@@ -1,0 +1,33 @@
+# Documentation files to ignore
+README.md
+**/README.md
+architecture.md
+**/architecture.md
+
+# Old project folder to ignore
+backend-old/
+**/backend-old/
+
+# Common files to ignore
+.DS_Store
+.idea/
+*.iml
+*.iws
+*.class
+target/
+.settings/
+.project
+.classpath
+
+# Logs
+*.log
+logs/
+
+# Build directories
+**/target/
+**/build/
+
+# Maven
+.mvn/
+mvnw
+mvnw.cmd
