@@ -1,0 +1,20 @@
+[
+    {
+        "pairName": "PF2_USDTRY",
+        "bid": 34.50,
+        "ask": 34.55,
+        "timestamp": "2024-07-15T10:00:00.000Z"
+    },
+    {
+        "pairName": "PF2_EURUSD",
+        "bid": 1.0850,
+        "ask": 1.0855,
+        "timestamp": "2024-07-15T10:00:00.000Z"
+    },
+    {
+        "pairName": "PF2_GBPUSD",
+        "bid": 1.2650,
+        "ask": 1.2655,
+        "timestamp": "2024-07-15T10:00:00.000Z"
+    }
+]
