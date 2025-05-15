@@ -22,16 +22,20 @@
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RollingFile"/>
         </Logger>
+        <Logger name="com.toyota.tcpserver.logging" level="TRACE" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="RollingFile"/>
+        </Logger>
         <!-- Set to TRACE for very detailed FluctuationSimulator logging if needed -->
-        <!-- <Logger name="com.toyota.tcpserver.RateFluctuationSimulator" level="TRACE" additivity="false">
+        <Logger name="com.toyota.tcpserver.RateFluctuationSimulator" level="INFO" additivity="false">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RollingFile"/>
-        </Logger> -->
-         <!-- Set to TRACE for very detailed ClientHandler send/receive logging if needed -->
-        <!-- <Logger name="com.toyota.tcpserver.ClientHandler" level="TRACE" additivity="false">
+        </Logger>
+        <!-- Set to TRACE for very detailed ClientHandler send/receive logging if needed -->
+        <Logger name="com.toyota.tcpserver.ClientHandler" level="INFO" additivity="false">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RollingFile"/>
-        </Logger> -->
+        </Logger>
         <Root level="WARN">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RollingFile"/>

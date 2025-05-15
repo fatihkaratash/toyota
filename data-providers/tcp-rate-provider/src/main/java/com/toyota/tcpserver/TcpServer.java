@@ -1,8 +1,6 @@
 package com.toyota.tcpserver;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
+import com.toyota.tcpserver.logging.LoggingHelper;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -13,7 +11,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 public class TcpServer {
-    private static final Logger logger = LogManager.getLogger(TcpServer.class);
+    private static final LoggingHelper log = new LoggingHelper(TcpServer.class);
 
     private final int port;
     private final ConfigurationReader configurationReader;
@@ -40,7 +38,8 @@ public class TcpServer {
 
     public void start() {
         if (running) {
-            logger.warn("TCP Sunucusu zaten {} portunda çalışıyor", port);
+            log.warn(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, null, 
+                    "TCP Sunucusu zaten " + port + " portunda çalışıyor");
             return;
         }
         running = true;
@@ -53,12 +52,14 @@ public class TcpServer {
     private void runServerLoop() {
         try {
             serverSocket = new ServerSocket(port);
-            logger.info("TCP Sunucusu {} portunda başlatıldı", port);
+            log.info(LoggingHelper.OPERATION_START, LoggingHelper.PLATFORM_TCP, null, 
+                    "TCP Sunucusu " + port + " portunda başlatıldı");
 
             while (running) {
                 try {
                     Socket clientSocket = serverSocket.accept(); // Bir bağlantı yapılana kadar bloklar
-                    logger.info("Yeni istemci bağlantısı kabul edildi: {}", clientSocket.getRemoteSocketAddress());
+                    log.info(LoggingHelper.OPERATION_CONNECT, LoggingHelper.PLATFORM_TCP, null, 
+                            "Yeni istemci bağlantısı kabul edildi: " + clientSocket.getRemoteSocketAddress());
                     
                     ClientHandler clientHandler = new ClientHandler(clientSocket, ratePublisher);
                     clientHandlers.add(clientHandler);
@@ -69,18 +70,22 @@ public class TcpServer {
 
                 } catch (IOException e) {
                     if (running) { // Sadece sunucunun çalışması gerekiyorsa logla
-                        logger.error("İstemci bağlantısı kabul edilirken hata: {}", e.getMessage(), e);
+                        log.error(LoggingHelper.PLATFORM_TCP, null, 
+                                "İstemci bağlantısı kabul edilirken hata: " + e.getMessage(), e);
                     } else {
-                        logger.info("TCP Sunucu soketi kapatıldı, yeni bağlantılar kabul edilmiyor.");
+                        log.info(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, null, 
+                                "TCP Sunucu soketi kapatıldı, yeni bağlantılar kabul edilmiyor.");
                     }
                 }
             }
         } catch (IOException e) {
             if (running) {
-                logger.error("{} portunda TCP sunucusu başlatılamadı: {}", port, e.getMessage(), e);
+                log.error(LoggingHelper.PLATFORM_TCP, null, 
+                        port + " portunda TCP sunucusu başlatılamadı: " + e.getMessage(), e);
             }
         } finally {
-            logger.info("TCP Sunucu çalışma döngüsü sona erdi.");
+            log.info(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, null, 
+                    "TCP Sunucu çalışma döngüsü sona erdi.");
             // Döngü beklenmedik bir şekilde çıkarsa ve çalışma devam ediyorsa kaynakların temizlenmesini sağla
             if (running) {
                 stopServerInternally();
@@ -90,29 +95,35 @@ public class TcpServer {
     
     private void cleanupClientHandlers() {
         clientHandlers.removeIf(handler -> !handler.isRunning());
-        logger.trace("Aktif istemci işleyicileri: {}", clientHandlers.size());
+        log.trace(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, null, null, 
+                "Aktif istemci işleyicileri: " + clientHandlers.size());
     }
 
     public void stop() {
         if (!running) {
-            logger.warn("TCP Sunucusu çalışmıyor veya zaten durduruluyor.");
+            log.warn(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, null, 
+                    "TCP Sunucusu çalışmıyor veya zaten durduruluyor.");
             return;
         }
-        logger.info("TCP Sunucusu durduruluyor...");
+        log.info(LoggingHelper.OPERATION_STOP, LoggingHelper.PLATFORM_TCP, null, 
+                "TCP Sunucusu durduruluyor...");
         stopServerInternally();
         if (serverThread != null) {
             try {
                 serverThread.join(5000); // Sunucu threadinin bitmesini bekle
                 if (serverThread.isAlive()) {
-                    logger.warn("Sunucu thread'i düzgün sonlandırılamadı, kesiliyor.");
+                    log.warn(LoggingHelper.OPERATION_ALERT, LoggingHelper.PLATFORM_TCP, null, 
+                            "Sunucu thread'i düzgün sonlandırılamadı, kesiliyor.");
                     serverThread.interrupt();
                 }
             } catch (InterruptedException e) {
-                logger.warn("Sunucu thread'inin durmasını beklerken kesildi.", e);
+                log.warn(LoggingHelper.OPERATION_ALERT, LoggingHelper.PLATFORM_TCP, null, 
+                        "Sunucu thread'inin durmasını beklerken kesildi.");
                 Thread.currentThread().interrupt();
             }
         }
-        logger.info("TCP Sunucusu başarıyla durduruldu.");
+        log.info(LoggingHelper.OPERATION_STOP, LoggingHelper.PLATFORM_TCP, null, 
+                "TCP Sunucusu başarıyla durduruldu.");
     }
 
     private void stopServerInternally() {
@@ -123,7 +134,8 @@ public class TcpServer {
         }
 
         // Tüm istemci işleyicilerini durdur
-        logger.info("Tüm istemci işleyicileri durduruluyor...");
+        log.info(LoggingHelper.OPERATION_STOP, LoggingHelper.PLATFORM_TCP, null, 
+                "Tüm istemci işleyicileri durduruluyor...");
         for (ClientHandler handler : clientHandlers) {
             handler.stopHandler();
         }
@@ -134,7 +146,8 @@ public class TcpServer {
         try {
             if (!clientExecutorService.awaitTermination(5, TimeUnit.SECONDS)) {
                 clientExecutorService.shutdownNow();
-                logger.warn("İstemci yürütücü servisi düzgün sonlandırılamadı.");
+                log.warn(LoggingHelper.OPERATION_ALERT, LoggingHelper.PLATFORM_TCP, null, 
+                        "İstemci yürütücü servisi düzgün sonlandırılamadı.");
             }
         } catch (InterruptedException e) {
             clientExecutorService.shutdownNow();
@@ -145,9 +158,11 @@ public class TcpServer {
         if (serverSocket != null && !serverSocket.isClosed()) {
             try {
                 serverSocket.close();
-                logger.info("Sunucu soketi kapatıldı.");
+                log.info(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, null, 
+                        "Sunucu soketi kapatıldı.");
             } catch (IOException e) {
-                logger.error("Sunucu soketi kapatılırken hata: {}", e.getMessage(), e);
+                log.error(LoggingHelper.PLATFORM_TCP, null, 
+                        "Sunucu soketi kapatılırken hata: " + e.getMessage(), e);
             }
         }
     }

@@ -1,12 +1,10 @@
 package com.toyota.tcpserver;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
+import com.toyota.tcpserver.logging.LoggingHelper;
 import java.util.Random;
 
 public class RateFluctuationSimulator {
-    private static final Logger logger = LogManager.getLogger(RateFluctuationSimulator.class);
+    private static final LoggingHelper log = new LoggingHelper(RateFluctuationSimulator.class);
     private final Random random = new Random();
     private final double volatility;
     private final double minSpread;
@@ -45,7 +43,9 @@ public class RateFluctuationSimulator {
                 validPrice = true;
             } else {
                 retries++;
-                logger.trace("{} için geçersiz fiyat oluşturuldu, alış={}, satış={}. Yeniden deneniyor... ({}/{})", newRate.getPairName(), newBid, newAsk, retries, maxRetries);
+                String rateInfo = String.format("BID:%.5f ASK:%.5f", newBid, newAsk);
+                log.trace(LoggingHelper.OPERATION_ALERT, LoggingHelper.PLATFORM_PF1, newRate.getPairName(), rateInfo,
+                        "Geçersiz fiyat oluşturuldu. Yeniden deneniyor... (" + retries + "/" + maxRetries + ")");
                 // Yeniden denemeler oluyorsa, kötü değerlerden kaynaklanan sapmayı önlemek için orjinale sıfırla
                 newBid = originalRate.getBid();
                 newAsk = originalRate.getAsk();
@@ -53,7 +53,8 @@ public class RateFluctuationSimulator {
         }
 
         if (!validPrice) {
-            logger.warn("{} için {} deneme sonrasında geçerli bir dalgalanmış fiyat oluşturulamadı. Orijinal fiyatlar kullanılıyor.", newRate.getPairName(), maxRetries);
+            log.warn(LoggingHelper.OPERATION_ALERT, LoggingHelper.PLATFORM_PF1, newRate.getPairName(), 
+                    maxRetries + " deneme sonrasında geçerli bir dalgalanmış fiyat oluşturulamadı. Orijinal fiyatlar kullanılıyor.");
             newRate.setBid(originalRate.getBid()); // Hala geçersizse orijinale geri dön
             newRate.setAsk(originalRate.getAsk());
         } else {
@@ -62,8 +63,9 @@ public class RateFluctuationSimulator {
         }
 
         newRate.setCurrentTimestamp();
-        logger.trace("{} için dalgalanmış kur: Alış={}, Satış={}, Zaman Damgası={}",
-                newRate.getPairName(), newRate.getBid(), newRate.getAsk(), newRate.getTimestamp());
+        String rateInfo = String.format("BID:%.5f ASK:%.5f", newRate.getBid(), newRate.getAsk());
+        log.trace(LoggingHelper.OPERATION_UPDATE, LoggingHelper.PLATFORM_PF1, newRate.getPairName(), rateInfo,
+                "Dalgalanmış kur oluşturuldu, Zaman Damgası=" + newRate.getTimestamp());
         return newRate;
     }
 }

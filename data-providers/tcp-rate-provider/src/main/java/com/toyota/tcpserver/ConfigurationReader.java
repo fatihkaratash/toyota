@@ -2,8 +2,7 @@ package com.toyota.tcpserver;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.toyota.tcpserver.logging.LoggingHelper;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -15,7 +14,7 @@ import java.util.List;
 import java.util.Properties;
 
 public class ConfigurationReader {
-    private static final Logger logger = LogManager.getLogger(ConfigurationReader.class);
+    private static final LoggingHelper log = new LoggingHelper(ConfigurationReader.class);
     private static final String PROPERTIES_FILE = "tcp-provider.properties";
     private static final String INITIAL_RATES_JSON_CLASSPATH = "initial-rates.json"; // Sınıf yolundan (src/main/resources/config)
     private static final String INITIAL_RATES_JSON_FILESYSTEM = "config/initial-rates.json"; // Dosya sisteminden (./config)
@@ -33,13 +32,16 @@ public class ConfigurationReader {
     private void loadProperties() {
         try (InputStream input = getClass().getClassLoader().getResourceAsStream(PROPERTIES_FILE)) {
             if (input == null) {
-                logger.error("Üzgünüz, {} bulunamadı", PROPERTIES_FILE);
+                log.error(LoggingHelper.PLATFORM_TCP, null, 
+                        "Üzgünüz, " + PROPERTIES_FILE + " bulunamadı");
                 throw new RuntimeException("Yapılandırma dosyası " + PROPERTIES_FILE + " sınıf yolunda bulunamadı.");
             }
             properties.load(input);
-            logger.info("{} dosyasından yapılandırma başarıyla yüklendi", PROPERTIES_FILE);
+            log.info(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, null, 
+                    PROPERTIES_FILE + " dosyasından yapılandırma başarıyla yüklendi");
         } catch (IOException ex) {
-            logger.error(PROPERTIES_FILE + " dosyasından yapılandırma yüklenirken hata", ex);
+            log.error(LoggingHelper.PLATFORM_TCP, null, 
+                    PROPERTIES_FILE + " dosyasından yapılandırma yüklenirken hata", ex);
             throw new RuntimeException(PROPERTIES_FILE + " dosyasından yapılandırma yüklenirken hata", ex);
         }
     }
@@ -51,7 +53,8 @@ public class ConfigurationReader {
             // Önce dosya sisteminden yüklemeyi dene (örn. IDE'den veya paketlenmemiş JAR'dan çalıştırırken)
             if (Files.exists(Paths.get(INITIAL_RATES_JSON_FILESYSTEM))) {
                 jsonInput = Files.newInputStream(Paths.get(INITIAL_RATES_JSON_FILESYSTEM));
-                logger.info("Başlangıç kurları dosya sisteminden yükleniyor: {}", INITIAL_RATES_JSON_FILESYSTEM);
+                log.info(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_PF1, null, 
+                        "Başlangıç kurları dosya sisteminden yükleniyor: " + INITIAL_RATES_JSON_FILESYSTEM);
             }
             // Sınıf yoluna geri dön (örn. uber JAR'dan çalıştırılırken)
             else {
@@ -61,10 +64,12 @@ public class ConfigurationReader {
                  }
 
                 if (jsonInput == null) {
-                    logger.error("Üzgünüz, {} sınıf yolunda veya dosya sisteminde bulunamadı.", INITIAL_RATES_JSON_CLASSPATH);
+                    log.error(LoggingHelper.PLATFORM_PF1, null, 
+                            "Üzgünüz, " + INITIAL_RATES_JSON_CLASSPATH + " sınıf yolunda veya dosya sisteminde bulunamadı.");
                     throw new FileNotFoundException(INITIAL_RATES_JSON_CLASSPATH + " bulunamadı.");
                 }
-                logger.info("Başlangıç kurları sınıf yolundan yükleniyor: {}", INITIAL_RATES_JSON_CLASSPATH);
+                log.info(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_PF1, null, 
+                        "Başlangıç kurları sınıf yolundan yükleniyor: " + INITIAL_RATES_JSON_CLASSPATH);
             }
 
             initialRates = mapper.readValue(jsonInput, new TypeReference<List<Rate>>() {});
@@ -73,10 +78,12 @@ public class ConfigurationReader {
                     rate.setCurrentTimestamp();
                 }
             });
-            logger.info("Başarıyla {} başlangıç kuru yüklendi.", initialRates.size());
+            log.info(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_PF1, null, 
+                    "Başarıyla " + initialRates.size() + " başlangıç kuru yüklendi.");
 
         } catch (IOException ex) {
-            logger.error(INITIAL_RATES_JSON_CLASSPATH + " dosyasından başlangıç kurları yüklenirken hata", ex);
+            log.error(LoggingHelper.PLATFORM_PF1, null, 
+                    INITIAL_RATES_JSON_CLASSPATH + " dosyasından başlangıç kurları yüklenirken hata", ex);
             initialRates = Collections.emptyList();
             throw new RuntimeException("Başlangıç kurları yüklenirken hata", ex);
         } finally {
@@ -84,7 +91,8 @@ public class ConfigurationReader {
                 try {
                     jsonInput.close();
                 } catch (IOException e) {
-                    logger.warn("Başlangıç kurları JSON giriş akışı kapatılırken hata", e);
+                    log.warn(LoggingHelper.OPERATION_ALERT, LoggingHelper.PLATFORM_PF1, null, 
+                            "Başlangıç kurları JSON giriş akışı kapatılırken hata");
                 }
             }
         }
@@ -108,7 +116,6 @@ public class ConfigurationReader {
     public double getMinSpread() {
         return Double.parseDouble(properties.getProperty("fluctuation.min.spread", "0.0001"));
     }
-
 
     public List<Rate> getInitialRates() {
         // Orijinal listenin değiştirilmesini önlemek için kopyalar döndür

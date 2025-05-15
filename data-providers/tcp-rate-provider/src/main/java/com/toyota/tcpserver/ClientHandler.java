@@ -1,20 +1,17 @@
 package com.toyota.tcpserver;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
+import com.toyota.tcpserver.logging.LoggingHelper;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.net.SocketException;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ClientHandler implements Runnable {
-    private static final Logger logger = LogManager.getLogger(ClientHandler.class);
+    private static final LoggingHelper log = new LoggingHelper(ClientHandler.class);
     private final Socket clientSocket;
     private final RatePublisher ratePublisher; // Abone olma üzerine ilk kuru göndermek için
     private final Set<String> subscriptions = ConcurrentHashMap.newKeySet(); // Abonelikler için thread-safe set
@@ -29,7 +26,8 @@ public class ClientHandler implements Runnable {
             this.out = new PrintWriter(clientSocket.getOutputStream(), true);
             this.in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
         } catch (IOException e) {
-            logger.error("ClientHandler: {} istemcisi için akışlar ayarlanırken hata: {}", clientSocket.getRemoteSocketAddress(), e.getMessage(), e);
+            log.error(LoggingHelper.PLATFORM_TCP, null, 
+                   "ClientHandler: " + clientSocket.getRemoteSocketAddress() + " istemcisi için akışlar ayarlanırken hata: " + e.getMessage(), e);
             running = false; // Kurulum başarısız olursa run() metodunun ilerlemesini engelle
             closeConnection();
         }
@@ -39,23 +37,28 @@ public class ClientHandler implements Runnable {
     public void run() {
         if (!running) return; // Kurulum başarısız olduysa çık
 
-        logger.info("İstemci bağlandı: {}", clientSocket.getRemoteSocketAddress());
+        log.info(LoggingHelper.OPERATION_CONNECT, LoggingHelper.PLATFORM_TCP, null, 
+                "İstemci bağlandı: " + clientSocket.getRemoteSocketAddress());
         try {
             String inputLine;
             while (running && (inputLine = in.readLine()) != null) {
-                logger.debug("{} adresinden alındı: {}", clientSocket.getRemoteSocketAddress(), inputLine);
+                log.debug(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, null, 
+                        clientSocket.getRemoteSocketAddress() + " adresinden alındı: " + inputLine);
                 processCommand(inputLine);
             }
         } catch (SocketException e) {
             if (running) { // Sadece kasıtlı kapatılmadıysa logla
-                 logger.warn("{} istemcisi için SocketException: {} (İstemci muhtemelen bağlantıyı kesti)", clientSocket.getRemoteSocketAddress(), e.getMessage());
+                 log.warn(LoggingHelper.OPERATION_DISCONNECT, LoggingHelper.PLATFORM_TCP, null, 
+                         clientSocket.getRemoteSocketAddress() + " istemcisi için SocketException: " + e.getMessage() + " (İstemci muhtemelen bağlantıyı kesti)");
             }
         } catch (IOException e) {
             if (running) {
-                logger.error("{} istemcisi için IOException: {}", clientSocket.getRemoteSocketAddress(), e.getMessage(), e);
+                log.error(LoggingHelper.PLATFORM_TCP, null, 
+                        clientSocket.getRemoteSocketAddress() + " istemcisi için IOException: " + e.getMessage(), e);
             }
         } finally {
-            logger.info("{} istemcisi bağlantısı kesildi veya işleyici durduruluyor.", clientSocket.getRemoteSocketAddress());
+            log.info(LoggingHelper.OPERATION_DISCONNECT, LoggingHelper.PLATFORM_TCP, null, 
+                    clientSocket.getRemoteSocketAddress() + " istemcisi bağlantısı kesildi veya işleyici durduruluyor.");
             closeConnection();
             // İsteğe bağlı olarak, TcpServer'ı bu işleyiciyi listesinden kaldırmak için bilgilendir
         }
@@ -77,17 +80,20 @@ public class ClientHandler implements Runnable {
                     if (ratePublisher.isValidRatePair(rateName)) {
                         subscriptions.add(rateName);
                         out.println("Şuna abone olundu: " + rateName);
-                        logger.info("{} istemcisi {} kuruna abone oldu", clientSocket.getRemoteSocketAddress(), rateName);
+                        log.info(LoggingHelper.OPERATION_SUBSCRIBE, LoggingHelper.PLATFORM_TCP, rateName, 
+                                clientSocket.getRemoteSocketAddress() + " istemcisi kuruna abone oldu");
                         // Abonelik üzerine mevcut kuru hemen gönder
                         Rate currentRate = ratePublisher.getCurrentRate(rateName);
                         if (currentRate != null) {
                             sendRateUpdate(currentRate);
                         } else {
-                            logger.warn("Anlık abonelik isteği üzerine {} için mevcut kur bulunamadı.", rateName);
+                            log.warn(LoggingHelper.OPERATION_ALERT, LoggingHelper.PLATFORM_TCP, rateName, 
+                                    "Anlık abonelik isteği üzerine mevcut kur bulunamadı.");
                         }
                     } else {
                         out.println("ERROR|Geçersiz veya bilinmeyen kur adı: " + rateName);
-                        logger.warn("{} istemcisi geçersiz kura abone olmaya çalıştı: {}", clientSocket.getRemoteSocketAddress(), rateName);
+                        log.warn(LoggingHelper.OPERATION_ALERT, LoggingHelper.PLATFORM_TCP, rateName, 
+                                clientSocket.getRemoteSocketAddress() + " istemcisi geçersiz kura abone olmaya çalıştı");
                     }
                 } else {
                     out.println("ERROR|Subscribe komutu bir kur adı gerektirir (örn. subscribe|PF1_USDTRY)");
@@ -97,14 +103,16 @@ public class ClientHandler implements Runnable {
                 if (rateName != null && !rateName.isEmpty()) {
                     subscriptions.remove(rateName);
                     out.println("Şundan abonelik kaldırıldı: " + rateName);
-                    logger.info("{} istemcisi {} kurundan aboneliğini kaldırdı", clientSocket.getRemoteSocketAddress(), rateName);
+                    log.info(LoggingHelper.OPERATION_UNSUBSCRIBE, LoggingHelper.PLATFORM_TCP, rateName, 
+                            clientSocket.getRemoteSocketAddress() + " istemcisi kurundan aboneliğini kaldırdı");
                 } else {
                     out.println("ERROR|Unsubscribe komutu bir kur adı gerektirir (örn. unsubscribe|PF1_USDTRY)");
                 }
                 break;
             default:
                 out.println("ERROR|Bilinmeyen komut: " + action);
-                logger.warn("{} istemcisi bilinmeyen komut gönderdi: {}", clientSocket.getRemoteSocketAddress(), action);
+                log.warn(LoggingHelper.OPERATION_ALERT, LoggingHelper.PLATFORM_TCP, null, 
+                        clientSocket.getRemoteSocketAddress() + " istemcisi bilinmeyen komut gönderdi: " + action);
         }
     }
 
@@ -117,9 +125,15 @@ public class ClientHandler implements Runnable {
             String message = String.format("%s|22:number:%.8f|25:number:%.8f|5:timestamp:%s",
                     rate.getPairName(), rate.getBid(), rate.getAsk(), rate.getTimestamp());
             out.println(message);
-            logger.trace("{} adresine gönderildi: {}", clientSocket.getRemoteSocketAddress(), message);
+            
+            // Kur bilgisini log için hazırla
+            String rateInfo = String.format("BID:%.5f ASK:%.5f", rate.getBid(), rate.getAsk());
+            log.trace(LoggingHelper.OPERATION_UPDATE, LoggingHelper.PLATFORM_PF1, rate.getPairName(), rateInfo,
+                    clientSocket.getRemoteSocketAddress() + " adresine gönderildi");
+            
             if (out.checkError()) { // PrintWriter'ın hata ile karşılaşıp karşılaşmadığını kontrol et
-                logger.error("{} istemcisine mesaj gönderilirken hata. Bağlantı kapatılıyor.", clientSocket.getRemoteSocketAddress());
+                log.error(LoggingHelper.PLATFORM_TCP, rate.getPairName(), 
+                        clientSocket.getRemoteSocketAddress() + " istemcisine mesaj gönderilirken hata. Bağlantı kapatılıyor.");
                 stopHandler(); // Gönderme başarısız olursa durdur ve kapat
             }
         }
@@ -146,8 +160,8 @@ public class ClientHandler implements Runnable {
                 clientSocket.close();
             }
         } catch (IOException e) {
-            logger.error("{} istemcisi için bağlantı kapatılırken hata: {}",
-                         (clientSocket != null ? clientSocket.getRemoteSocketAddress() : "N/A"), e.getMessage());
+            log.error(LoggingHelper.PLATFORM_TCP, null,
+                     (clientSocket != null ? clientSocket.getRemoteSocketAddress() : "N/A") + " istemcisi için bağlantı kapatılırken hata: " + e.getMessage());
         }
     }
 

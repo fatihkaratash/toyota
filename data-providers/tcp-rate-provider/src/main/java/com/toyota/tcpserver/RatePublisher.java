@@ -1,7 +1,6 @@
 package com.toyota.tcpserver;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.toyota.tcpserver.logging.LoggingHelper;
 
 import java.util.List;
 import java.util.Map;
@@ -9,7 +8,7 @@ import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 public class RatePublisher {
-    private static final Logger logger = LogManager.getLogger(RatePublisher.class);
+    private static final LoggingHelper log = new LoggingHelper(RatePublisher.class);
 
     private final Map<String, Rate> currentRates; // Parite adı -> Kur haritalama
     private final RateFluctuationSimulator simulator;
@@ -28,7 +27,8 @@ public class RatePublisher {
         this.currentRates = new ConcurrentHashMap<>();
         List<Rate> initialRates = configurationReader.getInitialRates();
         if (initialRates == null || initialRates.isEmpty()) {
-            logger.warn("Başlangıç kurları yüklenemedi. RatePublisher düzgün çalışmayabilir.");
+            log.warn(LoggingHelper.OPERATION_ALERT, LoggingHelper.PLATFORM_PF1, null, 
+                    "Başlangıç kurları yüklenemedi. RatePublisher düzgün çalışmayabilir.");
         } else {
             for (Rate rate : initialRates) {
                 this.currentRates.put(rate.getPairName(), rate.copy()); // Kopyaları sakla
@@ -43,32 +43,40 @@ public class RatePublisher {
 
     public void start() {
         if (running) {
-            logger.warn("RatePublisher zaten çalışıyor.");
+            log.warn(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_PF1, null, 
+                    "RatePublisher zaten çalışıyor.");
             return;
         }
         if (currentRates.isEmpty()) {
-            logger.warn("RatePublisher başlatılamıyor: Başlangıç kurları yapılandırılmamış veya yüklenmemiş.");
+            log.warn(LoggingHelper.OPERATION_ALERT, LoggingHelper.PLATFORM_PF1, null, 
+                    "RatePublisher başlatılamıyor: Başlangıç kurları yapılandırılmamış veya yüklenmemiş.");
             return;
         }
         running = true;
         long publishIntervalMs = configurationReader.getPublishIntervalMs();
         scheduler.scheduleAtFixedRate(this::publishRates, 0, publishIntervalMs, TimeUnit.MILLISECONDS);
-        logger.info("RatePublisher başlatıldı. Her {} ms'de bir kurlar yayınlanacak.", publishIntervalMs);
+        log.info(LoggingHelper.OPERATION_START, LoggingHelper.PLATFORM_PF1, null, 
+                "RatePublisher başlatıldı. Her " + publishIntervalMs + " ms'de bir kurlar yayınlanacak.");
     }
 
     private void publishRates() {
         if (!running) return;
         try {
-            logger.debug("Kur yayınlama döngüsü başladı.");
+            log.debug(LoggingHelper.OPERATION_UPDATE, LoggingHelper.PLATFORM_PF1, null, 
+                    "Kur yayınlama döngüsü başladı.");
             for (String pairName : currentRates.keySet()) {
                 Rate originalRate = currentRates.get(pairName);
                 if (originalRate == null) { // Düzgün başlatılmış ConcurrentHashMap'te olmamalı
-                    logger.warn("{} için orijinal kur null, dalgalanma atlanıyor.", pairName);
+                    log.warn(LoggingHelper.OPERATION_ALERT, LoggingHelper.PLATFORM_PF1, pairName, 
+                            "Orijinal kur null, dalgalanma atlanıyor.");
                     continue;
                 }
                 Rate fluctuatedRate = simulator.fluctuateRate(originalRate);
                 currentRates.put(pairName, fluctuatedRate); // Dalgalanmış yeni kur ile güncelle
 
+                // Kur bilgisini log için hazırla
+                String rateInfo = String.format("BID:%.5f ASK:%.5f", fluctuatedRate.getBid(), fluctuatedRate.getAsk());
+                
                 // İlgili istemcilere yayın yap
                 // ConcurrentModificationException'dan kaçınmak için clientHandlers'ın bir anlık görüntüsü üzerinde dolaş
                 // clientHandlers listesi başka bir thread tarafından değiştirilirse (örn. TcpServer)
@@ -82,10 +90,15 @@ public class RatePublisher {
                         handler.sendRateUpdate(fluctuatedRate);
                     }
                 }
+                
+                log.trace(LoggingHelper.OPERATION_UPDATE, LoggingHelper.PLATFORM_PF1, pairName, rateInfo,
+                        "Kur güncellendi ve yayınlandı");
             }
-            logger.debug("Kur yayınlama döngüsü tamamlandı.");
+            log.debug(LoggingHelper.OPERATION_UPDATE, LoggingHelper.PLATFORM_PF1, null, 
+                    "Kur yayınlama döngüsü tamamlandı.");
         } catch (Exception e) {
-            logger.error("Kur yayınlama döngüsü sırasında hata", e);
+            log.error(LoggingHelper.PLATFORM_PF1, null, 
+                    "Kur yayınlama döngüsü sırasında hata", e);
         }
     }
     
@@ -105,12 +118,14 @@ public class RatePublisher {
         try {
             if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
                 scheduler.shutdownNow();
-                logger.warn("RatePublisher planlaması düzgün sonlandırılamadı, zorla kapatılıyor.");
+                log.warn(LoggingHelper.OPERATION_ALERT, LoggingHelper.PLATFORM_PF1, null, 
+                        "RatePublisher planlaması düzgün sonlandırılamadı, zorla kapatılıyor.");
             }
         } catch (InterruptedException e) {
             scheduler.shutdownNow();
             Thread.currentThread().interrupt();
         }
-        logger.info("RatePublisher durduruldu.");
+        log.info(LoggingHelper.OPERATION_STOP, LoggingHelper.PLATFORM_PF1, null, 
+                "RatePublisher durduruldu.");
     }
 }
