@@ -1,0 +1,14 @@
+[
+    {
+        "pairName": "PF1_USDTRY",
+        "bid": 33.45,
+        "ask": 33.55,
+        "timestamp": "2024-07-10T10:00:00.000Z"
+    },
+    {
+        "pairName": "PF1_EURUSD",
+        "bid": 1.09,
+        "ask": 1.095,
+        "timestamp": "2024-07-10T10:00:00.000Z"
+    }
+]
