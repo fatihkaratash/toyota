@@ -1,0 +1,18 @@
+[
+  {
+    "providerId": "PF1_TCP",
+    "type": "TCP",
+    "host": "localhost",
+    "port": 8081,
+    "enabled": true,
+    "subscribedRateNames": ["USDTRY", "EURUSD"]
+  },
+  {
+    "providerId": "PF2_REST",
+    "type": "REST",
+    "baseUrl": "http://localhost:8081/api/rates",
+    "enabled": true,
+    "subscribedRateNames": ["USDTRY", "EURUSD"],
+    "pollIntervalMillis": 5000
+  }
+]

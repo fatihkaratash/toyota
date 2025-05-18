@@ -49,3 +49,47 @@ coverage/
 # Temporary files
 temp/
 tmp/
+
+# Java / Maven / Spring Boot
+*.class
+*.jar
+*.war
+*.ear
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/
+mvnw
+mvnw.cmd
+.spring-boot-devtools.properties
+
+# IntelliJ
+*.iml
+*.ipr
+*.iws
+.idea/modules.xml
+.idea/compiler.xml
+.idea/jarRepositories.xml
+.idea/misc.xml
+.idea/vcs.xml
+.idea/encodings.xml
+.idea/workspace.xml
+
+# Eclipse
+.classpath
+.project
+.settings/
+bin/
+
+# NetBeans
+nbproject/
+build/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
