@@ -1,18 +1,33 @@
 [
   {
-    "providerId": "PF1_TCP",
-    "type": "TCP",
-    "host": "localhost",
-    "port": 8081,
-    "enabled": true,
-    "subscribedRateNames": ["USDTRY", "EURUSD"]
+    "type": "tcp",
+    "name": "ProviderTCP1",
+    "className": "com.toyota.mainapp.subscriber.impl.TcpRateSubscriber",
+    "host": "localhost", 
+    "port": 8081, 
+    "subscribedSymbols": ["PF1_USDTRY", "PF1_EURUSD", "PF1_GBPUSD"],
+    "additionalProperties": {
+      "connectionTimeoutMs": 5000,
+      "retryAttempts": 3
+    }
   },
   {
-    "providerId": "PF2_REST",
-    "type": "REST",
-    "baseUrl": "http://localhost:8081/api/rates",
-    "enabled": true,
-    "subscribedRateNames": ["USDTRY", "EURUSD"],
-    "pollIntervalMillis": 5000
+    "type": "rest",
+    "name": "ProviderREST1",
+    "className": "com.toyota.mainapp.subscriber.impl.RestRateSubscriber",
+    "url": "http://localhost:8081/api/rates",
+    "pollIntervalMs": 10000,
+    "subscribedSymbols": ["PF2_USDTRY", "PF2_GBPUSD", "PF2_EURUSD"],
+    "additionalProperties": {
+      "readTimeoutMs": 3000
+    }
+  },
+  {
+    "type": "tcp",
+    "name": "ProviderTCP2_NoClass",
+    "className": "com.toyota.mainapp.subscriber.impl.TcpRateSubscriber", // Added default
+    "host": "localhost",
+    "port": 8083,
+    "subscribedSymbols": ["PF3_AUDUSD"]
   }
 ]

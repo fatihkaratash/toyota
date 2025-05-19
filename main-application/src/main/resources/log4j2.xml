@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <!-- Example pattern: includes timestamp, thread, level, logger name, message, and exception -->
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n%throwable"/>
+        </Console>
+
+        <!-- File Appender (Optional) -->
+        
+        <RollingFile name="RollingFile" fileName="logs/main-application.log"
+                     filePattern="logs/main-application-%d{yyyy-MM-dd}-%i.log.gz">
+            <PatternLayout>
+                <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n%throwable</Pattern>
+            </PatternLayout>
+            <Policies>
+                <TimeBasedTriggeringPolicy />
+                <SizeBasedTriggeringPolicy size="10 MB" />
+            </Policies>
+            <DefaultRolloverStrategy max="10"/>
+        </RollingFile>
+    
+    </Appenders>
+    <Loggers>
+        <!-- Application specific loggers -->
+        <Logger name="com.toyota.mainapp" level="INFO" additivity="false">
+            <AppenderRef ref="Console"/>
+            <!-- <AppenderRef ref="RollingFile"/> -->
+        </Logger>
+
+        <!-- Spring Framework loggers -->
+        <Logger name="org.springframework" level="INFO" additivity="false">
+            <AppenderRef ref="Console"/>
+            <!-- <AppenderRef ref="RollingFile"/> -->
+        </Logger>
+
+        <!-- Kafka client loggers -->
+        <Logger name="org.apache.kafka" level="WARN" additivity="false">
+            <AppenderRef ref="Console"/>
+            <!-- <AppenderRef ref="RollingFile"/> -->
+        </Logger>
+        
+        <!-- Redis client (Lettuce) loggers -->
+        <Logger name="io.lettuce.core" level="INFO" additivity="false">
+            <AppenderRef ref="Console"/>
+            <!-- <AppenderRef ref="RollingFile"/> -->
+        </Logger>
+
+
+        <!-- Root logger -->
+        <Root level="INFO">
+            <AppenderRef ref="Console"/>
+            <!-- <AppenderRef ref="RollingFile"/> -->
+        </Root>
+    </Loggers>
+</Configuration>
