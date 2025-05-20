@@ -42,7 +42,7 @@ public interface CircuitBreaker {
      * @throws CircuitBreakerOpenException if the circuit is open.
      * @throws Exception if the supplier throws an exception.
      */
-    <T> Texecute(Supplier<T> supplier) throws Exception;
+    <T> T execute(Supplier<T> supplier) throws Exception;
 }
 
 class CircuitBreakerOpenException extends RuntimeException {

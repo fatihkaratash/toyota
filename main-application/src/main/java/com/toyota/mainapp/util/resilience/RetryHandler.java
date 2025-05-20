@@ -16,7 +16,7 @@ public interface RetryHandler {
      * @return The result of the supplier if successful within retry attempts.
      * @throws Exception if the operation fails after all retry attempts.
      */
-    <T> TexecuteWithRetries(Supplier<T> supplier) throws Exception;
+    <T> T executeWithRetries(Supplier<T> supplier) throws Exception;
 
     /**
      * Configures the maximum number of retry attempts.
