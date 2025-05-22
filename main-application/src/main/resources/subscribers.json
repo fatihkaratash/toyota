@@ -5,18 +5,12 @@
     "enabled": true,
     "implementationClass": "com.toyota.mainapp.subscriber.impl.RestRateSubscriber",
     "connectionConfig": {
-      "baseUrl": "http://rest-rate-provider:8080",
+      "baseUrl": "http://rest-rate-provider:8080/api",
       "pollIntervalMs": 5000,
-      "symbols": ["PF2_USDTRY", "PF2_EURUSD", "PF2_GBPTRY"],
       "timeout": 3000,
-      "retryConfig": {
-        "maxAttempts": 3,
-        "waitDuration": 1000
-      },
-      "circuitBreakerConfig": {
-        "failureThreshold": 50,
-        "waitDurationMs": 30000
-      }
+      "symbols": "PF2_USDTRY,PF2_EURUSD,PF2_GBPTRY",   
+      "retryConfig": { "maxAttempts": 3, "waitDuration": 1000 },
+      "circuitBreakerConfig": { "failureThreshold": 50, "waitDurationMs": 30000 }
     }
   },
   {
@@ -28,9 +22,9 @@
       "host": "tcp-rate-provider",
       "port": 8081,
       "connectionTimeoutMs": 5000,
-      "readTimeoutMs": 60000, 
+      "readTimeoutMs": 60000,
       "retryAttempts": 10,
-      "symbols": ["PF1_USDTRY", "PF1_EURUSD"]
+      "symbols": "PF1_USDTRY,PF1_EURUSD"               
     }
   }
 ]

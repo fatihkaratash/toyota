@@ -49,9 +49,9 @@ public class RatePublisher {
      */
     public void addListener(RateUpdateListener listener) {
         if (listener != null) {
-            listeners.add(listener);
+            boolean added = listeners.add(listener);
             log.debug(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_PF1, null,
-                    "Yeni dinleyici eklendi, toplam dinleyici sayısı: " + listeners.size());
+                    "RateUpdateListener eklendi: " + listener.toString() + " (Eklendi mi: " + added + "). Toplam dinleyici sayısı: " + listeners.size());
         }
     }
     
@@ -60,9 +60,10 @@ public class RatePublisher {
      * @param listener Kaydı kaldırılacak dinleyici
      */
     public void removeListener(RateUpdateListener listener) {
-        if (listeners.remove(listener)) {
+        if (listener != null) {
+            boolean removed = listeners.remove(listener);
             log.debug(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_PF1, null,
-                    "Dinleyici kaldırıldı, kalan dinleyici sayısı: " + listeners.size());
+                    "RateUpdateListener kaldırıldı: " + listener.toString() + " (Kaldırıldı mı: " + removed + "). Kalan dinleyici sayısı: " + listeners.size());
         }
     }
 
@@ -124,11 +125,27 @@ public class RatePublisher {
         String pairName = rate.getPairName();
         int notifiedCount = 0;
         
+        log.debug(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_PF1, pairName,
+                "notifyListeners: '" + pairName + "' için dinleyicilere bildirim yapılıyor. Toplam dinleyici: " + listeners.size());
+
+        if (listeners.isEmpty()) {
+            log.debug(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_PF1, pairName,
+                    "notifyListeners: '" + pairName + "' için aktif dinleyici bulunmuyor.");
+            return;
+        }
+
         for (RateUpdateListener listener : listeners) {
             try {
+                log.trace(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_PF1, pairName,
+                        "notifyListeners: Dinleyici kontrol ediliyor: " + listener.toString() + " '" + pairName + "' için.", null);
                 if (listener.isSubscribedTo(pairName)) {
+                    log.debug(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_PF1, pairName,
+                            "notifyListeners: Dinleyici " + listener.toString() + " '" + pairName + "' kuruna abone. Güncelleme gönderiliyor.");
                     listener.onRateUpdate(rate);
                     notifiedCount++;
+                } else {
+                    log.trace(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_PF1, pairName,
+                            "notifyListeners: Dinleyici " + listener.toString() + " '" + pairName + "' kuruna abone DEĞİL.", null);
                 }
             } catch (Exception e) {
                 log.error(LoggingHelper.PLATFORM_PF1, pairName,

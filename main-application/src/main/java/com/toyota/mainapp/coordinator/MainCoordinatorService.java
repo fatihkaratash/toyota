@@ -54,6 +54,18 @@ public class MainCoordinatorService implements PlatformCallback {
      */
     @PostConstruct
     public void initializeAndStartSubscribers() {
+        log.info("MainCoordinatorService initializing...");
+        try {
+            // TEMPORARY: Add a delay to allow Kafka to fully start before KafkaAdmin client tries to connect.
+            // Remove or replace with a proper health check or retry mechanism for production.
+            log.info("Waiting for 15 seconds to allow Kafka to initialize...");
+            Thread.sleep(15000); // 15 seconds delay
+            log.info("Proceeding with subscriber initialization.");
+        } catch (InterruptedException e) {
+            log.warn("Kafka startup delay interrupted.", e);
+            Thread.currentThread().interrupt();
+        }
+
         log.info("Aboneler yükleniyor: {}", subscribersConfigPath);
         
         try {

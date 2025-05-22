@@ -1,5 +1,6 @@
 package com.toyota.mainapp.config;
 
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -15,6 +16,7 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -38,10 +40,15 @@ public class AppConfig {
     @Primary
     public ObjectMapper objectMapper() {
         ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
-        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        mapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-        return mapper;
+    // Add type information to serialized objects
+    mapper.activateDefaultTyping(
+        mapper.getPolymorphicTypeValidator(),
+        ObjectMapper.DefaultTyping.NON_FINAL,
+        JsonTypeInfo.As.PROPERTY
+    );
+    mapper.registerModule(new JavaTimeModule());
+    mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    return mapper;
     }
 
     /**
@@ -53,10 +60,15 @@ public class AppConfig {
             RedisConnectionFactory redisConnectionFactory,
             ObjectMapper objectMapper) {
         RedisTemplate<String, RawRateDto> template = new RedisTemplate<>();
-        template.setConnectionFactory(redisConnectionFactory);
-        template.setKeySerializer(new StringRedisSerializer());
-        template.setValueSerializer(new GenericJackson2JsonRedisSerializer(objectMapper));
-        return template;
+    template.setConnectionFactory(redisConnectionFactory);
+    template.setKeySerializer(new StringRedisSerializer());
+    
+    // Use Jackson2JsonRedisSerializer instead of GenericJackson2JsonRedisSerializer
+    Jackson2JsonRedisSerializer<RawRateDto> serializer = new Jackson2JsonRedisSerializer<>(RawRateDto.class);
+    serializer.setObjectMapper(objectMapper);
+    template.setValueSerializer(serializer);
+    
+    return template;
     }
 
     /**
@@ -67,11 +79,17 @@ public class AppConfig {
     public RedisTemplate<String, CalculatedRateDto> calculatedRateRedisTemplate(
             RedisConnectionFactory redisConnectionFactory,
             ObjectMapper objectMapper) {
-        RedisTemplate<String, CalculatedRateDto> template = new RedisTemplate<>();
-        template.setConnectionFactory(redisConnectionFactory);
-        template.setKeySerializer(new StringRedisSerializer());
-        template.setValueSerializer(new GenericJackson2JsonRedisSerializer(objectMapper));
-        return template;
+         RedisTemplate<String, CalculatedRateDto> template = new RedisTemplate<>();
+    template.setConnectionFactory(redisConnectionFactory);
+    template.setKeySerializer(new StringRedisSerializer());
+    
+    // Use Jackson2JsonRedisSerializer instead of GenericJackson2JsonRedisSerializer
+    Jackson2JsonRedisSerializer<CalculatedRateDto> serializer = 
+        new Jackson2JsonRedisSerializer<>(CalculatedRateDto.class);
+    serializer.setObjectMapper(objectMapper);
+    template.setValueSerializer(serializer);
+    
+    return template;
     }
 
     /**

@@ -91,12 +91,23 @@ public class DynamicSubscriberLoader {
             }
             
             try (InputStream inputStream = resource.getInputStream()) {
-                return objectMapper.readValue(inputStream, new TypeReference<List<SubscriberConfigDto>>() {});
+                // Create a dedicated ObjectMapper instance without type information for reading subscribers.json
+                ObjectMapper subscriberMapper = createSubscriberObjectMapper();
+                return subscriberMapper.readValue(inputStream, new TypeReference<List<SubscriberConfigDto>>() {});
             }
         } catch (Exception e) {
             log.error("Yapılandırma dosyası okunamadı: {}", configPath, e);
             throw new SubscriberInitializationException("Abone yapılandırması okunamadı: " + configPath, e);
         }
+    }
+    
+    /**
+     * Creates a basic ObjectMapper without type information, specifically for subscribers.json
+     */
+    private ObjectMapper createSubscriberObjectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        // No need to activate default typing - we want to read plain JSON without type info
+        return mapper;
     }
 
     /**

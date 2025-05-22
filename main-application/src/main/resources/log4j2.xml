@@ -1,13 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Configuration status="WARN">
+    <Properties>
+        <Property name="CONSOLE_PATTERN">%highlight{%d{HH:mm:ss.SSS} %-5level %logger{1.} - %msg%n}{FATAL=red, ERROR=red, WARN=yellow, INFO=cyan, DEBUG=blue, TRACE=white}</Property>
+        <Property name="FILE_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level %logger{36} - %msg%n%ex{5}</Property>
+    </Properties>
+    
     <Appenders>
         <Console name="Console" target="SYSTEM_OUT">
-            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+            <PatternLayout pattern="${CONSOLE_PATTERN}"/>
         </Console>
         <RollingFile name="RollingFile" fileName="/app/logs/main-application.log"
-                     filePattern="/app/logs/main-application-%d{MM-dd-yyyy}-%i.log.gz">
+                     filePattern="/app/logs/main-application-%d{yyyy-MM-dd}-%i.log.gz">
             <PatternLayout>
-                <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n</Pattern>
+                <Pattern>${FILE_PATTERN}</Pattern>
             </PatternLayout>
             <Policies>
                 <TimeBasedTriggeringPolicy />
@@ -16,17 +21,48 @@
             <DefaultRolloverStrategy max="10"/>
         </RollingFile>
     </Appenders>
+    
     <Loggers>
-        <Root level="INFO"> <!-- Ensures ALL logs are captured, including FATAL, ERROR, WARN, INFO, DEBUG, TRACE -->
+        <!-- Kök logger seviyesi INFO, varsayılan log seviyesi -->
+        <Root level="INFO">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RollingFile"/>
         </Root>
-        <!-- You can add more specific loggers if needed -->
+
+        <!-- Spring Framework için log seviyesi düşürüldü -->
+        <Logger name="org.springframework" level="WARN" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="RollingFile"/>
+        </Logger>
         
+        <!-- Toyota ana modülleri için loglar -->
         <Logger name="com.toyota.mainapp" level="INFO" additivity="false">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RollingFile"/>
         </Logger>
         
+        <!-- Toyota alt sistemleri için daha spesifik loglar -->
+        <Logger name="com.toyota.mainapp.subscriber.impl.TcpRateSubscriber" level="DEBUG" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="RollingFile"/>
+        </Logger>
+        
+        <Logger name="com.toyota.mainapp.subscriber.impl.RestRateSubscriber" level="DEBUG" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="RollingFile"/>
+        </Logger>
+
+        <!-- Noisy kütüphaneler için log seviyesi yüksek tutuldu -->
+        <Logger name="org.apache.kafka" level="WARN" additivity="false">
+            <AppenderRef ref="RollingFile"/>
+        </Logger>
+        
+        <Logger name="org.apache.zookeeper" level="ERROR" additivity="false">
+            <AppenderRef ref="RollingFile"/>
+        </Logger>
+        
+        <Logger name="io.netty" level="WARN" additivity="false">
+            <AppenderRef ref="RollingFile"/>
+        </Logger>
     </Loggers>
 </Configuration>

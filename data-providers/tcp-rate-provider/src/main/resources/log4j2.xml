@@ -1,13 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Configuration status="WARN">
+    <Properties>
+        <Property name="CONSOLE_PATTERN">%highlight{%d{HH:mm:ss.SSS} %-5level %logger{1.} - %msg%n}{FATAL=red, ERROR=red, WARN=yellow, INFO=cyan, DEBUG=blue, TRACE=white}</Property>
+        <Property name="FILE_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level %logger{36} - %msg%n%ex{5}</Property>
+    </Properties>
+    
     <Appenders>
         <Console name="Console" target="SYSTEM_OUT">
-            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+            <PatternLayout pattern="${CONSOLE_PATTERN}"/>
         </Console>
         <RollingFile name="RollingFile" fileName="/app/logs/tcp-provider.log"
-                     filePattern="/app/logs/tcp-provider-%d{MM-dd-yyyy}-%i.log.gz">
+                     filePattern="/app/logs/tcp-provider-%d{yyyy-MM-dd}-%i.log.gz">
             <PatternLayout>
-                <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n</Pattern>
+                <Pattern>${FILE_PATTERN}</Pattern>
             </PatternLayout>
             <Policies>
                 <TimeBasedTriggeringPolicy />
@@ -16,12 +21,14 @@
             <DefaultRolloverStrategy max="10"/>
         </RollingFile>
     </Appenders>
+    
     <Loggers>
-        <Root level="TRACE"> <!-- Ensures ALL logs are captured -->
+        <Root level="INFO">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RollingFile"/>
         </Root>
-        <Logger name="com.toyota.tcpserver" level="TRACE" additivity="false">
+
+        <Logger name="com.toyota.tcpserver" level="INFO" additivity="false">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RollingFile"/>
         </Logger>

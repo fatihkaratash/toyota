@@ -1,13 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Configuration status="WARN">
+    <Properties>
+        <Property name="CONSOLE_PATTERN">%highlight{%d{HH:mm:ss.SSS} %-5level %logger{1.} - %msg%n}{FATAL=red, ERROR=red, WARN=yellow, INFO=cyan, DEBUG=blue, TRACE=white}</Property>
+        <Property name="FILE_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level %logger{36} - %msg%n%ex{5}</Property>
+    </Properties>
+    
     <Appenders>
         <Console name="Console" target="SYSTEM_OUT">
-            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+            <PatternLayout pattern="${CONSOLE_PATTERN}"/>
         </Console>
         <RollingFile name="RollingFile" fileName="/app/logs/rest-provider.log"
-                     filePattern="/app/logs/rest-provider-%d{MM-dd-yyyy}-%i.log.gz">
+                     filePattern="/app/logs/rest-provider-%d{yyyy-MM-dd}-%i.log.gz">
             <PatternLayout>
-                <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n</Pattern>
+                <Pattern>${FILE_PATTERN}</Pattern>
             </PatternLayout>
             <Policies>
                 <TimeBasedTriggeringPolicy />
@@ -16,17 +21,27 @@
             <DefaultRolloverStrategy max="10"/>
         </RollingFile>
     </Appenders>
+    
     <Loggers>
-        <Root level="TRACE"> <!-- Ensures ALL logs are captured -->
+        <Root level="INFO">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RollingFile"/>
         </Root>
-        <!-- You can add more specific loggers if needed -->
         
-        <Logger name="com.toyota.restserver" level="TRACE" additivity="false">
+        <Logger name="com.toyota.restserver" level="INFO" additivity="false">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RollingFile"/>
         </Logger>
         
+        <!-- Spring Framework için log seviyesi düşürüldü -->
+        <Logger name="org.springframework" level="WARN" additivity="false">
+            <AppenderRef ref="RollingFile"/>
+        </Logger>
+        
+        <!-- REST Web servisleri için detaylı loglar -->
+        <Logger name="com.toyota.restserver.controller" level="INFO" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="RollingFile"/>
+        </Logger>
     </Loggers>
 </Configuration>
