@@ -25,7 +25,7 @@ public class MainAppApplication {
 
             // Add shutdown hook to stop coordinator gracefully
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                logger.info("Kapatma  tetiklendi. Koordinatör durduruluyor...");
+                logger.info("Kapatma kancası tetiklendi. Koordinatör durduruluyor...");
                 coordinator.stop();
                 logger.info("Koordinatör durduruldu.");
             }));
