@@ -69,6 +69,16 @@ public class RestRateSubscriber implements PlatformSubscriber {
         if (webClientBuilder != null && baseUrl != null && !baseUrl.isEmpty()) {
             this.webClient = webClientBuilder.baseUrl(baseUrl).build();
             log.info("[{}] WebClient initialized with baseUrl: {}", providerName, baseUrl);
+            log.debug("[{}] WebClient created: {}", providerName, this.webClient != null);
+        } else {
+            log.warn("[{}] WebClientBuilder is null or baseUrl is empty. WebClient cannot be initialized.", 
+                    providerName);
+            if (webClientBuilder == null) {
+                log.error("[{}] CRITICAL ERROR: WebClientBuilder is null! REST API calls will fail.", providerName);
+            }
+            if (baseUrl == null || baseUrl.isEmpty()) {
+                log.error("[{}] CRITICAL ERROR: baseUrl is empty! REST API calls will fail.", providerName);
+            }
         }
         
         // Log detailed information about symbols
@@ -148,10 +158,14 @@ public class RestRateSubscriber implements PlatformSubscriber {
                     try {
                         log.info("[{}] REST poll döngüsü başladı.", providerName);
                         if (connected.get() && symbols.length > 0) {
+                            log.info("[{}] Toplam {} sembol için REST sorgusu yapılacak", providerName, symbols.length);
                             for (String symbol : symbols) {
                                 if (!running.get()) break; // Check running status before fetching each symbol
+                                log.info("[{}] Fetching rate for symbol: {}", providerName, symbol);
                                 fetchRate(symbol);
                             }
+                            log.info("[{}] Tüm semboller sorgulandı, sonraki poll çevrimine kadar {}ms bekleniyor", 
+                                    providerName, pollIntervalMs);
                         } else {
                             if (!connected.get()) {
                                 log.warn("[{}] REST poll atlandı, bağlantı yok (connected=false).", providerName);
@@ -202,83 +216,102 @@ public class RestRateSubscriber implements PlatformSubscriber {
     }
 
     private void fetchRate(String symbol) {
-    if (webClient == null) {
-        log.warn("[{}] WebClient null, {} için kur alınamıyor.", providerName, symbol);
-        return;
-    }
+        if (webClient == null) {
+            log.warn("[{}] WebClient null, {} için kur alınamıyor.", providerName, symbol);
+            return;
+        }
 
-    String requestUrl = baseUrl + "/rates/" + symbol;
-    log.debug("[{}] REST rate sorgulanıyor: {}, URL: {}", providerName, symbol, requestUrl);
-    
-    Mono<String> rawJsonMono = webClient.get()
-        .uri(requestUrl)
-        .retrieve()
-        .bodyToMono(String.class);
-
-    // Apply Resilience4j operators if available
-    if (circuitBreaker != null) {
-        rawJsonMono = rawJsonMono.transform(CircuitBreakerOperator.of(circuitBreaker));
-    }
-    if (retry != null) {
-        rawJsonMono = rawJsonMono.transform(io.github.resilience4j.reactor.retry.RetryOperator.of(retry));
-    }
+        String requestPath = "/rates/" + symbol;
+        log.debug("[{}] REST rate sorgulanıyor: {}, Base URL: {}, Path: {}", 
+                 providerName, symbol, baseUrl, requestPath);
         
-    rawJsonMono.subscribe(
-            jsonResponse -> {
-                if (jsonResponse != null) {
-                    try {
-                        // Parse JSON manually to handle timestamp format
-                        ObjectMapper mapper = new ObjectMapper();
-                        JsonNode rootNode = mapper.readTree(jsonResponse);
-                        
-                        ProviderRateDto rate = new ProviderRateDto();
-                        rate.setSymbol(rootNode.has("symbol") ? rootNode.get("symbol").asText() : symbol);
-                        rate.setBid(rootNode.has("bid") ? rootNode.get("bid").asText() : null);
-                        rate.setAsk(rootNode.has("ask") ? rootNode.get("ask").asText() : null);
-                        rate.setProviderName(providerName);
-                        
-                        // Handle timestamp - convert ISO string to long if needed
-                        if (rootNode.has("timestamp")) {
-                            JsonNode timestampNode = rootNode.get("timestamp");
-                            if (timestampNode.isTextual()) {
-                                // Parse ISO timestamp to long
-                                try {
-                                    rate.setTimestamp(
-                                        Instant.parse(timestampNode.asText()).toEpochMilli()
-                                    );
-                                } catch (Exception e) {
-                                    log.warn("[{}] ISO timestamp parsing failed, using current time: {}", 
-                                             providerName, e.getMessage());
+        try {
+            Mono<String> rawJsonMono = webClient.get()
+                .uri(requestPath)
+                .retrieve()
+                .bodyToMono(String.class);
+
+            // Apply Resilience4j operators if available
+            if (circuitBreaker != null) {
+                log.debug("[{}] Applying circuit breaker for request: {}", providerName, symbol);
+                rawJsonMono = rawJsonMono.transform(CircuitBreakerOperator.of(circuitBreaker));
+            }
+            if (retry != null) {
+                log.debug("[{}] Applying retry for request: {}", providerName, symbol);
+                rawJsonMono = rawJsonMono.transform(io.github.resilience4j.reactor.retry.RetryOperator.of(retry));
+            }
+                
+            rawJsonMono.subscribe(
+                    jsonResponse -> {
+                        if (jsonResponse != null) {
+                            log.trace("[{}] Raw JSON response for {}: {}", providerName, symbol, jsonResponse);
+                            try {
+                                // Parse JSON manually to handle timestamp format
+                                ObjectMapper mapper = new ObjectMapper();
+                                JsonNode rootNode = mapper.readTree(jsonResponse);
+                                
+                                log.debug("[{}] JSON parsed successfully for {}: Node type: {}", 
+                                         providerName, symbol, rootNode.getNodeType());
+                                
+                                ProviderRateDto rate = new ProviderRateDto();
+                                rate.setSymbol(rootNode.has("symbol") ? rootNode.get("symbol").asText() : symbol);
+                                rate.setBid(rootNode.has("bid") ? rootNode.get("bid").asText() : null);
+                                rate.setAsk(rootNode.has("ask") ? rootNode.get("ask").asText() : null);
+                                rate.setProviderName(providerName);
+                                
+                                // Handle timestamp - convert ISO string to long if needed
+                                if (rootNode.has("timestamp")) {
+                                    JsonNode timestampNode = rootNode.get("timestamp");
+                                    if (timestampNode.isTextual()) {
+                                        // Parse ISO timestamp to long
+                                        try {
+                                            rate.setTimestamp(
+                                                Instant.parse(timestampNode.asText()).toEpochMilli()
+                                            );
+                                        } catch (Exception e) {
+                                            log.warn("[{}] ISO timestamp parsing failed, using current time: {}", 
+                                                     providerName, e.getMessage());
+                                            rate.setTimestamp(System.currentTimeMillis());
+                                        }
+                                    } else if (timestampNode.isNumber()) {
+                                        rate.setTimestamp(timestampNode.asLong());
+                                    } else {
+                                        rate.setTimestamp(System.currentTimeMillis());
+                                    }
+                                } else {
                                     rate.setTimestamp(System.currentTimeMillis());
                                 }
-                            } else if (timestampNode.isNumber()) {
-                                rate.setTimestamp(timestampNode.asLong());
-                            } else {
-                                rate.setTimestamp(System.currentTimeMillis());
+                                
+                                log.info("[{}] REST kurları alındı - Sembol: {}, Bid: {}, Ask: {}", 
+                                         providerName, rate.getSymbol(), rate.getBid(), rate.getAsk());
+                                
+                                // Critical point: onRateAvailable call
+                                log.debug("[{}] Calling onRateAvailable with ProviderRateDto for symbol: {}", 
+                                         providerName, rate.getSymbol());
+                                callback.onRateAvailable(providerName, rate);
+                                log.debug("[{}] onRateAvailable callback completed for symbol: {}", 
+                                         providerName, rate.getSymbol());
+                            } catch (Exception e) {
+                                log.error("[{}] JSON ayrıştırma hatası: {} - JSON: {}", 
+                                         providerName, e.getMessage(), jsonResponse, e);
+                                callback.onProviderError(providerName, "JSON ayrıştırma hatası: " + symbol, e);
                             }
                         } else {
-                            rate.setTimestamp(System.currentTimeMillis());
+                            log.warn("[{}] {} için REST'ten null kur verisi alındı.", providerName, symbol);
                         }
-                        
-                        log.debug("[{}] REST kurları alındı ve zenginleştirildi - Sembol: {}, ProviderRateDto: {}", 
-                                 providerName, symbol, rate);
-                        callback.onRateAvailable(providerName, rate);
-                    } catch (Exception e) {
-                        log.error("[{}] JSON ayrıştırma hatası: {} - JSON: {}", 
-                                 providerName, e.getMessage(), jsonResponse, e);
-                        callback.onProviderError(providerName, "JSON ayrıştırma hatası: " + symbol, e);
+                    },
+                    error -> {
+                        log.error("[{}] REST sorgu hatası: {} - URL: {}{} - Hata: {}", 
+                                  providerName, symbol, baseUrl, requestPath, error.getMessage(), error);
+                        callback.onProviderError(providerName, "REST sorgu hatası: " + symbol, error);
                     }
-                } else {
-                    log.warn("[{}] {} için REST'ten null kur verisi alındı.", providerName, symbol);
-                }
-            },
-            error -> {
-                log.error("[{}] REST sorgu hatası: {} - URL: {} - Hata: {}", 
-                          providerName, symbol, requestUrl, error.getMessage(), error);
-                callback.onProviderError(providerName, "REST sorgu hatası: " + symbol, error);
-            }
-        );
-}
+                );
+        } catch (Exception e) {
+            log.error("[{}] REST request oluşturulurken beklenmedik hata: {} - Symbol: {}", 
+                     providerName, e.getMessage(), symbol, e);
+            callback.onProviderError(providerName, "REST request hatası: " + symbol, e);
+        }
+    }
     
     @SuppressWarnings("unchecked")
     private <T> T getConfigValue(Map<String, Object> config, String key, T defaultValue) {

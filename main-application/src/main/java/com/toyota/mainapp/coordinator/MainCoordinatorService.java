@@ -1,5 +1,6 @@
 package com.toyota.mainapp.coordinator;
 
+import com.toyota.mainapp.aggregator.TwoWayWindowAggregator;
 import com.toyota.mainapp.cache.RateCacheService;
 import com.toyota.mainapp.calculator.RateCalculatorService;
 import com.toyota.mainapp.coordinator.callback.PlatformCallback;
@@ -10,6 +11,7 @@ import com.toyota.mainapp.dto.RawRateDto;
 import com.toyota.mainapp.dto.payload.RawRatePayloadDto;
 import com.toyota.mainapp.exception.AggregatedRateValidationException;
 import com.toyota.mainapp.kafka.producer.KafkaRateProducer;
+import com.toyota.mainapp.kafka.producer.SimpleFormatKafkaProducer;
 import com.toyota.mainapp.mapper.RateMapper;
 import com.toyota.mainapp.subscriber.api.PlatformSubscriber;
 import com.toyota.mainapp.subscriber.dynamic.DynamicSubscriberLoader;
@@ -42,7 +44,9 @@ public class MainCoordinatorService implements PlatformCallback {
     private final RateValidatorService rateValidatorService;
     private final RateCacheService rateCacheService;
     private final KafkaRateProducer kafkaRateProducer;
+    private final SimpleFormatKafkaProducer simpleFormatProducer;
     private final RateCalculatorService rateCalculatorService;
+    private final TwoWayWindowAggregator aggregator; // Yeni eklenen toplayıcı
 
     @Value("${subscribers.config.path}")
     private String subscribersConfigPath;
@@ -116,7 +120,8 @@ public class MainCoordinatorService implements PlatformCallback {
      */
     @Override
     public void onRateAvailable(String providerName, ProviderRateDto providerRate) {
-        log.info("Sağlayıcıdan veri alındı {}: {}", providerName, providerRate);
+        log.info("Sağlayıcıdan veri alındı {}: Symbol={}, Bid={}, Ask={}", 
+                providerName, providerRate.getSymbol(), providerRate.getBid(), providerRate.getAsk());
         
         try {
             // Sağlayıcı adını ayarla
@@ -130,6 +135,7 @@ public class MainCoordinatorService implements PlatformCallback {
 
             // 2. Veriyi doğrula
             rateValidatorService.validate(normalizedRate);
+            log.debug("Kur doğrulama başarılı: {}", normalizedRate.getSymbol());
             
             // 3. Önbellekleme ve Kafka için ham kur oluştur
             RawRateDto rawRate = rateMapper.toRawDto(normalizedRate);
@@ -138,15 +144,24 @@ public class MainCoordinatorService implements PlatformCallback {
             
             // 4. Ham kuru önbelleğe al
             String rawRateCacheKey = rawRate.getProviderName() + "_" + rawRate.getSymbol();
+            log.debug("Önbellek anahtarı oluşturuldu: {}", rawRateCacheKey);
             rateCacheService.cacheRawRate(rawRateCacheKey, rawRate);
             log.info("Kur başarıyla işlendi ve önbelleğe alındı: {}, sağlayıcı: {}", 
                     rawRate.getSymbol(), providerName);
 
-            // 5. Ham kuru Kafka'ya gönder
+            // 5. Ham kuru Kafka'ya gönder - JSON formatı
             RawRatePayloadDto payload = rateMapper.toRawRatePayloadDto(rawRate);
             kafkaRateProducer.sendRawRate(payload);
+            
+            // 5b. Ham kuru Kafka'ya gönder - Basit metin formatı
+            simpleFormatProducer.sendRawRate(rawRate);
+            log.debug("Kur Kafka'ya gönderildi: {}", rawRateCacheKey);
 
-            // 6. Hesaplama motorunu tetikle
+            // 6. YENİ: Toplayıcıya gönder - pencere bazlı hesaplama için
+            log.debug("Kur toplayıcıya gönderiliyor: {}", rawRateCacheKey);
+            aggregator.accept(rawRate);
+
+            // 7. Hesaplama motorunu tetikle - mevcut yöntem de tutulabilir veya kaldırılabilir
             log.info("Güncellenen ham kura dayalı hesaplamalar tetikleniyor: {}", rawRateCacheKey);
             rateCalculatorService.processRateUpdate(rawRateCacheKey, true);
 

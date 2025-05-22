@@ -88,6 +88,40 @@ public class RuleEngineServiceImpl implements RuleEngineService {
     }
 
     @Override
+    public List<CalculationRuleDto> getRulesByInputBaseSymbol(String baseSymbol) {
+        return rules.stream()
+                .filter(rule -> {
+                    String[] dependsOnRaw = rule.getDependsOnRaw();
+                    if (dependsOnRaw == null) {
+                        return false;
+                    }
+                    
+                    for (String rawSymbol : dependsOnRaw) {
+                        // Sağlayıcı önekini kaldırarak temel sembolü elde et
+                        String rawBaseSymbol = deriveBaseSymbol(rawSymbol);
+                        if (rawBaseSymbol.equals(baseSymbol)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                })
+                .collect(Collectors.toList());
+    }
+    
+    /**
+     * Sağlayıcıya özgü sembolden temel sembolü türet
+     * Not: Bu metot, TwoWayWindowAggregator sınıfındaki aynı adlı metotla tutarlı olmalıdır.
+     */
+    private String deriveBaseSymbol(String providerSymbol) {
+        if (providerSymbol == null) {
+            return "";
+        }
+        
+        int underscoreIndex = providerSymbol.indexOf('_');
+        return underscoreIndex > 0 ? providerSymbol.substring(underscoreIndex + 1) : providerSymbol;
+    }
+
+    @Override
     public CalculatedRateDto executeRule(CalculationRuleDto rule, Map<String, RawRateDto> inputRates) {
         String strategyName = rule.getImplementation();
         CalculationStrategy strategy = strategies.get(strategyName);

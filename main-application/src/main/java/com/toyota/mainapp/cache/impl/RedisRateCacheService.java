@@ -48,6 +48,13 @@ public class RedisRateCacheService implements RateCacheService {
     public void cacheRawRate(String key, RawRateDto rawRateDto) {
         String cacheKey = buildRawRateCacheKey(key);
         try {
+            if (rawRateDto == null) {
+                log.warn("Cannot cache null RawRateDto with key: {}", cacheKey);
+                return;
+            }
+            
+            log.debug("Caching RawRateDto with key: {}, object type: {}", 
+                     cacheKey, rawRateDto.getClass().getName());
             rawRateRedisTemplate.opsForValue().set(cacheKey, rawRateDto, rawRateTtlSeconds, TimeUnit.SECONDS);
             log.debug("Ham kur {}: {} anahtariyla onbellege alindi.", cacheKey, rawRateDto);
         } catch (Exception e) {
@@ -61,12 +68,27 @@ public class RedisRateCacheService implements RateCacheService {
         try {
             RawRateDto rawRate = rawRateRedisTemplate.opsForValue().get(cacheKey);
             if (rawRate != null) {
-                log.debug("{} anahtarli ham kur onbellekten alindi: {}", cacheKey, rawRate);
+                // Add type checking to identify class cast issues
+                log.debug("Retrieved object from Redis with key {}: type={}, content={}", 
+                         cacheKey, rawRate.getClass().getName(), rawRate);
                 return Optional.of(rawRate);
             } else {
                 log.debug("{} anahtarli ham kur onbellekte bulunamadi.", cacheKey);
                 return Optional.empty();
             }
+        } catch (ClassCastException cce) {
+            // Special handling for class cast exception to provide more diagnostics
+            log.error("{} anahtarli ham kur onbellekten alinirken ClassCastException: {}", 
+                    cacheKey, cce.getMessage(), cce);
+            try {
+                // Try to get the raw object to see its actual type
+                Object rawObject = rawRateRedisTemplate.opsForValue().get(cacheKey);
+                log.error("Retrieved object is of type: {}", 
+                        rawObject != null ? rawObject.getClass().getName() : "null");
+            } catch (Exception e) {
+                log.error("Additional error trying to diagnose the object: {}", e.getMessage());
+            }
+            return Optional.empty();
         } catch (Exception e) {
             log.error("{} anahtarli ham kur onbellekten alinirken hata: {}", cacheKey, e.getMessage(), e);
             return Optional.empty();

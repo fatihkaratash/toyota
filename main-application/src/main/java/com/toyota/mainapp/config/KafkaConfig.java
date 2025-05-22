@@ -32,7 +32,10 @@ public class KafkaConfig {
     private String rawRatesTopicName; // Değişken adı daha net
 
     @Value("${app.kafka.topic.calculated-rates:financial-calculated-rates}")
-    private String calculatedRatesTopicName; // Değişken adı daha net
+    private String calculatedRatesTopicName;
+
+    @Value("${app.kafka.topic.simple-rates:financial-simple-rates}")
+    private String simpleRatesTopicName;
 
     @Value("${app.kafka.topic.partitions:3}")
     private Integer topicPartitions;
@@ -82,6 +85,20 @@ public class KafkaConfig {
         return new KafkaTemplate<>(rateMessageProducerFactory());
     }
 
+    // String değerler için ProducerFactory
+    @Bean
+    public ProducerFactory<String, String> stringProducerFactory() {
+        Map<String, Object> configProps = new HashMap<>(baseProducerConfigs());
+        configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        return new DefaultKafkaProducerFactory<>(configProps);
+    }
+
+    // String değerler için KafkaTemplate
+    @Bean
+    public KafkaTemplate<String, String> stringKafkaTemplate() {
+        return new KafkaTemplate<>(stringProducerFactory());
+    }
+
     // Kafka Admin client for topic management (Bu kısım doğru görünüyor)
     @Bean
     public KafkaAdmin kafkaAdmin() {
@@ -102,5 +119,12 @@ public class KafkaConfig {
         log.info("Creating Kafka topic: {}, partitions: {}, replication: {}",
                 calculatedRatesTopicName, topicPartitions, topicReplication.intValue());
         return new NewTopic(calculatedRatesTopicName, topicPartitions, (short) topicReplication.intValue());
+    }
+
+    @Bean
+    public NewTopic simpleRatesTopic() {
+        log.info("Creating Kafka topic: {}, partitions: {}, replication: {}",
+                simpleRatesTopicName, topicPartitions, topicReplication);
+        return new NewTopic(simpleRatesTopicName, topicPartitions, (short) topicReplication.intValue());
     }
 }

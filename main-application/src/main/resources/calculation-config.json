@@ -6,8 +6,8 @@
       "strategyType": "JAVA_CLASS",
       "implementation": "averageUsdTryStrategy",
       "dependsOnRaw": [
-        "PF1_USDTRY",
-        "PF2_USDTRY"
+       "TCPProvider2_PF1_USDTRY",
+        "RESTProvider1_PF2_USDTRY"
       ],
       "priority": 10
     },
@@ -17,8 +17,8 @@
       "strategyType": "GROOVY_SCRIPT",
       "implementation": "scripts/eur_try_calculator.groovy",
       "dependsOnRaw": [
-        "PF1_EURUSD",
-        "PF2_EURUSD"
+        "TCPProvider2_EURUSD",
+        "RESTProvider1_EURUSD"
       ],
       "dependsOnCalculated": [
         "USD/TRY_AVG"
@@ -48,7 +48,7 @@
       ]
     },
     {
-      "baseSymbol": "EURTRY",
+      "baseSymbol": "GBPUSD",
       "expectedProviders": [
         "PF1",
         "PF2"

@@ -40,9 +40,9 @@ public class AppConfig {
     @Primary
     public ObjectMapper objectMapper() {
         ObjectMapper mapper = new ObjectMapper();
-    mapper.registerModule(new JavaTimeModule());
+         mapper.registerModule(new JavaTimeModule());
     // Enable default typing to preserve type information
-    mapper.activateDefaultTyping(
+          mapper.activateDefaultTyping(
         mapper.getPolymorphicTypeValidator(), 
         ObjectMapper.DefaultTyping.NON_FINAL, 
         JsonTypeInfo.As.PROPERTY);
@@ -51,7 +51,7 @@ public class AppConfig {
 
     /**
      * Ham kurlar için Redis şablonu
-     */
+     
     @Bean
     @Qualifier("rawRateRedisTemplate")
     public RedisTemplate<String, RawRateDto> rawRateRedisTemplate(
@@ -71,7 +71,7 @@ public class AppConfig {
 
     /**
      * Hesaplanmış kurlar için Redis şablonu
-     */
+     
     @Bean
     @Qualifier("calculatedRateRedisTemplate")
     public RedisTemplate<String, CalculatedRateDto> calculatedRateRedisTemplate(

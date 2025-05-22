@@ -21,6 +21,15 @@ public interface RuleEngineService {
     List<CalculationRuleDto> getRulesByInputSymbol(String symbol);
     
     /**
+     * Belirtilen temel sembolü giriş olarak kullanan tüm hesaplama kurallarını bul.
+     * Bu, sağlayıcı önekini (örn. PF1_) içermeyen semboller için kullanılır.
+     * 
+     * @param baseSymbol Aranacak temel sembol (örn. "USDTRY")
+     * @return Bu temel sembolü kullanan hesaplama kurallarının listesi
+     */
+    List<CalculationRuleDto> getRulesByInputBaseSymbol(String baseSymbol);
+    
+    /**
      * Bir hesaplama kuralını verilen giriş kurları ile çalıştır
      * 
      * @param rule Çalıştırılacak hesaplama kuralı
