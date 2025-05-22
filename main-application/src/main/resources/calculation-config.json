@@ -6,10 +6,10 @@
       "strategyType": "JAVA_CLASS",
       "implementation": "averageUsdTryStrategy",
       "dependsOnRaw": [
-        "MockProvider1_USDTRY",
-        "MockProvider2_USDTRY"
+        "PF1_USDTRY",
+        "PF2_USDTRY"
       ],
-      "priority": 1
+      "priority": 10
     },
     {
       "outputSymbol": "EUR/TRY",
@@ -17,16 +17,19 @@
       "strategyType": "GROOVY_SCRIPT",
       "implementation": "scripts/eur_try_calculator.groovy",
       "dependsOnRaw": [
-        "MockProvider1_EURUSD"
+        "PF1_EURUSD",
+        "PF2_EURUSD"
       ],
       "dependsOnCalculated": [
         "USD/TRY_AVG"
       ],
       "inputParameters": {
-        "eurUsdSymbol": "MockProvider1_EURUSD",
-        "usdTryAvgSymbol": "USD/TRY_AVG"
+        "eurUsdSource1Key": "PF1_EURUSD",
+        "eurUsdSource2Key": "PF2_EURUSD",
+        "usdTryAvgSourceKey": "USD/TRY_AVG",
+        "defaultScale": "8"
       },
-      "priority": 2
+      "priority": 20
     }
   ]
 }

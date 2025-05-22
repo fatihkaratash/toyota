@@ -4,8 +4,8 @@ import com.toyota.tcpserver.logging.LoggingHelper;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.*;
-import java.util.stream.Collectors;
 
 public class RatePublisher {
     private static final LoggingHelper log = new LoggingHelper(RatePublisher.class);
@@ -14,13 +14,15 @@ public class RatePublisher {
     private final RateFluctuationSimulator simulator;
     private final ConfigurationReader configurationReader;
     private final ScheduledExecutorService scheduler;
-    private final List<ClientHandler> clientHandlers; // Aktif istemci işleyicilerinin paylaşılan listesi
+    
+    // Listenerları saklamak için ConcurrentHashMap kullan
+    private final Set<RateUpdateListener> listeners = ConcurrentHashMap.newKeySet();
+    
     private volatile boolean running = false;
 
 
     public RatePublisher(ConfigurationReader configurationReader, List<ClientHandler> clientHandlers) {
         this.configurationReader = configurationReader;
-        this.clientHandlers = clientHandlers; // Bu liste TcpServer tarafından yönetilir
         this.simulator = new RateFluctuationSimulator(configurationReader);
         
         // configurationReader'dan derin kopyalarla currentRates'i başlat
@@ -39,6 +41,29 @@ public class RatePublisher {
             t.setDaemon(true);
             return t;
         });
+    }
+    
+    /**
+     * Bir dinleyiciyi rate güncellemeleri için kaydeder
+     * @param listener Kayıt edilecek dinleyici
+     */
+    public void addListener(RateUpdateListener listener) {
+        if (listener != null) {
+            listeners.add(listener);
+            log.debug(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_PF1, null,
+                    "Yeni dinleyici eklendi, toplam dinleyici sayısı: " + listeners.size());
+        }
+    }
+    
+    /**
+     * Bir dinleyicinin kaydını kaldırır
+     * @param listener Kaydı kaldırılacak dinleyici
+     */
+    public void removeListener(RateUpdateListener listener) {
+        if (listeners.remove(listener)) {
+            log.debug(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_PF1, null,
+                    "Dinleyici kaldırıldı, kalan dinleyici sayısı: " + listeners.size());
+        }
     }
 
     public void start() {
@@ -77,19 +102,8 @@ public class RatePublisher {
                 // Kur bilgisini log için hazırla
                 String rateInfo = String.format("BID:%.5f ASK:%.5f", fluctuatedRate.getBid(), fluctuatedRate.getAsk());
                 
-                // İlgili istemcilere yayın yap
-                // ConcurrentModificationException'dan kaçınmak için clientHandlers'ın bir anlık görüntüsü üzerinde dolaş
-                // clientHandlers listesi başka bir thread tarafından değiştirilirse (örn. TcpServer)
-                List<ClientHandler> snapshot;
-                synchronized(clientHandlers) { // Güvenli kopyalamayı sağla
-                    snapshot = List.copyOf(clientHandlers);
-                }
-
-                for (ClientHandler handler : snapshot) {
-                    if (handler.isRunning() && handler.isSubscribedTo(pairName)) {
-                        handler.sendRateUpdate(fluctuatedRate);
-                    }
-                }
+                // İlgili dinleyicilere yayın yap
+                notifyListeners(fluctuatedRate);
                 
                 log.trace(LoggingHelper.OPERATION_UPDATE, LoggingHelper.PLATFORM_PF1, pairName, rateInfo,
                         "Kur güncellendi ve yayınlandı");
@@ -100,6 +114,30 @@ public class RatePublisher {
             log.error(LoggingHelper.PLATFORM_PF1, null, 
                     "Kur yayınlama döngüsü sırasında hata", e);
         }
+    }
+    
+    /**
+     * Güncellenmiş kur hakkında uygun dinleyicilere bildirim yapar
+     * @param rate Güncellenen kur
+     */
+    private void notifyListeners(Rate rate) {
+        String pairName = rate.getPairName();
+        int notifiedCount = 0;
+        
+        for (RateUpdateListener listener : listeners) {
+            try {
+                if (listener.isSubscribedTo(pairName)) {
+                    listener.onRateUpdate(rate);
+                    notifiedCount++;
+                }
+            } catch (Exception e) {
+                log.error(LoggingHelper.PLATFORM_PF1, pairName,
+                        "Dinleyiciye bildirim gönderilirken hata oluştu: " + e.getMessage(), e);
+            }
+        }
+        
+        log.trace(LoggingHelper.OPERATION_UPDATE, LoggingHelper.PLATFORM_PF1, pairName, null,
+                pairName + " kuruna abone olan " + notifiedCount + " dinleyiciye bildirim gönderildi");
     }
     
     public boolean isValidRatePair(String rateName) {
@@ -114,6 +152,7 @@ public class RatePublisher {
 
     public void stop() {
         running = false;
+        listeners.clear(); // Tüm dinleyicileri temizle
         scheduler.shutdown();
         try {
             if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {

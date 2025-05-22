@@ -18,7 +18,7 @@ public class TcpServer {
     private final RatePublisher ratePublisher;
     private ServerSocket serverSocket;
     private final ExecutorService clientExecutorService;
-    // Thread-safe istemci işleyicileri listesi kullan
+    // Thread-safe istemci işleyicileri listesi kullan (sadece yönetim için)
     private final List<ClientHandler> clientHandlers = new CopyOnWriteArrayList<>();
     private volatile boolean running = false;
     private Thread serverThread;
@@ -32,8 +32,8 @@ public class TcpServer {
             t.setDaemon(true); // Sadece daemon thread'ler çalışıyorsa JVM'in çıkmasına izin ver
             return t;
         });
-        // Paylaşılan clientHandlers listesini RatePublisher'a geçir
-        this.ratePublisher = new RatePublisher(configurationReader, clientHandlers);
+        // RatePublisher'ı oluştur (artık listenerleri kendisi yönetecek)
+        this.ratePublisher = new RatePublisher(configurationReader, null);
     }
 
     public void start() {
@@ -61,6 +61,7 @@ public class TcpServer {
                     log.info(LoggingHelper.OPERATION_CONNECT, LoggingHelper.PLATFORM_TCP, null, 
                             "Yeni istemci bağlantısı kabul edildi: " + clientSocket.getRemoteSocketAddress());
                     
+                    // ClientHandler nesnesi, constructor'ında RatePublisher'a dinleyici olarak kendini kaydedecek
                     ClientHandler clientHandler = new ClientHandler(clientSocket, ratePublisher);
                     clientHandlers.add(clientHandler);
                     clientExecutorService.submit(clientHandler);

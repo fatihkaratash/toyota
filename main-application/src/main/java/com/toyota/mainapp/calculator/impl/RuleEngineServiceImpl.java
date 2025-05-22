@@ -53,14 +53,14 @@ public class RuleEngineServiceImpl implements RuleEngineService {
         // TODO: Rules should be loaded from configuration file
         log.info("Hesaplama kuralları yükleniyor...");
         
-        // Sample rule for demonstration
+        // Updated sample rule with correct provider symbols
         CalculationRuleDto sampleRule = CalculationRuleDto.builder()
                 .outputSymbol("USD/TRY_AVG")
                 .description("USD/TRY ortalaması")
                 .strategyType("JAVA_CLASS")
                 .implementation("averageUsdTryStrategy")
-                .dependsOnRaw(new String[]{"PROVIDER1_USDTRY", "PROVIDER2_USDTRY"})
-                .priority(1)
+                .dependsOnRaw(new String[]{"PF1_USDTRY", "PF2_USDTRY"})
+                .priority(10)
                 .build();
                 
         rules.add(sampleRule);

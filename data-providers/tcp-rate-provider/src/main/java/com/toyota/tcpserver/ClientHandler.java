@@ -10,10 +10,10 @@ import java.net.SocketException;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class ClientHandler implements Runnable {
+public class ClientHandler implements Runnable, RateUpdateListener {
     private static final LoggingHelper log = new LoggingHelper(ClientHandler.class);
     private final Socket clientSocket;
-    private final RatePublisher ratePublisher; // Abone olma üzerine ilk kuru göndermek için
+    private final RatePublisher ratePublisher;
     private final Set<String> subscriptions = ConcurrentHashMap.newKeySet(); // Abonelikler için thread-safe set
     private PrintWriter out;
     private BufferedReader in;
@@ -30,6 +30,13 @@ public class ClientHandler implements Runnable {
                    "ClientHandler: " + clientSocket.getRemoteSocketAddress() + " istemcisi için akışlar ayarlanırken hata: " + e.getMessage(), e);
             running = false; // Kurulum başarısız olursa run() metodunun ilerlemesini engelle
             closeConnection();
+        }
+        
+        // Başlangıçta kendini RatePublisher'a dinleyici olarak kaydet
+        if (ratePublisher != null && running) {
+            ratePublisher.addListener(this);
+            log.debug(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, null,
+                    clientSocket.getRemoteSocketAddress() + " dinleyici olarak kaydedildi");
         }
     }
 
@@ -59,13 +66,16 @@ public class ClientHandler implements Runnable {
         } finally {
             log.info(LoggingHelper.OPERATION_DISCONNECT, LoggingHelper.PLATFORM_TCP, null, 
                     clientSocket.getRemoteSocketAddress() + " istemcisi bağlantısı kesildi veya işleyici durduruluyor.");
+            // RatePublisher'dan dinleyici kaydını kaldır
+            if (ratePublisher != null) {
+                ratePublisher.removeListener(this);
+            }
             closeConnection();
-            // İsteğe bağlı olarak, TcpServer'ı bu işleyiciyi listesinden kaldırmak için bilgilendir
         }
     }
 
     private void processCommand(String command) {
-        String[] parts = command.split("\\|");
+        String[] parts = command.split("\\|",2);
         if (parts.length == 0) {
             out.println("ERROR|Geçersiz komut formatı");
             return;
@@ -82,6 +92,7 @@ public class ClientHandler implements Runnable {
                         out.println("Şuna abone olundu: " + rateName);
                         log.info(LoggingHelper.OPERATION_SUBSCRIBE, LoggingHelper.PLATFORM_TCP, rateName, 
                                 clientSocket.getRemoteSocketAddress() + " istemcisi kuruna abone oldu");
+                        
                         // Abonelik üzerine mevcut kuru hemen gönder
                         Rate currentRate = ratePublisher.getCurrentRate(rateName);
                         if (currentRate != null) {
@@ -116,6 +127,11 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    @Override
+    public void onRateUpdate(Rate rate) {
+        sendRateUpdate(rate);
+    }
+
     public void sendRateUpdate(Rate rate) {
         if (rate == null || clientSocket.isClosed() || out == null) {
             return;
@@ -139,6 +155,7 @@ public class ClientHandler implements Runnable {
         }
     }
     
+    @Override
     public boolean isSubscribedTo(String pairName) {
         return subscriptions.contains(pairName);
     }

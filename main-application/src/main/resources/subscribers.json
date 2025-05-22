@@ -5,9 +5,9 @@
     "enabled": true,
     "implementationClass": "com.toyota.mainapp.subscriber.impl.RestRateSubscriber",
     "connectionConfig": {
-      "baseUrl": "http://localhost:8080",
+      "baseUrl": "http://rest-rate-provider:8080",
       "pollIntervalMs": 5000,
-      "symbols": ["USD/TRY", "EUR/TRY", "GBP/TRY"],
+      "symbols": ["PF2_USDTRY", "PF2_EURUSD", "PF2_GBPTRY"],
       "timeout": 3000,
       "retryConfig": {
         "maxAttempts": 3,
@@ -25,11 +25,12 @@
     "enabled": true,
     "implementationClass": "com.toyota.mainapp.subscriber.impl.TcpRateSubscriber",
     "connectionConfig": {
-      "host": "localhost",
+      "host": "tcp-rate-provider",
       "port": 8081,
       "connectionTimeoutMs": 5000,
-      "retryAttempts": 3,
-      "symbols": ["USD/TRY", "EUR/TRY"]
+      "readTimeoutMs": 60000, 
+      "retryAttempts": 10,
+      "symbols": ["PF1_USDTRY", "PF1_EURUSD"]
     }
   }
 ]

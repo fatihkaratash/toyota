@@ -23,10 +23,10 @@ public class TcpRateSubscriber implements PlatformSubscriber {
     private BufferedReader reader;
     private PrintWriter writer;
     
-    private String host = "localhost";
+    private String host = "tcp-rate-provider"; // Default host updated to "tcp-rate-provider"
     private int port = 8081; // Default TCP port updated to 8081
     private int timeout = 30000;
-    private int retries = 3;
+    private int retries = 10;
     private String[] symbols = new String[0];
 
     @Override
@@ -36,7 +36,8 @@ public class TcpRateSubscriber implements PlatformSubscriber {
         
         if (config.getConnectionConfig() != null) {
             Map<String, Object> connConfig = config.getConnectionConfig();
-            this.host = getString(connConfig, "host", "localhost");
+            this.host = getString(connConfig, "host", "tcp-rate-provider"); // Default host updated to "tcp-rate-provider"
+            //this.host = getString(connConfig, "host", "localhost"); // Default host updated to "tcp-rate-provider"
             this.port = getInt(connConfig, "port", 8081); // Default TCP port updated to 8081
             this.timeout = getInt(connConfig, "connectionTimeoutMs", 30000);
             this.retries = getInt(connConfig, "retryAttempts", 3);
@@ -94,37 +95,99 @@ public class TcpRateSubscriber implements PlatformSubscriber {
         
         running.set(true);
         
-        // Abone ol
+        // Subscribe using proper format
         for (String symbol : symbols) {
-            writer.println("SUBSCRIBE " + symbol);
+            writer.println("subscribe|" + symbol); //hatalıydı format clienttan veri cekemiyordu
+            log.info("TCP sembolüne abone olundu: {}", symbol);
         }
         
         // Ana döngü
-        Thread thread = new Thread(() -> {
-            while (running.get() && connected.get()) {
-                try {
-                    String line = reader.readLine();
-                    if (line == null) break;
-                    
-                    processLine(line);
-                } catch (Exception e) {
-                    if (running.get()) {
-                        log.error("TCP okuma hatası: {}", e.getMessage());
-                        callback.onProviderError(providerName, "TCP veri alma hatası", e);
-                        break;
-                    }
+    Thread thread = new Thread(() -> {
+        while (running.get()) {
+            try {
+                if (!connected.get()) {
+                    reconnect(); // Yeni metod: Yeniden bağlanma girişimi
+                    continue;
+                }
+                
+                String line = reader.readLine();
+                if (line == null) {
+                    handleConnectionLost("Bağlantı kapatıldı (null)");
+                    continue;
+                }
+                
+                processLine(line);
+            } catch (IOException e) {
+                handleConnectionLost("Okuma hatası: " + e.getMessage());
+            } catch (Exception e) {
+                if (running.get()) {
+                    log.error("TCP işleme hatası: {}", e.getMessage());
+                    callback.onProviderError(providerName, "TCP veri işleme hatası", e);
                 }
             }
             
-            // Bağlantı koptu veya durduruldu
-            closeResources();
-            connected.set(false);
-            callback.onProviderConnectionStatus(providerName, false, "TCP bağlantısı kesildi");
-        });
+            // Bağlantı koptu ise kısa bir bekleme yap
+            if (!connected.get() && running.get()) {
+                try {
+                    Thread.sleep(1000); // Aşırı CPU kullanımını önle
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
         
-        thread.setName("TCP-" + providerName);
-        thread.start();
+        // Ana döngü sonlandı, kaynakları temizle
+        closeResources();
+        connected.set(false);
+        callback.onProviderConnectionStatus(providerName, false, "TCP bağlantısı kapatıldı");
+    });
+    
+    thread.setName("TCP-" + providerName);
+    thread.setDaemon(true); // Arka plan thread'i olarak ayarla
+    thread.start();
+}
+
+// Yeniden bağlanma metodunu ekle -- Reconnec hatasını çözmeye calıstım
+private void reconnect() {
+    if (!running.get()) return;
+    
+    closeResources(); // Mevcut kaynakları temizle
+    
+    try {
+        log.info("TCP yeniden bağlanılıyor: {}", providerName);
+        socket = new Socket(host, port);
+        socket.setSoTimeout(timeout);
+        reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+        writer = new PrintWriter(socket.getOutputStream(), true);
+        
+        connected.set(true);
+        callback.onProviderConnectionStatus(providerName, true, "TCP bağlantısı yeniden kuruldu");
+        
+        // Yeniden abone ol
+        for (String symbol : symbols) {
+            writer.println("subscribe|" + symbol);
+            log.info("TCP sembolüne yeniden abone olundu: {}", symbol);
+        }
+    } catch (IOException e) {
+        log.error("TCP yeniden bağlanma hatası: {}", e.getMessage());
+        connected.set(false);
+        
+        // Hemen tekrar denemeyi önlemek için kısa bir bekleme
+        try {
+            Thread.sleep(3000);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
     }
+}
+
+// Bağlantı kopması durumunu yönet
+private void handleConnectionLost(String reason) {
+    log.warn("TCP bağlantısı koptu: {} - {}", providerName, reason);
+    connected.set(false);
+    callback.onProviderConnectionStatus(providerName, false, "TCP bağlantısı koptu: " + reason);
+    closeResources();
+}
 
     @Override
     public void stopMainLoop() {
@@ -143,15 +206,30 @@ public class TcpRateSubscriber implements PlatformSubscriber {
     }
 
     private void processLine(String line) {
-        // Beklenen format: SYMBOL,BID,ASK
-        String[] parts = line.split(",");
-        if (parts.length < 3) return;
-
         try {
-            String symbol = parts[0].trim();
-            double bid = Double.parseDouble(parts[1].trim());
-            double ask = Double.parseDouble(parts[2].trim());
+            // Format from TCP server: PAIR_NAME|22:number:BID_VALUE|25:number:ASK_VALUE|5:timestamp:TIMESTAMP_VALUE
+            String[] parts = line.split("\\|");
+            if (parts.length < 3) {
+                log.warn("TCP geçersiz format: {}", line);
+                return;
+            }
 
+            String symbol = parts[0].trim();
+            double bid = 0.0;
+            double ask = 0.0;
+            
+            // Parse bid and ask from specialized fields
+            for (int i = 1; i < parts.length; i++) {
+                String part = parts[i];
+                if (part.contains("22:number:")) {
+                    bid = Double.parseDouble(part.substring(part.lastIndexOf(":") + 1));
+                } else if (part.contains("25:number:")) {
+                    ask = Double.parseDouble(part.substring(part.lastIndexOf(":") + 1));
+                }
+            }
+            
+            log.debug("TCP veri alındı: {} (bid={}, ask={})", symbol, bid, ask);
+            
             ProviderRateDto rate = new ProviderRateDto();
             rate.setSymbol(symbol);
             rate.setBid(String.valueOf(bid));
@@ -161,7 +239,7 @@ public class TcpRateSubscriber implements PlatformSubscriber {
 
             callback.onRateAvailable(providerName, rate);
         } catch (Exception e) {
-            log.warn("Satır işlenemedi: {}", line, e);
+            log.warn("TCP satır işlenemedi: {}", line, e);
         }
     }
     

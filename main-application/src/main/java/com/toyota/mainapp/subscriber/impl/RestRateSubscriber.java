@@ -126,6 +126,8 @@ public class RestRateSubscriber implements PlatformSubscriber {
     private void fetchRate(String symbol) {
         if (webClient == null) return;
 
+        log.debug("REST rate sorgulanıyor: {}, URL: {}", symbol, baseUrl + "/rates/" + symbol);
+        
         webClient.get()
             .uri(baseUrl + "/rates/" + symbol)
             .retrieve()
@@ -134,10 +136,16 @@ public class RestRateSubscriber implements PlatformSubscriber {
                 rate -> {
                     if (rate != null) {
                         rate.setProviderName(providerName);
+                        rate.setSymbol(symbol); // Ensure symbol is correctly set
                         callback.onRateAvailable(providerName, rate);
+                        log.debug("REST kurları alındı - Sembol: {}, Bid: {}, Ask: {}", 
+                                 symbol, rate.getBid(), rate.getAsk());
                     }
                 },
-                error -> callback.onProviderError(providerName, "REST sorgu hatası: " + symbol, error)
+                error -> {
+                    log.error("REST sorgu hatası: {} - {}", symbol, error.getMessage());
+                    callback.onProviderError(providerName, "REST sorgu hatası: " + symbol, error);
+                }
             );
     }
     
