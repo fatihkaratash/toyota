@@ -6,14 +6,18 @@ import com.toyota.mainapp.coordinator.callback.PlatformCallback;
 import com.toyota.mainapp.exception.SubscriberInitializationException;
 import com.toyota.mainapp.subscriber.api.PlatformSubscriber;
 import com.toyota.mainapp.subscriber.api.SubscriberConfigDto;
+import com.toyota.mainapp.subscriber.impl.RestRateSubscriber;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -29,110 +33,124 @@ public class DynamicSubscriberLoader {
 
     private final ObjectMapper objectMapper;
     private final ResourceLoader resourceLoader;
+    
+    @Autowired(required = false)
+    private WebClient.Builder webClientBuilder;
 
     /**
      * Aboneleri yapılandırma dosyasından yükle
-     * 
-     * @param configPath Yapılandırma dosyası yolu
-     * @param callback Platform olayları için callback
-     * @return Yüklenen abonelerin listesi
      */
     @CircuitBreaker(name = "subscriberLoader")
     @Retry(name = "loaderRetry")
     public List<PlatformSubscriber> loadSubscribers(String configPath, PlatformCallback callback) {
         List<PlatformSubscriber> subscribers = new ArrayList<>();
-
+        
         try {
-            // Yapılandırma dosyasından konfigürasyonları oku
             List<SubscriberConfigDto> configs = readConfiguration(configPath);
-
+            
             if (configs.isEmpty()) {
                 log.warn("Yapılandırma dosyasında abone bulunamadı: {}", configPath);
                 return subscribers;
             }
-
+            
             log.info("{} abone konfigürasyonu okundu", configs.size());
-
-            // Her konfigürasyon için abone örneği oluştur
+            
             for (SubscriberConfigDto config : configs) {
                 if (!config.isEnabled()) {
                     log.info("Devre dışı abone atlanıyor: {}", config.getName());
                     continue;
                 }
-
+                
                 try {
-                    PlatformSubscriber subscriber = instantiateSubscriber(config, callback);
+                    PlatformSubscriber subscriber = createSubscriberInstance(config, callback);
                     subscribers.add(subscriber);
                     log.info("Abone başarıyla oluşturuldu: {}", config.getName());
                 } catch (Exception e) {
-                    log.error("Abone oluşturulamadı: {}", config.getName(), e);
+                    log.error("Abone oluşturulamadı: {} - Hata: {}", config.getName(), e.getMessage(), e);
                 }
             }
-
+            
             log.info("Toplam {} abone yüklendi", subscribers.size());
             
         } catch (Exception e) {
-            log.error("Aboneler yüklenirken hata oluştu: {}", configPath, e);
+            log.error("Aboneler yüklenirken hata oluştu: {} - Hata: {}", configPath, e.getMessage(), e);
         }
-
+        
         return subscribers;
     }
 
     /**
-     * Yapılandırma dosyasından konfigürasyonları oku
+     * Yapılandırma dosyasını oku
      */
-    private List<SubscriberConfigDto> readConfiguration(String configPath) {
-        try {
-            Resource resource = resourceLoader.getResource(configPath);
-            
-            if (!resource.exists()) {
-                log.error("Yapılandırma dosyası bulunamadı: {}", configPath);
-                return Collections.emptyList();
-            }
-            
-            try (InputStream inputStream = resource.getInputStream()) {
-                // Create a dedicated ObjectMapper instance without type information for reading subscribers.json
-                ObjectMapper subscriberMapper = createSubscriberObjectMapper();
-                return subscriberMapper.readValue(inputStream, new TypeReference<List<SubscriberConfigDto>>() {});
-            }
-        } catch (Exception e) {
-            log.error("Yapılandırma dosyası okunamadı: {}", configPath, e);
-            throw new SubscriberInitializationException("Abone yapılandırması okunamadı: " + configPath, e);
+    private List<SubscriberConfigDto> readConfiguration(String configPath) throws IOException {
+        Resource resource = resourceLoader.getResource(configPath);
+        
+        if (!resource.exists()) {
+            log.error("Yapılandırma dosyası bulunamadı: {}", configPath);
+            return Collections.emptyList();
         }
-    }
-    
-    /**
-     * Creates a basic ObjectMapper without type information, specifically for subscribers.json
-     */
-    private ObjectMapper createSubscriberObjectMapper() {
-        ObjectMapper mapper = new ObjectMapper();
-        // No need to activate default typing - we want to read plain JSON without type info
-        return mapper;
+        
+        try (InputStream inputStream = resource.getInputStream()) {
+            // Create a copy of ObjectMapper with default typing disabled
+            ObjectMapper localMapper = objectMapper.copy();
+            // This is the key step - disable type info which causes JSON parsing problems
+            localMapper.deactivateDefaultTyping();
+            
+            // Daha ayrıntılı hata ayıklama için
+            log.debug("Yapılandırma dosyasının içeriğini okuma: {}", configPath);
+            String jsonContent = new String(inputStream.readAllBytes());
+            log.debug("Okunan JSON içeriği: {}", jsonContent);
+            
+            // Parsed configuration to return
+            List<SubscriberConfigDto> configs;
+            
+            try {
+                // Parse the config
+                configs = localMapper.readValue(jsonContent, 
+                    new TypeReference<List<SubscriberConfigDto>>() {});
+                    
+                log.debug("Yapılandırma başarıyla okundu, {} abone yapılandırması bulundu", configs.size());
+                return configs;
+            } catch (Exception e) {
+                log.error("JSON okuma hatası: {}", e.getMessage(), e);
+                throw e;
+            }
+        } catch (IOException e) {
+            log.error("Yapılandırma dosyası okunamadı: {}", configPath, e);
+            throw e;
+        }
     }
 
     /**
-     * Konfigürasyona göre abone örneği oluştur
+     * Abone örneği oluştur
      */
-    private PlatformSubscriber instantiateSubscriber(SubscriberConfigDto config, PlatformCallback callback) {
-        try {
-            if (config.getImplementationClass() == null || config.getImplementationClass().trim().isEmpty()) {
-                throw new IllegalArgumentException("Uygulama sınıfı belirtilmemiş: " + config.getName());
-            }
-            
-            Class<?> subscriberClass = Class.forName(config.getImplementationClass());
-            
-            if (!PlatformSubscriber.class.isAssignableFrom(subscriberClass)) {
-                throw new IllegalArgumentException("Sınıf PlatformSubscriber arayüzünü uygulamalıdır: " + subscriberClass.getName());
-            }
-            
-            PlatformSubscriber subscriber = (PlatformSubscriber) subscriberClass.getDeclaredConstructor().newInstance();
-            subscriber.init(config, callback);
-            
-            return subscriber;
-        } catch (ClassNotFoundException e) {
-            throw new SubscriberInitializationException("Abone sınıfı bulunamadı: " + config.getImplementationClass(), e);
-        } catch (Exception e) {
-            throw new SubscriberInitializationException("Abone örneği oluşturulamadı: " + config.getName(), e);
+    private PlatformSubscriber createSubscriberInstance(SubscriberConfigDto config, PlatformCallback callback) 
+            throws ReflectiveOperationException {
+        
+        if (config.getImplementationClass() == null || config.getImplementationClass().isEmpty()) {
+            throw new IllegalArgumentException("Uygulama sınıfı belirtilmemiş: " + config.getName());
         }
+        
+        // RestRateSubscriber için özel işlem
+        if (config.getImplementationClass().contains("RestRateSubscriber")) {
+            log.debug("RestRateSubscriber için WebClient.Builder ile özel oluşturma: {}", config.getName());
+            RestRateSubscriber subscriber = webClientBuilder != null ? 
+                new RestRateSubscriber(webClientBuilder) : new RestRateSubscriber();
+            subscriber.init(config, callback);
+            return subscriber;
+        }
+        
+        // Diğer tüm aboneler için standart oluşturma
+        Class<?> subscriberClass = Class.forName(config.getImplementationClass());
+        
+        if (!PlatformSubscriber.class.isAssignableFrom(subscriberClass)) {
+            throw new IllegalArgumentException(
+                "Sınıf PlatformSubscriber arayüzünü uygulamalıdır: " + subscriberClass.getName());
+        }
+        
+        PlatformSubscriber subscriber = (PlatformSubscriber) subscriberClass.getDeclaredConstructor().newInstance();
+        subscriber.init(config, callback);
+        
+        return subscriber;
     }
 }

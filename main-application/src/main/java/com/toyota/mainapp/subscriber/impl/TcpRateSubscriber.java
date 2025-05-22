@@ -10,6 +10,7 @@ import java.io.*;
 import java.net.Socket;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -333,15 +334,60 @@ private void handleConnectionLost(String reason) {
     }
     
     private String[] getSymbols(Map<String, Object> config) {
-        if (config == null || !config.containsKey("symbols")) return new String[0];
-        
-        Object symbols = config.get("symbols");
-        if (symbols instanceof String[]) {
-            return (String[])symbols;
-        } else if (symbols instanceof String) {
-            return ((String)symbols).split(",");
+        if (config == null || !config.containsKey("symbols")) {
+            log.warn("[{}] Yapılandırmada 'symbols' anahtarı bulunamadı", providerName);
+            return new String[0];
         }
         
-        return new String[0];
+        Object symbolsObj = config.get("symbols");
+        log.debug("[{}] Yapılandırmadan alınan ham symbols nesnesi: {}", 
+                providerName, symbolsObj);
+        
+        List<String> parsedSymbols = new java.util.ArrayList<>();
+        
+        // Handle List type (most common from JSON)
+        if (symbolsObj instanceof List) {
+            @SuppressWarnings("unchecked")
+            List<String> symbolsList = (List<String>) symbolsObj;
+            for (String item : symbolsList) {
+                if (item != null) {
+                    String[] parts = item.split(",");
+                    for (String part : parts) {
+                        String trimmed = part.trim();
+                        if (!trimmed.isEmpty()) {
+                            parsedSymbols.add(trimmed);
+                        }
+                    }
+                }
+            }
+        } 
+        // Handle simple String
+        else if (symbolsObj instanceof String) {
+            String symbolsStr = (String) symbolsObj;
+            String[] parts = symbolsStr.split(",");
+            for (String part : parts) {
+                String trimmed = part.trim();
+                if (!trimmed.isEmpty()) {
+                    parsedSymbols.add(trimmed);
+                }
+            }
+        }
+        // Handle String[] (less common)
+        else if (symbolsObj instanceof String[]) {
+            for (String s : (String[]) symbolsObj) {
+                if (s != null) {
+                    String[] parts = s.split(",");
+                    for (String part : parts) {
+                        String trimmed = part.trim();
+                        if (!trimmed.isEmpty()) {
+                            parsedSymbols.add(trimmed);
+                        }
+                    }
+                }
+            }
+        }
+        
+        log.info("[{}] Çözümlenen semboller: {}", providerName, parsedSymbols);
+        return parsedSymbols.toArray(new String[0]);
     }
 }

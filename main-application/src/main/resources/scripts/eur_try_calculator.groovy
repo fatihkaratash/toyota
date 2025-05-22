@@ -104,6 +104,7 @@ if (validSources > 1) {
 // Calculate EUR/TRY
 def eurTryBid = eurUsdBid.multiply(usdTryAvg.getBid()).setScale(scale, roundingMode)
 def eurTryAsk = eurUsdAsk.multiply(usdTryAvg.getAsk()).setScale(scale, roundingMode)
+log.debug("EUR/TRY hesaplandı: Bid=${eurTryBid}, Ask=${eurTryAsk}")
 
 log.info("Successfully calculated ${outputSymbol}: Bid=${eurTryBid}, Ask=${eurTryAsk}")
 

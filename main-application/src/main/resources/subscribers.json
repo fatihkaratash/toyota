@@ -8,7 +8,7 @@
       "baseUrl": "http://rest-rate-provider:8080/api",
       "pollIntervalMs": 5000,
       "timeout": 3000,
-      "symbols": "PF2_USDTRY,PF2_EURUSD,PF2_GBPTRY",   
+      "symbols": ["PF2_USDTRY", "PF2_EURUSD", "PF2_GBPUSD"],
       "retryConfig": { "maxAttempts": 3, "waitDuration": 1000 },
       "circuitBreakerConfig": { "failureThreshold": 50, "waitDurationMs": 30000 }
     }
@@ -22,9 +22,8 @@
       "host": "tcp-rate-provider",
       "port": 8081,
       "connectionTimeoutMs": 5000,
-      "readTimeoutMs": 60000,
       "retryAttempts": 10,
-      "symbols": "PF1_USDTRY,PF1_EURUSD"               
+      "symbols": ["PF1_USDTRY", "PF1_EURUSD"]
     }
   }
 ]

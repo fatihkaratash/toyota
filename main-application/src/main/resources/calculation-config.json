@@ -31,5 +31,28 @@
       },
       "priority": 20
     }
+  ],
+  "symbolConfigs": [
+    {
+      "baseSymbol": "USDTRY",
+      "expectedProviders": [
+        "PF1",
+        "PF2"
+      ]
+    },
+    {
+      "baseSymbol": "EURUSD",
+      "expectedProviders": [
+        "PF1",
+        "PF2"
+      ]
+    },
+    {
+      "baseSymbol": "EURTRY",
+      "expectedProviders": [
+        "PF1",
+        "PF2"
+      ]
+    }
   ]
 }

@@ -31,6 +31,27 @@ public class AverageUsdTryStrategy implements CalculationStrategy {
             return Optional.empty();
         }
 
+        // Check if all required symbols are present
+        String[] requiredSymbols = rule.getDependsOnRaw();
+        if (requiredSymbols != null && requiredSymbols.length > 0) {
+            boolean missingSymbols = false;
+            StringBuilder missingSymbolsMsg = new StringBuilder("Eksik semboller: ");
+            
+            for (String symbol : requiredSymbols) {
+                if (!inputRates.containsKey(symbol)) {
+                    missingSymbols = true;
+                    missingSymbolsMsg.append(symbol).append(", ");
+                    log.debug("Gerekli sembol bulunamadı: {} (Kural: {})", symbol, rule.getOutputSymbol());
+                }
+            }
+            
+            if (missingSymbols) {
+                log.warn("{} kuralı için gerekli bazı semboller eksik. {}Hesaplama atlanıyor.", 
+                       rule.getOutputSymbol(), missingSymbolsMsg);
+                return Optional.empty();
+            }
+        }
+
         List<RawRateDto> sourceRates = new ArrayList<>(inputRates.values());
         List<InputRateInfo> calculationInputs = new ArrayList<>();
 

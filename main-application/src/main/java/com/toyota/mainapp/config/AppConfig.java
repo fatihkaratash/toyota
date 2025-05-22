@@ -40,14 +40,12 @@ public class AppConfig {
     @Primary
     public ObjectMapper objectMapper() {
         ObjectMapper mapper = new ObjectMapper();
-    // Add type information to serialized objects
-    mapper.activateDefaultTyping(
-        mapper.getPolymorphicTypeValidator(),
-        ObjectMapper.DefaultTyping.NON_FINAL,
-        JsonTypeInfo.As.PROPERTY
-    );
     mapper.registerModule(new JavaTimeModule());
-    mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    // Enable default typing to preserve type information
+    mapper.activateDefaultTyping(
+        mapper.getPolymorphicTypeValidator(), 
+        ObjectMapper.DefaultTyping.NON_FINAL, 
+        JsonTypeInfo.As.PROPERTY);
     return mapper;
     }
 
@@ -64,9 +62,9 @@ public class AppConfig {
     template.setKeySerializer(new StringRedisSerializer());
     
     // Use Jackson2JsonRedisSerializer instead of GenericJackson2JsonRedisSerializer
-    Jackson2JsonRedisSerializer<RawRateDto> serializer = new Jackson2JsonRedisSerializer<>(RawRateDto.class);
-    serializer.setObjectMapper(objectMapper);
+   GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(objectMapper);
     template.setValueSerializer(serializer);
+    template.setHashValueSerializer(serializer);
     
     return template;
     }
@@ -83,11 +81,9 @@ public class AppConfig {
     template.setConnectionFactory(redisConnectionFactory);
     template.setKeySerializer(new StringRedisSerializer());
     
-    // Use Jackson2JsonRedisSerializer instead of GenericJackson2JsonRedisSerializer
-    Jackson2JsonRedisSerializer<CalculatedRateDto> serializer = 
-        new Jackson2JsonRedisSerializer<>(CalculatedRateDto.class);
-    serializer.setObjectMapper(objectMapper);
+    GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(objectMapper);
     template.setValueSerializer(serializer);
+    template.setHashValueSerializer(serializer);
     
     return template;
     }

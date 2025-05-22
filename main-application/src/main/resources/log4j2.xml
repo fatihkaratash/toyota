@@ -20,49 +20,71 @@
             </Policies>
             <DefaultRolloverStrategy max="10"/>
         </RollingFile>
+        
+        <!-- Add a fallback File appender that writes to a file in the project directory -->
+        <File name="FallbackFile" fileName="c:\Projects\toyota\logs\main-application.log">
+            <PatternLayout>
+                <Pattern>${FILE_PATTERN}</Pattern>
+            </PatternLayout>
+        </File>
     </Appenders>
     
     <Loggers>
-        <!-- Kök logger seviyesi INFO, varsayılan log seviyesi -->
+        <!-- Root logger level INFO -->
         <Root level="INFO">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RollingFile"/>
+            <AppenderRef ref="FallbackFile"/>
         </Root>
 
-        <!-- Spring Framework için log seviyesi düşürüldü -->
+        <!-- Spring Framework reduced logging -->
         <Logger name="org.springframework" level="WARN" additivity="false">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RollingFile"/>
+            <AppenderRef ref="FallbackFile"/>
         </Logger>
         
-        <!-- Toyota ana modülleri için loglar -->
+        <!-- Toyota main modules logging -->
         <Logger name="com.toyota.mainapp" level="INFO" additivity="false">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RollingFile"/>
+            <AppenderRef ref="FallbackFile"/>
         </Logger>
         
-        <!-- Toyota alt sistemleri için daha spesifik loglar -->
-        <Logger name="com.toyota.mainapp.subscriber.impl.TcpRateSubscriber" level="DEBUG" additivity="false">
+        <!-- Toyota subscriber modules with increased logging -->
+        <Logger name="com.toyota.mainapp.subscriber" level="DEBUG" additivity="false">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RollingFile"/>
+            <AppenderRef ref="FallbackFile"/>
         </Logger>
         
+        <!-- Specific subscriber implementations -->
         <Logger name="com.toyota.mainapp.subscriber.impl.RestRateSubscriber" level="DEBUG" additivity="false">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RollingFile"/>
+            <AppenderRef ref="FallbackFile"/>
+        </Logger>
+        
+        <Logger name="com.toyota.mainapp.subscriber.impl.TcpRateSubscriber" level="DEBUG" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="RollingFile"/>
+            <AppenderRef ref="FallbackFile"/>
         </Logger>
 
-        <!-- Noisy kütüphaneler için log seviyesi yüksek tutuldu -->
+        <!-- Noisy libraries with reduced logging -->
         <Logger name="org.apache.kafka" level="WARN" additivity="false">
             <AppenderRef ref="RollingFile"/>
+            <AppenderRef ref="FallbackFile"/>
         </Logger>
         
         <Logger name="org.apache.zookeeper" level="ERROR" additivity="false">
             <AppenderRef ref="RollingFile"/>
+            <AppenderRef ref="FallbackFile"/>
         </Logger>
         
         <Logger name="io.netty" level="WARN" additivity="false">
             <AppenderRef ref="RollingFile"/>
+            <AppenderRef ref="FallbackFile"/>
         </Logger>
     </Loggers>
 </Configuration>

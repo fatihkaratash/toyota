@@ -108,6 +108,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       APP_PROVIDER_REST_DEFAULT_HOST: rest-rate-provider
       APP_PROVIDER_TCP_DEFAULT_HOST: tcp-rate-provider
+      APP_RATE_KEY_FORMAT: "raw_rate:{providerName}_{symbol}"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
       interval: 30s
@@ -116,6 +117,7 @@ services:
       start_period: 40s
     volumes:
       - ./logs/main-application:/app/logs # Maps container's /app/logs to host's ./logs/main-application
+
 
   # Kafka tüketici uygulaması (opsiyonel)
 # kafka-consumer:
