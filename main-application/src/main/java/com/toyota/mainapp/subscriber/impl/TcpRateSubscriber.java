@@ -24,7 +24,7 @@ public class TcpRateSubscriber implements PlatformSubscriber {
     private PrintWriter writer;
     
     private String host = "localhost";
-    private int port = 8080;
+    private int port = 8081; // Default TCP port updated to 8081
     private int timeout = 30000;
     private int retries = 3;
     private String[] symbols = new String[0];
@@ -37,7 +37,7 @@ public class TcpRateSubscriber implements PlatformSubscriber {
         if (config.getConnectionConfig() != null) {
             Map<String, Object> connConfig = config.getConnectionConfig();
             this.host = getString(connConfig, "host", "localhost");
-            this.port = getInt(connConfig, "port", 8080);
+            this.port = getInt(connConfig, "port", 8081); // Default TCP port updated to 8081
             this.timeout = getInt(connConfig, "connectionTimeoutMs", 30000);
             this.retries = getInt(connConfig, "retryAttempts", 3);
             this.symbols = getSymbols(connConfig);

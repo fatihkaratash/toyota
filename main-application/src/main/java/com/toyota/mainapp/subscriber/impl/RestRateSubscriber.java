@@ -31,7 +31,7 @@ public class RestRateSubscriber implements PlatformSubscriber {
     private Retry retry;
     private CircuitBreaker circuitBreaker;
     
-    private String baseUrl;
+    private String baseUrl = "http://localhost:8080"; // Default REST port is 8080
     private long pollIntervalMs = 10000;
     private String[] symbols = new String[0];
 
@@ -41,7 +41,7 @@ public class RestRateSubscriber implements PlatformSubscriber {
         this.callback = callback;
         
         if (config.getConnectionConfig() != null) {
-            this.baseUrl = getConfigValue(config.getConnectionConfig(), "baseUrl", "http://localhost:8080");
+            this.baseUrl = getConfigValue(config.getConnectionConfig(), "baseUrl", "http://localhost:8080"); // Default REST port
             this.pollIntervalMs = getConfigValue(config.getConnectionConfig(), "pollInterval", 10000L);
             this.symbols = getSymbols(config.getConnectionConfig());
         }

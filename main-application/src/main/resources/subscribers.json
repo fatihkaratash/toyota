@@ -5,7 +5,7 @@
     "enabled": true,
     "implementationClass": "com.toyota.mainapp.subscriber.impl.RestRateSubscriber",
     "connectionConfig": {
-      "baseUrl": "http://localhost:8081",
+      "baseUrl": "http://localhost:8080",
       "pollIntervalMs": 5000,
       "symbols": ["USD/TRY", "EUR/TRY", "GBP/TRY"],
       "timeout": 3000,
@@ -26,7 +26,7 @@
     "implementationClass": "com.toyota.mainapp.subscriber.impl.TcpRateSubscriber",
     "connectionConfig": {
       "host": "localhost",
-      "port": 8080,
+      "port": 8081,
       "connectionTimeoutMs": 5000,
       "retryAttempts": 3,
       "symbols": ["USD/TRY", "EUR/TRY"]
