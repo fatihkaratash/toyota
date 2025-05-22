@@ -93,3 +93,9 @@ nbbuild/
 dist/
 nbdist/
 .nb-gradle/
+
+
+# Project specific
+prompt.md
+README.md
+.history/

@@ -1,47 +1,35 @@
 [
   {
-    "type": "tcp",
-    "name": "ProviderTCP1",
-    "className": "com.toyota.mainapp.subscriber.impl.TcpRateSubscriber",
-    "host": "localhost", 
-    "port": 8081, 
-    "subscribedSymbols": ["PF1_USDTRY", "PF1_EURUSD", "PF1_GBPUSD"],
-    "additionalProperties": {
-      "connectionTimeoutMs": 5000,
-      "readTimeoutMs": 10000,
-      "retryAttempts": 3,
-      "subscribeMessageFormat": "subscribe|{symbol}"
-    }
-  },
-  {
-    "type": "rest",
-    "name": "ProviderREST1",
-    "className": "com.toyota.mainapp.subscriber.impl.RestRateSubscriber",
-    "url": "http://localhost:8081/api/rates",
-    "pollIntervalMs": 10000,
-    "subscribedSymbols": ["PF2_USDTRY", "PF2_GBPUSD", "PF2_EURUSD"],
-    "additionalProperties": {
-      "readTimeoutMs": 3000,
-      "connectTimeoutMs": 3000,
-      "failureThreshold": 3,
-      "successThreshold": 2,
-      "circuitTimeoutSeconds": 60,
-      "urlTemplate": "{baseUrl}{symbol}",
-      "headers": {
-        "X-API-Key": "test-api-key"
+    "name": "RESTProvider1",
+    "type": "REST",
+    "enabled": true,
+    "implementationClass": "com.toyota.mainapp.subscriber.impl.RestRateSubscriber",
+    "connectionConfig": {
+      "baseUrl": "http://localhost:8081",
+      "pollIntervalMs": 5000,
+      "symbols": ["USD/TRY", "EUR/TRY", "GBP/TRY"],
+      "timeout": 3000,
+      "retryConfig": {
+        "maxAttempts": 3,
+        "waitDuration": 1000
+      },
+      "circuitBreakerConfig": {
+        "failureThreshold": 50,
+        "waitDurationMs": 30000
       }
     }
   },
   {
-    "type": "tcp",
-    "name": "ProviderTCP2",
-    "className": "com.toyota.mainapp.subscriber.impl.TcpRateSubscriber",
-    "host": "localhost",
-    "port": 8083,
-    "subscribedSymbols": ["PF3_AUDUSD"],
-    "additionalProperties": {
-      "connectionTimeoutMs": 3000,
-      "readTimeoutMs": 8000
+    "name": "TCPProvider2",
+    "type": "TCP",
+    "enabled": true,
+    "implementationClass": "com.toyota.mainapp.subscriber.impl.TcpRateSubscriber",
+    "connectionConfig": {
+      "host": "localhost",
+      "port": 8080,
+      "connectionTimeoutMs": 5000,
+      "retryAttempts": 3,
+      "symbols": ["USD/TRY", "EUR/TRY"]
     }
   }
 ]

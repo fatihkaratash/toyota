@@ -31,3 +31,5 @@ logs/
 .mvn/
 mvnw
 mvnw.cmd
+.history
+.vscode

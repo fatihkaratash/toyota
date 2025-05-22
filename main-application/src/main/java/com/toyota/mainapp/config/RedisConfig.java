@@ -7,52 +7,57 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
- * Configuration for Redis.
+ * Redis connection configuration
  */
 @Configuration
+@Slf4j
 public class RedisConfig {
-    
+
     @Value("${spring.redis.host:localhost}")
     private String redisHost;
-    
+
     @Value("${spring.redis.port:6379}")
     private int redisPort;
-    
-    @Value("${rate.cache.raw.ttl-seconds:300}")
-    private long rawRatesTtlSeconds;
-    
-    @Value("${rate.cache.calculated.ttl-seconds:300}")
-    private long calculatedRatesTtlSeconds;
-    
+
+    @Value("${spring.redis.password:}")
+    private String redisPassword;
+
+    @Value("${spring.redis.database:0}")
+    private int redisDatabase;
+
+    /**
+     * Creates a Redis connection factory
+     */
     @Bean
     public RedisConnectionFactory redisConnectionFactory() {
-        RedisStandaloneConfiguration config = new RedisStandaloneConfiguration(redisHost, redisPort);
-        return new LettuceConnectionFactory(config);
+        RedisStandaloneConfiguration redisConfig = new RedisStandaloneConfiguration();
+        redisConfig.setHostName(redisHost);
+        redisConfig.setPort(redisPort);
+        
+        if (!redisPassword.isEmpty()) {
+            redisConfig.setPassword(redisPassword);
+        }
+        
+        redisConfig.setDatabase(redisDatabase);
+        
+        log.info("Redis bağlantısı yapılandırılıyor: {}:{}, database: {}", redisHost, redisPort, redisDatabase);
+        return new LettuceConnectionFactory(redisConfig);
     }
-    
+
+    /**
+     * Creates a general purpose Redis template
+     */
     @Bean
-    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
-        RedisTemplate<String, Object> template = new RedisTemplate<>();
+    public RedisTemplate<String, String> redisTemplate(RedisConnectionFactory connectionFactory) {
+        RedisTemplate<String, String> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
         template.setKeySerializer(new StringRedisSerializer());
-        template.setValueSerializer(new GenericJackson2JsonRedisSerializer());
-        template.setHashKeySerializer(new StringRedisSerializer());
-        template.setHashValueSerializer(new GenericJackson2JsonRedisSerializer());
-        template.afterPropertiesSet();
+        template.setValueSerializer(new StringRedisSerializer());
         return template;
-    }
-    
-    @Bean
-    public long rawRatesTtlSeconds() {
-        return rawRatesTtlSeconds;
-    }
-    
-    @Bean
-    public long calculatedRatesTtlSeconds() {
-        return calculatedRatesTtlSeconds;
     }
 }

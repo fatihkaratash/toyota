@@ -1,33 +1,32 @@
 {
-  "strategies": [
-    // Example of a Groovy-based strategy (if you create a corresponding script)
-    /*
+  "calculationRules": [
     {
-      "type": "groovy",
-      "symbol": "AUDCAD_SCRIPT", // The derived symbol this strategy calculates
-      "script": "audcad_calculator.groovy", // Script file located in 'scripts/groovy/'
-      "sourceSymbols": ["PF1_AUDUSD", "PF2_USDCAD"] // Raw symbols needed for this calculation
+      "outputSymbol": "USD/TRY_AVG",
+      "description": "USD/TRY ortalama kuru",
+      "strategyType": "JAVA_CLASS",
+      "implementation": "averageUsdTryStrategy",
+      "dependsOnRaw": [
+        "MockProvider1_USDTRY",
+        "MockProvider2_USDTRY"
+      ],
+      "priority": 1
     },
-    */
-    // Example of a JavaScript-based strategy
-    /*
     {
-      "type": "javascript",
-      "symbol": "NZDUSD_SCRIPT",
-      "script": "nzdusd_calculator.js", // Script file located in 'scripts/javascript/'
-      "sourceSymbols": ["PF1_NZDUSD"]
-    },
-    */
-    // Example of a Java class-based strategy (if you create a corresponding class)
-    /*
-    {
-      "type": "java",
-      "symbol": "CHFJPY_CLASS",
-      "class": "com.toyota.mainapp.calculator.custom.ChfJpyFormula", // Fully qualified class name
-      "sourceSymbols": ["PF1_USDCHF", "PF2_USDJPY"]
+      "outputSymbol": "EUR/TRY",
+      "description": "EUR/TRY çapraz kuru",
+      "strategyType": "GROOVY_SCRIPT",
+      "implementation": "scripts/eur_try_calculator.groovy",
+      "dependsOnRaw": [
+        "MockProvider1_EURUSD"
+      ],
+      "dependsOnCalculated": [
+        "USD/TRY_AVG"
+      ],
+      "inputParameters": {
+        "eurUsdSymbol": "MockProvider1_EURUSD",
+        "usdTryAvgSymbol": "USD/TRY_AVG"
+      },
+      "priority": 2
     }
-    */
-    // Built-in strategies like UsdTryFormula, EurTryFormula, GbpTryFormula are added directly in CalculationConfig.java
-    // and do not need to be listed here unless you want to override or manage them through this file.
   ]
 }

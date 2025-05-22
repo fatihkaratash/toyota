@@ -5,23 +5,28 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.2.0</version> <!-- Or your desired Spring Boot version -->
-        <relativePath/> <!-- lookup parent from repository -->
+        <version>3.2.8</version> <!-- Kullandığınız Spring Boot versiyonu -->
+        <relativePath/>
     </parent>
     <groupId>com.toyota</groupId>
     <artifactId>main-application</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>main-application</name>
-    <description>Toyota Main Application</description>
+    <description>Main Application (Coordinator) - Toyota Financial Data Platform</description>
 
     <properties>
         <java.version>21</java.version>
+        <mapstruct.version>1.5.5.Final</mapstruct.version> <!-- En son kararlı sürümü kontrol edin -->
+        <lombok.version>1.18.32</lombok.version> <!-- En son kararlı Lombok sürümü -->
+        <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version> <!-- En son kararlı sürümü kontrol edin -->
+        <groovy.version>4.0.21</groovy.version> <!-- En son kararlı sürümü kontrol edin -->
+        <resilience4j.version>2.2.0</resilience4j.version> <!-- Tüm Resilience4j modülleri için ortak versiyon -->
     </properties>
 
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter</artifactId>
+            <artifactId>spring-boot-starter-web</artifactId>
             <exclusions>
                 <exclusion>
                     <groupId>org.springframework.boot</groupId>
@@ -34,59 +39,103 @@
             <artifactId>spring-boot-starter-log4j2</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId> <!-- If exposing any REST endpoints -->
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.groovy</groupId>
+            <artifactId>groovy</artifactId>
+            <version>${groovy.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
+
+        <!-- Lombok -->
         <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka</artifactId>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
+            <scope>provided</scope>
         </dependency>
+
+        <!-- MapStruct -->
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+            <version>${mapstruct.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct-processor</artifactId>
+            <version>${mapstruct.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency> <!-- Eğer Lombok ile MapStruct'ı birlikte kullanıyorsanız -->
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok-mapstruct-binding</artifactId>
+            <version>${lombok-mapstruct-binding.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Jackson (genellikle spring-boot-starter-web ile gelir ama açıkça belirtmek iyi olabilir) -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId> <!-- For Java 8 Date/Time types -->
+            <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
 
-        <!-- For Groovy scripting, if to be made functional -->
-        <!--
+        <!-- Resilience4j dependencies (Spring Boot 3 için) -->
         <dependency>
-            <groupId>org.apache.groovy</groupId>
-            <artifactId>groovy</artifactId>
-            <version>4.0.15</version>
-        </dependency>
-        -->
-
-        <!-- For JavaScript scripting (e.g., GraalVM JS) -->
-        <!--
-        <dependency>
-            <groupId>org.graalvm.js</groupId>
-            <artifactId>js</artifactId>
-            <version>23.1.0</version> 
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot3</artifactId>
+            <version>${resilience4j.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.graalvm.js</groupId>
-            <artifactId>js-scriptengine</artifactId>
-            <version>23.1.0</version>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-reactor</artifactId> <!-- WebFlux/Project Reactor ile kullanım için -->
+            <version>${resilience4j.version}</version>
         </dependency>
-        -->
-        
+         <!-- Diğer Resilience4j modülleri (circuitbreaker, retry vb.) resilience4j-spring-boot3 tarafından yönetilir,
+              ayrıca eklemeye gerek kalmayabilir. Gerekirse aynı versiyonla ekleyin. -->
         <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <optional>true</optional>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-retry</artifactId>
+            <version>${resilience4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-circuitbreaker</artifactId>
+            <version>${resilience4j.version}</version>
         </dependency>
 
+
+        <!-- Jakarta EE API (Spring Boot 3 için doğru olan) -->
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+        </dependency>
+        <!-- javax.annotation-api'yi kaldırın veya projenizde gerçekten ihtiyaç olup olmadığını kontrol edin -->
+
+        <!-- Test Dependencies -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-logging</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.springframework.kafka</groupId>
@@ -107,6 +156,37 @@
                             <artifactId>lombok</artifactId>
                         </exclude>
                     </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version> <!-- Daha güncel bir compiler plugin versiyonu -->
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                        <path>
+                            <groupId>org.mapstruct</groupId>
+                            <artifactId>mapstruct-processor</artifactId>
+                            <version>${mapstruct.version}</version>
+                        </path>
+                        <!-- lombok-mapstruct-binding genellikle bu ikisiyle birlikte çalışır -->
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok-mapstruct-binding</artifactId>
+                            <version>${lombok-mapstruct-binding.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                    <!-- Java modül sistemiyle ilgili sorunları çözmek için gerekli argümanlar -->
+                    <compilerArgs>
+                        <arg>-parameters</arg>
+                    </compilerArgs>
                 </configuration>
             </plugin>
         </plugins>

@@ -1,15 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Configuration status="WARN">
+<Configuration status="WARN" monitorInterval="30">
     <Properties>
-        <Property name="LOG_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} [%X{requestId}] [%thread] %-5level %logger{36} - %msg%n</Property>
-        <Property name="APP_LOG_ROOT">c:/Projects/toyota/logs</Property>
+        <Property name="LOG_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%X{traceId},%X{spanId}] - %msg%n</Property>
+        <Property name="APP_LOG_ROOT">logs</Property>
+        <Property name="SERVICE_NAME">main-application</Property>
     </Properties>
+
     <Appenders>
-        <Console name="ConsoleAppender" target="SYSTEM_OUT">
+        <Console name="Console" target="SYSTEM_OUT" follow="true">
             <PatternLayout pattern="${LOG_PATTERN}"/>
         </Console>
-        <RollingFile name="FileAppender" fileName="${APP_LOG_ROOT}/main-application.log"
-                     filePattern="${APP_LOG_ROOT}/main-application-%d{yyyy-MM-dd}-%i.log">
+
+        <RollingFile name="ApplicationLog"
+                     fileName="${APP_LOG_ROOT}/${SERVICE_NAME}.log"
+                     filePattern="${APP_LOG_ROOT}/${SERVICE_NAME}-%d{yyyy-MM-dd}-%i.log.gz">
             <PatternLayout pattern="${LOG_PATTERN}"/>
             <Policies>
                 <SizeBasedTriggeringPolicy size="10MB"/>
@@ -17,27 +21,90 @@
             </Policies>
             <DefaultRolloverStrategy max="10"/>
         </RollingFile>
-        <RollingFile name="ErrorFileAppender" fileName="${APP_LOG_ROOT}/error.log"
-                     filePattern="${APP_LOG_ROOT}/error-%d{yyyy-MM-dd}-%i.log">
+
+        <RollingFile name="ErrorLog"
+                     fileName="${APP_LOG_ROOT}/${SERVICE_NAME}-error.log"
+                     filePattern="${APP_LOG_ROOT}/${SERVICE_NAME}-error-%d{yyyy-MM-dd}-%i.log.gz">
             <PatternLayout pattern="${LOG_PATTERN}"/>
-            <Policies>
-                <SizeBasedTriggeringPolicy size="10MB"/>
-                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
-            </Policies>
-            <DefaultRolloverStrategy max="10"/>
             <LevelRangeFilter minLevel="ERROR" maxLevel="ERROR" onMatch="ACCEPT" onMismatch="DENY"/>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="10MB"/>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+            </Policies>
+            <DefaultRolloverStrategy max="10"/>
         </RollingFile>
+
+        <!-- JSON format for OpenSearch Integration -->
+        <RollingFile name="JsonAppender"
+                     fileName="${APP_LOG_ROOT}/${SERVICE_NAME}-json.log"
+                     filePattern="${APP_LOG_ROOT}/${SERVICE_NAME}-json-%d{yyyy-MM-dd}-%i.log.gz">
+            <JSONLayout compact="true" eventEol="true" properties="true" stacktraceAsString="true">
+                <KeyValuePair key="serviceName" value="${SERVICE_NAME}"/>
+                <KeyValuePair key="hostName" value="${hostName}"/>
+            </JSONLayout>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="10MB"/>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+            </Policies>
+            <DefaultRolloverStrategy max="10"/>
+        </RollingFile>
+
+        <!-- Socket-based appender that can be used with Logstash/OpenSearch -->
+        <Socket name="OpenSearchSocket" host="localhost" port="5000" protocol="TCP">
+            <JSONLayout compact="true" eventEol="true" properties="true" stacktraceAsString="true">
+                <KeyValuePair key="serviceName" value="${SERVICE_NAME}"/>
+                <KeyValuePair key="hostName" value="${hostName}"/>
+            </JSONLayout>
+        </Socket>
     </Appenders>
+
     <Loggers>
-        <Logger name="com.toyota" level="DEBUG" additivity="false">
-            <AppenderRef ref="ConsoleAppender"/>
-            <AppenderRef ref="FileAppender"/>
-            <AppenderRef ref="ErrorFileAppender"/>
-        </Logger>
-        <Root level="INFO">
-            <AppenderRef ref="ConsoleAppender"/>
-            <AppenderRef ref="FileAppender"/>
-            <AppenderRef ref="ErrorFileAppender"/>
+        <!-- Default level for all loggers -->
+        <Root level="info">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="ApplicationLog"/>
+            <AppenderRef ref="ErrorLog" level="error"/>
+            <AppenderRef ref="JsonAppender"/>
+            <!-- Comment/uncomment the following line to enable/disable OpenSearch logging -->
+            <!-- <AppenderRef ref="OpenSearchSocket"/> -->
         </Root>
+
+        <!-- Application-specific loggers -->
+        <Logger name="com.toyota.mainapp" level="debug" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="ApplicationLog"/>
+            <AppenderRef ref="ErrorLog" level="error"/>
+            <AppenderRef ref="JsonAppender"/>
+            <!-- <AppenderRef ref="OpenSearchSocket"/> -->
+        </Logger>
+
+        <!-- Third-party library configurations -->
+        <Logger name="org.springframework" level="info" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="ApplicationLog"/>
+            <AppenderRef ref="ErrorLog" level="error"/>
+            <AppenderRef ref="JsonAppender" level="warn"/>
+        </Logger>
+
+        <Logger name="org.apache.kafka" level="warn" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="ApplicationLog"/>
+            <AppenderRef ref="ErrorLog" level="error"/>
+            <AppenderRef ref="JsonAppender" level="warn"/>
+        </Logger>
+
+        <Logger name="io.lettuce" level="warn" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="ApplicationLog"/>
+            <AppenderRef ref="ErrorLog" level="error"/>
+            <AppenderRef ref="JsonAppender" level="warn"/>
+        </Logger>
+
+        <Logger name="io.github.resilience4j" level="info" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="ApplicationLog"/>
+            <AppenderRef ref="ErrorLog" level="error"/>
+            <AppenderRef ref="JsonAppender" level="warn"/>
+        </Logger>
     </Loggers>
 </Configuration>
