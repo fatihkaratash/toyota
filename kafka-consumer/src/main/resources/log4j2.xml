@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Properties>
+        <Property name="APP_NAME">kafka-consumer</Property>
+        <Property name="LOG_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n</Property>
+    </Properties>
+
+    <Appenders>
+        <!-- Console Appender for logging to the standard output -->
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="${LOG_PATTERN}"/>
+        </Console>
+
+        <!-- File Appender for logging to a file -->
+        <File name="File" fileName="logs/${APP_NAME}.log">
+            <PatternLayout pattern="${LOG_PATTERN}"/>
+        </File>
+
+        <!--
+        INFO: Elasticsearch Appender Removal
+        If you are using Filebeat to send all application logs to OpenSearch/Elasticsearch,
+        you do NOT need a separate Elasticsearch appender in this logging configuration.
+        Ensure that any <Appender> definitions for Elasticsearch (e.g., SocketAppender, HttpAppender
+        configured for Elasticsearch) and their references in <Loggers> or <Root> are removed.
+
+        Example of an Elasticsearch appender that would typically be REMOVED:
+        <Socket name="Elasticsearch" host="your-elasticsearch-host" port="9200">
+            <JsonLayout complete="false" compact="true" eventEol="true" properties="true"/>
+        </Socket>
+        Or for Log4j2 Elasticsearch Appender:
+        <Elasticsearch name="ElasticsearchAppender" indexName="application-logs" serverUris="http://localhost:9200">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5p %c{1} - %m%n" />
+        </Elasticsearch>
+        -->
+
+    </Appenders>
+    <Loggers>
+        <!-- Root logger configuration -->
+        <Root level="info">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="File"/>
+            <!--
+            If an Elasticsearch appender was previously defined and referenced here,
+            that <AppenderRef ref="Elasticsearch"/> (or similar) should be REMOVED.
+            Example of a REMOVED appender reference:
+            <AppenderRef ref="ElasticsearchAppender"/>
+            -->
+        </Root>
+
+        <!-- Application-specific logger example -->
+        <Logger name="com.toyota" level="debug" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="File"/>
+            <!-- Ensure no Elasticsearch appender reference here either if it existed -->
+        </Logger>
+
+        <!-- Spring Boot loggers (examples) -->
+        <Logger name="org.springframework.boot" level="info" />
+        <Logger name="org.springframework.web" level="info" />
+
+    </Loggers>
+</Configuration>

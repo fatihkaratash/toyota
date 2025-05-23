@@ -1,5 +1,7 @@
+# version: '3.8' # Bu satırı kaldırabilirsiniz
+
 services:
-  # Kafka altyapısı
+  # --- Altyapı Servisleri ---
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     hostname: zookeeper
@@ -9,23 +11,25 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+    networks: # EKLENDİ (Eskisinde yoksa)
+      - toyota-network
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     hostname: kafka
     container_name: kafka
     depends_on:
-      - zookeeper # Kafka depends on Zookeeper to start
+      - zookeeper
     ports:
-      - "9092:9092" # External access
-      - "29092:29092" # Internal access
-      - "9101:9101"
+      - "9092:9092"
+      - "29092:29092"
+      # - "9101:9101" # JMX için, gerekmiyorsa kapalı kalsın
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
       KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092
-      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://kafka:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092 # Host'tan erişim için localhost
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
@@ -33,72 +37,123 @@ services:
       KAFKA_CONFLUENT_BALANCER_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_JMX_PORT: 9101
-      KAFKA_JMX_HOSTNAME: kafka
-    healthcheck: # Added healthcheck for Kafka
-      test: ["CMD-SHELL", "/usr/bin/kafka-topics --bootstrap-server localhost:29092 --list || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s # Give Kafka more time to start before first healthcheck
+      # KAFKA_JMX_PORT: 9101
+      # KAFKA_JMX_HOSTNAME: kafka
+    networks: # EKLENDİ (Eskisinde yoksa)
+      - toyota-network
 
-  # Redis önbellek servisi
   redis:
     image: redis:7.2.3-alpine
     container_name: redis
+    hostname: redis # EKLENDİ (İyi bir pratik)
     ports:
       - "6379:6379"
     volumes:
       - redis-data:/data
     command: redis-server --appendonly yes
+    networks: # EKLENDİ (Eskisinde yoksa)
+      - toyota-network
 
-  # REST veri sağlayıcı
+  postgres: # YENİ EKLENDİ
+    image: postgres:15-alpine
+    container_name: postgres
+    hostname: postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-financialdata}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres-init-scripts:/docker-entrypoint-initdb.d # Tablo oluşturma scriptleri için
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - toyota-network
+
+  opensearch: # YENİ EKLENDİ
+    image: opensearchproject/opensearch:2.11.0
+    container_name: opensearch
+    hostname: opensearch
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m" # Başlangıç için, ihtiyaca göre artırın
+      - plugins.security.disabled=${DISABLE_OPENSEARCH_SECURITY:-true}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    networks:
+      - toyota-network
+
+  opensearch-dashboards: # YENİ EKLENDİ
+    image: opensearchproject/opensearch-dashboards:2.11.0
+    container_name: opensearch-dashboards
+    hostname: opensearch-dashboards
+    ports:
+      - "5601:5601"
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: ${DISABLE_OPENSEARCH_SECURITY:-true}
+    depends_on:
+      - opensearch
+    networks:
+      - toyota-network
+
+  # --- Uygulama Servisleri ---
   rest-rate-provider:
     build:
       context: ./data-providers/rest-rate-provider
       dockerfile: Dockerfile
     container_name: rest-rate-provider
+    hostname: rest-rate-provider # EKLENDİ
     ports:
       - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SERVER_PORT: 8080
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 40s
     volumes:
-      - ./logs/rest-provider:/app/logs # Maps container's /app/logs to host's ./logs/rest-provider
+      - ./logs/rest-provider:/app/logs
+    networks: # EKLENDİ (Eskisinde yoksa)
+      - toyota-network
 
-  # TCP veri sağlayıcı
   tcp-rate-provider:
     build:
       context: ./data-providers/tcp-rate-provider
       dockerfile: Dockerfile
     container_name: tcp-rate-provider
+    hostname: tcp-rate-provider # EKLENDİ
     restart: unless-stopped
     ports:
       - "8081:8081"
     environment:
       SERVER_PORT: 8081
     volumes:
-      - ./logs/tcp-provider:/app/logs # Maps container's /app/logs to host's ./logs/tcp-provider
+      - ./logs/tcp-provider:/app/logs
+    networks: # EKLENDİ (Eskisinde yoksa)
+      - toyota-network
 
-  # Ana uygulama (koordinatör)
   main-application:
     build:
       context: ./main-application
       dockerfile: Dockerfile
     container_name: main-application
+    hostname: main-application # EKLENDİ
     restart: unless-stopped
     ports:
-      - "8083:8082"
-    depends_on: # Updated depends_on for main-application
+      - "8082:8082" # Eskiden 8083:8082 idi, 8082:8082 yaptım
+    depends_on:
       - kafka
       - redis
-      - rest-rate-provider
+      - rest-rate-provider # Bu bağımlılıklar başlangıç sırasını etkiler
       - tcp-rate-provider
     environment:
       SPRING_PROFILES_ACTIVE: docker
@@ -106,32 +161,52 @@ services:
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      APP_PROVIDER_REST_DEFAULT_HOST: rest-rate-provider
-      APP_PROVIDER_TCP_DEFAULT_HOST: tcp-rate-provider
-      APP_RATE_KEY_FORMAT: "raw_rate:{providerName}_{symbol}"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 40s
+      # Aşağıdakileri main-app'in subscribers.json'ında ${...} ile kullanmak için:
+      PROVIDER_REST_BASE_URL: http://rest-rate-provider:8080/api # Önceki gibi /v1/rates eklenebilir
+      PROVIDER_TCP_HOST: tcp-rate-provider
+      PROVIDER_TCP_PORT: 8081
     volumes:
-      - ./logs/main-application:/app/logs # Maps container's /app/logs to host's ./logs/main-application
+      - ./logs/main-application:/app/logs
+    networks: # EKLENDİ (Eskisinde yoksa)
+      - toyota-network
 
+  kafka-consumer: # YENİ EKLENDİ
+    build:
+      context: ./kafka-consumer
+      dockerfile: Dockerfile
+    container_name: kafka-consumer
+    hostname: kafka-consumer
+    restart: unless-stopped
+    depends_on: # Bu servislerin başlamasını bekler (tam hazır olmasını garanti etmez)
+      - kafka
+      - postgres
+      - opensearch # Eğer OpenSearch'e yazacaksa
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVER_PORT: 8084 # Eğer bir API sunuyorsa (genellikle sunmaz)
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-financialdata}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-user}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      SPRING_ELASTICSEARCH_URIS: http://opensearch:9200 # Veya spring.opensearch.uris
+      OPENSEARCH_USERNAME: ${OPENSEARCH_USERNAME:-}
+      OPENSEARCH_PASSWORD: ${OPENSEARCH_PASSWORD:-}
+      DISABLE_OPENSEARCH_SECURITY: ${DISABLE_OPENSEARCH_SECURITY:-true}
+      # Kafka Consumer için topic ve group id
+      APP_KAFKA_TOPIC_SIMPLE_RATES: ${APP_KAFKA_TOPIC_SIMPLE_RATES:-financial-simple-rates}
+      SPRING_KAFKA_CONSUMER_GROUP_ID: ${SPRING_KAFKA_CONSUMER_GROUP_ID:-simple-rate-persister-group}
+    volumes:
+      - ./logs/kafka-consumer:/app/logs
+    networks:
+      - toyota-network
 
-  # Kafka tüketici uygulaması (opsiyonel)
-# kafka-consumer:
-#   build:
-#     context: ./kafka-consumer
-#     dockerfile: Dockerfile
-#   container_name: kafka-consumer
-#   depends_on:
-#     - kafka
-#     - main-application
-#   environment:
-#     SPRING_PROFILES_ACTIVE: docker
-#     SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-#   restart: on-failure
+# Ortak Network (Eğer eskiden yoksa bu gerekli)
+networks:
+  toyota-network:
+    driver: bridge
 
+# Kalıcı Veri Alanları
 volumes:
   redis-data:
+  postgres-data: # YENİ EKLENDİ
+  opensearch-data: # YENİ EKLENDİ

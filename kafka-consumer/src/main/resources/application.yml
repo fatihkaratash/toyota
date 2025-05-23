@@ -1,0 +1,55 @@
+# Application settings
+spring:
+  application:
+    name: kafka-consumer
+  
+  # Kafka consumer configuration
+  kafka:
+    bootstrap-servers: kafka:29092
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+
+  # OpenSearch Configuration
+  elasticsearch:
+    uris: ${OPENSEARCH_URIS:http://localhost:9200}
+    username: ${OPENSEARCH_USERNAME:}
+    password: ${OPENSEARCH_PASSWORD:}
+    connection-timeout: 5s
+    socket-timeout: 5s
+
+  datasource:
+    url: jdbc:postgresql://postgres:5432/${POSTGRES_DB:toyota_rates}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:pgadmin}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+# Server Configuration
+server:
+  port: 8085
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.toyota: DEBUG
+    org.springframework.data.elasticsearch: INFO
+    org.springframework.kafka: INFO
+
+# Application specific Kafka configuration
+app:
+  kafka:
+    topic:
+      simple-rates: financial-simple-rates
+    consumer:
+      group-id: simple-rate-db-persister-group
