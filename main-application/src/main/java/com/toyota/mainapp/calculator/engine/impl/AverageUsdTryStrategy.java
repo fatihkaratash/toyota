@@ -1,116 +1,101 @@
 package com.toyota.mainapp.calculator.engine.impl;
 
 import com.toyota.mainapp.calculator.engine.CalculationStrategy;
-import com.toyota.mainapp.dto.CalculatedRateDto;
+import com.toyota.mainapp.dto.BaseRateDto;
 import com.toyota.mainapp.dto.CalculationRuleDto;
-import com.toyota.mainapp.dto.RawRateDto;
+import com.toyota.mainapp.dto.RateType;
 import com.toyota.mainapp.dto.common.InputRateInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
+import java.util.*;
 
+/**
+ * Specialized strategy for calculating average USD/TRY rate
+ */
 @Component("averageUsdTryStrategy")
 @Slf4j
 public class AverageUsdTryStrategy implements CalculationStrategy {
 
-    private static final int SCALE = 8; // Or from config
-
     @Override
-    public Optional<CalculatedRateDto> calculate(CalculationRuleDto rule, Map<String, RawRateDto> inputRates) {
-        log.debug("Executing AverageUsdTryStrategy for rule: {}", rule.getOutputSymbol());
-
+    public Optional<BaseRateDto> calculate(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates) {
+        log.info("Calculating average USD/TRY rate...");
+        
         if (inputRates == null || inputRates.isEmpty()) {
-            log.warn("Kural için giriş oranları sağlanmadı: {}. Hesaplama atlanıyor.", rule.getOutputSymbol());
+            log.warn("No input rates available for calculation");
             return Optional.empty();
         }
-
-        // Check if all required symbols are present
-        String[] requiredSymbols = rule.getDependsOnRaw();
-        if (requiredSymbols != null && requiredSymbols.length > 0) {
-            boolean missingSymbols = false;
-            StringBuilder missingSymbolsMsg = new StringBuilder("Eksik semboller: ");
+        
+        try {
+            BigDecimal totalBid = BigDecimal.ZERO;
+            BigDecimal totalAsk = BigDecimal.ZERO;
+            List<InputRateInfo> inputs = new ArrayList<>();
+            int validRatesCount = 0;
+            long latestTimestamp = 0;
             
-            for (String symbol : requiredSymbols) {
-                if (!inputRates.containsKey(symbol)) {
-                    missingSymbols = true;
-                    missingSymbolsMsg.append(symbol).append(", ");
-                    log.debug("Gerekli sembol bulunamadı: {} (Kural: {})", symbol, rule.getOutputSymbol());
+            // Process all input rates
+            for (Map.Entry<String, BaseRateDto> entry : inputRates.entrySet()) {
+                BaseRateDto rate = entry.getValue();
+                
+                if (rate.getBid() != null && rate.getAsk() != null) {
+                    totalBid = totalBid.add(rate.getBid());
+                    totalAsk = totalAsk.add(rate.getAsk());
+                    validRatesCount++;
+                    
+                    // Track the latest timestamp
+                    if (rate.getTimestamp() != null && rate.getTimestamp() > latestTimestamp) {
+                        latestTimestamp = rate.getTimestamp();
+                    }
+                    
+                    // Record input sources
+                    inputs.add(new InputRateInfo(
+                        rate.getSymbol(),
+                        rate.getRateType() != null ? rate.getRateType().name() : "RAW",
+                        rate.getProviderName(),
+                        rate.getBid(),
+                        rate.getAsk(),
+                        rate.getTimestamp()
+                    ));
+                    
+                    log.debug("Added rate to average calculation: {} from {}, bid={}, ask={}",
+                              rate.getSymbol(), rate.getProviderName(), rate.getBid(), rate.getAsk());
                 }
             }
             
-            if (missingSymbols) {
-                log.warn("{} kuralı için gerekli bazı semboller eksik. {}Hesaplama atlanıyor.", 
-                       rule.getOutputSymbol(), missingSymbolsMsg);
+            if (validRatesCount == 0) {
+                log.warn("No valid rates found for calculation");
                 return Optional.empty();
             }
-        }
-
-        List<RawRateDto> sourceRates = new ArrayList<>(inputRates.values());
-        List<InputRateInfo> calculationInputs = new ArrayList<>();
-
-        for (RawRateDto rawRate : sourceRates) {
-            if (rawRate == null) {
-                continue;
-            }
             
-            calculationInputs.add(InputRateInfo.builder()
-                    .symbol(rawRate.getSymbol())
-                    .rateType("RAW")
-                    .providerName(rawRate.getProviderName())
-                    .bid(rawRate.getBid())
-                    .ask(rawRate.getAsk())
-                    .timestamp(rawRate.getTimestamp())
-                    .build());
-        }
-
-        if (sourceRates.isEmpty()) {
-            log.warn("Önbellekten kuralı kontrol ettikten sonra kaynak kur bulunamadı: {}. Hesaplama atlanıyor.", rule.getOutputSymbol());
-            return Optional.empty();
-        }
-
-        BigDecimal sumBid = BigDecimal.ZERO;
-        BigDecimal sumAsk = BigDecimal.ZERO;
-
-        for (RawRateDto rate : sourceRates) {
-            if (rate.getBid() == null || rate.getAsk() == null) {
-                log.warn("{} sağlayıcısından {} kurunun teklif/talep değeri boş. Bu kur ortalama hesaplaması için atlanıyor (Kural: {}).",
-                        rate.getSymbol(), rate.getProviderName(), rule.getOutputSymbol());
-                // Decide if one null rate should fail the whole calculation or just be skipped
-                // For now, we'll skip it, but if all are skipped, it will result in division by zero or empty.
-                continue;
-            }
-            sumBid = sumBid.add(rate.getBid());
-            sumAsk = sumAsk.add(rate.getAsk());
-        }
-        
-        long validSourceRatesCount = sourceRates.stream().filter(r -> r.getBid() != null && r.getAsk() != null).count();
-
-        if (validSourceRatesCount == 0) {
-            log.warn("Kural için geçerli teklif/talep değeri olan kaynak kur bulunamadı: {}. Hesaplama atlanıyor.", rule.getOutputSymbol());
-            return Optional.empty();
-        }
-
-        BigDecimal avgBid = sumBid.divide(BigDecimal.valueOf(validSourceRatesCount), SCALE, RoundingMode.HALF_UP);
-        BigDecimal avgAsk = sumAsk.divide(BigDecimal.valueOf(validSourceRatesCount), SCALE, RoundingMode.HALF_UP);
-
-        CalculatedRateDto calculatedRate = CalculatedRateDto.builder()
+            // Calculate average
+            BigDecimal averageBid = totalBid.divide(BigDecimal.valueOf(validRatesCount), 6, RoundingMode.HALF_UP);
+            BigDecimal averageAsk = totalAsk.divide(BigDecimal.valueOf(validRatesCount), 6, RoundingMode.HALF_UP);
+            
+            // Use latest timestamp, or current time if none is available
+            long timestamp = latestTimestamp > 0 ? latestTimestamp : System.currentTimeMillis();
+            
+            // Create result
+            BaseRateDto resultRate = BaseRateDto.builder()
+                .rateType(RateType.CALCULATED)
                 .symbol(rule.getOutputSymbol())
-                .bid(avgBid)
-                .ask(avgAsk)
-                .timestamp(System.currentTimeMillis())
-                .calculationInputs(calculationInputs)
-                .calculatedByStrategy(this.getClass().getName())
+                .bid(averageBid)
+                .ask(averageAsk)
+                .timestamp(timestamp)
+                .calculationInputs(inputs)
+                .calculatedByStrategy("averageUsdTryStrategy")
                 .build();
-
-        log.info("{} için ortalama kur başarıyla hesaplandı: {}", rule.getOutputSymbol(), calculatedRate);
-        return Optional.of(calculatedRate);
+                
+            log.info("Successfully calculated USD/TRY average: {} using {} rates, bid={}, ask={}",
+                      rule.getOutputSymbol(), validRatesCount, averageBid, averageAsk);
+                      
+            return Optional.of(resultRate);
+            
+        } catch (Exception e) {
+            log.error("Error calculating USD/TRY average: {}", e.getMessage(), e);
+            return Optional.empty();
+        }
     }
 
     @Override

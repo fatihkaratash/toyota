@@ -36,22 +36,22 @@
     {
       "baseSymbol": "USDTRY",
       "expectedProviders": [
-        "PF1",
-        "PF2"
+        "RESTProvider1",
+        "TCPProvider2"
       ]
     },
     {
       "baseSymbol": "EURUSD",
       "expectedProviders": [
-        "PF1",
-        "PF2"
+        "RESTProvider1",
+        "TCPProvider2"
       ]
     },
     {
       "baseSymbol": "GBPUSD",
       "expectedProviders": [
-        "PF1",
-        "PF2"
+         "RESTProvider1",
+        "TCPProvider2"
       ]
     }
   ]

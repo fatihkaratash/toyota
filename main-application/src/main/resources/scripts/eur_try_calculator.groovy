@@ -5,6 +5,7 @@ import java.math.RoundingMode
 // cache (RateCacheService)
 // log (Logger)
 // outputSymbol (String, e.g., "EUR/TRY")
+// inputRates (Map<String, BaseRateDto>)
 // eurUsdSource1Key (String, from inputParameters, e.g., "PF1_EURUSD")
 // eurUsdSource2Key (String, from inputParameters, e.g., "PF2_EURUSD")
 // usdTryAvgSourceKey (String, from inputParameters, e.g., "USD/TRY_AVG")
@@ -25,8 +26,8 @@ if (!usdTryAvg) {
 }
 
 // Get EUR/USD rates from both providers
-def eurUsdSource1 = cache.getRawRate(eurUsdSource1Key).orElse(null)
-def eurUsdSource2 = cache.getRawRate(eurUsdSource2Key).orElse(null)
+def eurUsdSource1 = cache.getRate(eurUsdSource1Key).orElse(null)
+def eurUsdSource2 = cache.getRate(eurUsdSource2Key).orElse(null)
 
 // Create inputs list for tracking calculation sources
 def inputs = []
@@ -108,12 +109,13 @@ log.debug("EUR/TRY hesaplandı: Bid=${eurTryBid}, Ask=${eurTryAsk}")
 
 log.info("Successfully calculated ${outputSymbol}: Bid=${eurTryBid}, Ask=${eurTryAsk}")
 
-// Result
+// Result - return as a map that will be converted to BaseRateDto
 return [
     symbol: outputSymbol,
     bid: eurTryBid,
     ask: eurTryAsk,
     timestamp: System.currentTimeMillis(),
     calculationInputs: inputs,
-    calculatedByStrategy: "scripts/eur_try_calculator.groovy"
+    calculatedByStrategy: "scripts/eur_try_calculator.groovy",
+    rateType: "CALCULATED"
 ]

@@ -13,32 +13,17 @@ import lombok.NoArgsConstructor;
 public class ValidationError {
     
     /**
-     * Name of the field that failed validation (optional)
+     * Field name with the validation error
      */
-    private String fieldName;
+    private String field;
     
     /**
-     * The value that was rejected (optional)
+     * Invalid value
      */
-    private Object rejectedValue;
+    private Object value;
     
     /**
-     * A human-readable error message describing the validation failure
+     * Error message
      */
     private String message;
-    
-    /**
-     * Create a validation error with just a message
-     */
-    public ValidationError(String message) {
-        this.message = message;
-    }
-    
-    /**
-     * Create a validation error with field name and message
-     */
-    public ValidationError(String fieldName, String message) {
-        this.fieldName = fieldName;
-        this.message = message;
-    }
 }

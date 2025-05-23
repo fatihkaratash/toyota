@@ -1,12 +1,9 @@
 package com.toyota.mainapp.mapper;
 
-import com.toyota.mainapp.dto.CalculatedRateDto;
-import com.toyota.mainapp.dto.NormalizedRateDto;
+import com.toyota.mainapp.dto.BaseRateDto;
 import com.toyota.mainapp.dto.ProviderRateDto;
-import com.toyota.mainapp.dto.RateStatusDto;
-import com.toyota.mainapp.dto.RawRateDto;
-import com.toyota.mainapp.dto.payload.CalculatedRatePayloadDto;
-import com.toyota.mainapp.dto.payload.RawRatePayloadDto;
+import com.toyota.mainapp.dto.RateType;
+import com.toyota.mainapp.dto.payload.RatePayloadDto;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.Named;
@@ -16,77 +13,81 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
- * Veri nesnelerini dönüştürmek için MapStruct mapper
+ * Efficient and unified mapper for all rate DTOs
  */
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE)
 public interface RateMapper {
 
     /**
-     * Sağlayıcı verisini standart formata dönüştür
+     * Convert provider data directly to BaseRateDto with RAW type
      */
+    @Mapping(target = "rateType", constant = "RAW")
     @Mapping(target = "bid", expression = "java(stringToBigDecimal(providerRateDto.getBid()))")
     @Mapping(target = "ask", expression = "java(stringToBigDecimal(providerRateDto.getAsk()))")
-    @Mapping(target = "timestamp", expression = "java(convertTimestamp(providerRateDto.getTimestamp()))")
-    NormalizedRateDto toNormalizedDto(ProviderRateDto providerRateDto);
-
-    /**
-     * Standart kuru ham kura dönüştür
-     */
-    @Mapping(target = "receivedAt", ignore = true)
+    @Mapping(target = "timestamp", expression = "java(safelyConvertTimestamp(providerRateDto.getTimestamp()))")
+    @Mapping(target = "receivedAt", expression = "java(currentTimeMillis())")
     @Mapping(target = "validatedAt", ignore = true)
-    RawRateDto toRawDto(NormalizedRateDto normalizedRateDto);
+    @Mapping(target = "calculationInputs", ignore = true)
+    @Mapping(target = "calculatedByStrategy", ignore = true)
+    @Mapping(target = "status", ignore = true)
+    @Mapping(target = "statusMessage", ignore = true)
+    BaseRateDto toBaseRateDto(ProviderRateDto providerRateDto);
 
     /**
-     * Ham kuru Kafka yük verisi formatına dönüştür
+     * Convert BaseRateDto to Kafka payload format
      */
+    @Mapping(target = "eventType", expression = "java(baseRateDto.getRateType().getEventType())")
+    @Mapping(target = "eventTime", expression = "java(currentTimeMillis())")
     @Mapping(target = "sourceReceivedAt", source = "receivedAt")
     @Mapping(target = "sourceValidatedAt", source = "validatedAt")
-    @Mapping(target = "eventType", constant = "RAW_RATE")
-    @Mapping(target = "eventTime", expression = "java(currentTimeMillis())")
-    RawRatePayloadDto toRawRatePayloadDto(RawRateDto rawRateDto);
-
-    /**
-     * Hesaplanmış kuru Kafka yük verisi formatına dönüştür
-     */
     @Mapping(target = "rateTimestamp", source = "timestamp")
-    @Mapping(target = "eventType", constant = "CALCULATED_RATE")
-    @Mapping(target = "eventTime", expression = "java(currentTimeMillis())")
-    CalculatedRatePayloadDto toCalculatedRatePayloadDto(CalculatedRateDto calculatedRateDto);
+    RatePayloadDto toRatePayloadDto(BaseRateDto baseRateDto);
 
     /**
-     * Kur durum nesnesi oluştur
+     * Create a status DTO
      */
-    @Mapping(target = "timestamp", expression = "java(currentTimeMillis())")
-    RateStatusDto createRateStatusDto(String symbol, String providerName,
-                                     RateStatusDto.RateStatusEnum status,
-                                     String statusMessage);
+    @Named("createStatusDto")
+    default BaseRateDto createStatusDto(String symbol, String providerName,
+                                     BaseRateDto.RateStatusEnum status,
+                                     String statusMessage) {
+        return BaseRateDto.builder()
+                .rateType(RateType.STATUS)
+                .symbol(symbol)
+                .providerName(providerName)
+                .status(status)
+                .statusMessage(statusMessage)
+                .timestamp(currentTimeMillis())
+                .build();
+    }
 
     /**
-     * Ham kuru durum nesnesine dönüştür
+     * Convert raw rate to status DTO
      */
-    @Mapping(target = "status", source = "rawRate", qualifiedByName = "determineStatus")
+    @Mapping(target = "rateType", constant = "STATUS")
+    @Mapping(target = "status", source = "source", qualifiedByName = "determineStatus")
     @Mapping(target = "statusMessage", constant = "Kur başarıyla işlendi")
-    @Mapping(target = "timestamp", expression = "java(currentTimeMillis())")
-    RateStatusDto toRateStatusDto(RawRateDto rawRate);
+    @Mapping(target = "calculationInputs", ignore = true)
+    @Mapping(target = "calculatedByStrategy", ignore = true)
+    BaseRateDto toStatusDto(BaseRateDto source);
 
     /**
-     * Ham kur verisine göre durum belirle
+     * Determine status based on the raw rate
      */
     @Named("determineStatus")
-    default RateStatusDto.RateStatusEnum determineStatus(RawRateDto rawRate) {
-        if (rawRate == null) {
-            return RateStatusDto.RateStatusEnum.ERROR;
+    default BaseRateDto.RateStatusEnum determineStatus(BaseRateDto source) {
+        if (source == null) {
+            return BaseRateDto.RateStatusEnum.ERROR;
         }
         
-        if (rawRate.getValidatedAt() != null && rawRate.getValidatedAt() > 0) {
-            return RateStatusDto.RateStatusEnum.ACTIVE;
+        if (source.getValidatedAt() != null && source.getValidatedAt() > 0) {
+            return BaseRateDto.RateStatusEnum.ACTIVE;
         }
         
-        return RateStatusDto.RateStatusEnum.PENDING;
+        return BaseRateDto.RateStatusEnum.PENDING;
     }
     
     /**
-     * String değeri BigDecimal'e dönüştür
+     * Safely convert string to BigDecimal
      */
     default BigDecimal stringToBigDecimal(String value) {
         if (value == null || value.trim().isEmpty()) {
@@ -95,31 +96,46 @@ public interface RateMapper {
         try {
             return new BigDecimal(value.trim());
         } catch (NumberFormatException e) {
-            // Loglama yapılabilir
             return null;
         }
     }
     
     /**
-     * Timestamp'i milisaniye cinsinden long'a dönüştür
+     * Safely convert timestamp from various formats to Long
      */
-    default Long convertTimestamp(String timestamp) {
-        if (timestamp == null || timestamp.trim().isEmpty()) {
+    default Long safelyConvertTimestamp(Object timestamp) {
+        if (timestamp == null) {
             return currentTimeMillis();
         }
-        try {
-            // Basit bir dönüşüm - gerçek uygulamada daha karmaşık olabilir
-            return Long.parseLong(timestamp);
-        } catch (NumberFormatException e) {
-            // Loglama yapılabilir
-            return currentTimeMillis();
+        
+        if (timestamp instanceof Long) {
+            return (Long) timestamp;
         }
+        
+        if (timestamp instanceof String) {
+            String strTimestamp = (String) timestamp;
+            if (strTimestamp.trim().isEmpty()) {
+                return currentTimeMillis();
+            }
+            
+            try {
+                return Long.parseLong(strTimestamp);
+            } catch (NumberFormatException e) {
+                try {
+                    return Instant.parse(strTimestamp).toEpochMilli();
+                } catch (Exception parseException) {
+                    return currentTimeMillis();
+                }
+            }
+        }
+        
+        return currentTimeMillis();
     }
     
     /**
-     * Mevcut zamanı milisaniye cinsinden al
+     * Get current time in milliseconds
      */
     default long currentTimeMillis() {
-        return Instant.now().toEpochMilli();
+        return System.currentTimeMillis();
     }
 }

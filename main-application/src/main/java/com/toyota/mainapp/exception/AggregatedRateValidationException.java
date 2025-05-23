@@ -1,7 +1,5 @@
 package com.toyota.mainapp.exception;
 
-import com.toyota.mainapp.dto.ValidationError;
-
 import java.util.Collections;
 import java.util.List;
 
@@ -11,14 +9,14 @@ import java.util.List;
  */
 public class AggregatedRateValidationException extends RuntimeException {
 
-    private final List<ValidationError> errors;
+    private final List<String> errors;
 
-    public AggregatedRateValidationException(List<ValidationError> errors) {
-        super("Rate validation failed with " + errors.size() + " error(s)");
+    public AggregatedRateValidationException(List<String> errors) {
+        super("Rate validation failed with " + errors.size() + " error(s): " + String.join("; ", errors));
         this.errors = errors;
     }
 
-    public AggregatedRateValidationException(String message, List<ValidationError> errors) {
+    public AggregatedRateValidationException(String message, List<String> errors) {
         super(message);
         this.errors = errors;
     }
@@ -27,7 +25,7 @@ public class AggregatedRateValidationException extends RuntimeException {
      * Get all validation errors
      * @return Unmodifiable list of validation errors
      */
-    public List<ValidationError> getErrors() {
+    public List<String> getErrors() {
         return Collections.unmodifiableList(errors);
     }
 }

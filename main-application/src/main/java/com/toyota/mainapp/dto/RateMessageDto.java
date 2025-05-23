@@ -2,8 +2,7 @@ package com.toyota.mainapp.dto;
 
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.toyota.mainapp.dto.payload.CalculatedRatePayloadDto; // Placeholder for Faz 4+
-import com.toyota.mainapp.dto.payload.RawRatePayloadDto;
+import com.toyota.mainapp.dto.payload.RatePayloadDto;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -18,18 +17,20 @@ import java.util.Map;
 public class RateMessageDto {
     private String messageId;
     private long messageTimestamp;
-    private String rateType; // "RAW" or "CALCULATED"
+    private String rateType; // Maps to RateType.eventType
 
+    // Updated to use unified RatePayloadDto instead of type-specific DTOs
     @JsonTypeInfo(
             use = JsonTypeInfo.Id.NAME,
             include = JsonTypeInfo.As.EXTERNAL_PROPERTY,
             property = "rateType"
     )
     @JsonSubTypes({
-            @JsonSubTypes.Type(value = RawRatePayloadDto.class, name = "RAW"),
-            @JsonSubTypes.Type(value = CalculatedRatePayloadDto.class, name = "CALCULATED") // Placeholder for Faz 4+
+            @JsonSubTypes.Type(value = RatePayloadDto.class, name = "RAW_RATE"),
+            @JsonSubTypes.Type(value = RatePayloadDto.class, name = "CALCULATED_RATE"),
+            @JsonSubTypes.Type(value = RatePayloadDto.class, name = "RATE_STATUS")
     })
-    private Object payload;
+    private RatePayloadDto payload;
 
     private Map<String, String> metadata;
 }

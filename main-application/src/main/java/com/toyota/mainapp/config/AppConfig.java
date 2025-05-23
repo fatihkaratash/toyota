@@ -2,34 +2,27 @@ package com.toyota.mainapp.config;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.toyota.mainapp.dto.CalculatedRateDto;
-import com.toyota.mainapp.dto.RawRateDto;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.RetryRegistry;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
-import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
-import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.core.task.TaskExecutor;
-
-import java.util.concurrent.Executor;
 
 /**
  * Ana uygulama yapılandırma sınıfı
  */
 @Configuration
 @EnableAsync
+@EnableScheduling
 @Slf4j
 public class AppConfig {
 
@@ -40,52 +33,25 @@ public class AppConfig {
     @Primary
     public ObjectMapper objectMapper() {
         ObjectMapper mapper = new ObjectMapper();
-         mapper.registerModule(new JavaTimeModule());
-    // Enable default typing to preserve type information
-          mapper.activateDefaultTyping(
-        mapper.getPolymorphicTypeValidator(), 
-        ObjectMapper.DefaultTyping.NON_FINAL, 
-        JsonTypeInfo.As.PROPERTY);
-    return mapper;
+        mapper.registerModule(new JavaTimeModule());
+        // Enable default typing to preserve type information
+        mapper.activateDefaultTyping(
+            mapper.getPolymorphicTypeValidator(), 
+            ObjectMapper.DefaultTyping.NON_FINAL, 
+            JsonTypeInfo.As.PROPERTY);
+        return mapper;
     }
 
     /**
-     * Ham kurlar için Redis şablonu
-     
+     * TaskScheduler for scheduled tasks
+     */
     @Bean
-    @Qualifier("rawRateRedisTemplate")
-    public RedisTemplate<String, RawRateDto> rawRateRedisTemplate(
-            RedisConnectionFactory redisConnectionFactory,
-            ObjectMapper objectMapper) {
-        RedisTemplate<String, RawRateDto> template = new RedisTemplate<>();
-    template.setConnectionFactory(redisConnectionFactory);
-    template.setKeySerializer(new StringRedisSerializer());
-    
-    // Use Jackson2JsonRedisSerializer instead of GenericJackson2JsonRedisSerializer
-   GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(objectMapper);
-    template.setValueSerializer(serializer);
-    template.setHashValueSerializer(serializer);
-    
-    return template;
-    }
-
-    /**
-     * Hesaplanmış kurlar için Redis şablonu
-     
-    @Bean
-    @Qualifier("calculatedRateRedisTemplate")
-    public RedisTemplate<String, CalculatedRateDto> calculatedRateRedisTemplate(
-            RedisConnectionFactory redisConnectionFactory,
-            ObjectMapper objectMapper) {
-         RedisTemplate<String, CalculatedRateDto> template = new RedisTemplate<>();
-    template.setConnectionFactory(redisConnectionFactory);
-    template.setKeySerializer(new StringRedisSerializer());
-    
-    GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(objectMapper);
-    template.setValueSerializer(serializer);
-    template.setHashValueSerializer(serializer);
-    
-    return template;
+    public TaskScheduler taskScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(5);
+        scheduler.setThreadNamePrefix("Scheduled-");
+        scheduler.initialize();
+        return scheduler;
     }
 
     /**

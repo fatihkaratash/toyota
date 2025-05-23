@@ -1,20 +1,20 @@
 package com.toyota.mainapp.validation.rules;
 
-import com.toyota.mainapp.dto.NormalizedRateDto;
+import com.toyota.mainapp.dto.BaseRateDto;
 import com.toyota.mainapp.dto.ValidationError;
 
 import java.util.List;
 
 /**
- * Interface for validation rules that can be applied to rate data
+ * Interface for validation rules that check rate data
  */
 public interface ValidationRule {
-
+    
     /**
-     * Validate a normalized rate according to this rule
+     * Validates a rate DTO and returns any validation errors
      * 
      * @param rate The rate to validate
-     * @return List of validation errors (empty list if validation passed)
+     * @return List of validation errors (empty if validation passes)
      */
-    List<ValidationError> validate(NormalizedRateDto rate);
+    List<ValidationError> validate(BaseRateDto rate);
 }

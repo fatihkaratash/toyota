@@ -4,9 +4,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toyota.mainapp.cache.RateCacheService;
 import com.toyota.mainapp.calculator.engine.CalculationStrategy;
-import com.toyota.mainapp.dto.CalculatedRateDto;
+import com.toyota.mainapp.dto.BaseRateDto;
 import com.toyota.mainapp.dto.CalculationRuleDto;
-import com.toyota.mainapp.dto.RawRateDto;
+import com.toyota.mainapp.dto.RateType;
 import com.toyota.mainapp.dto.common.InputRateInfo;
 import groovy.lang.Binding;
 import groovy.lang.GroovyShell;
@@ -41,7 +41,7 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
     }
 
     @Override
-    public Optional<CalculatedRateDto> calculate(CalculationRuleDto rule, Map<String, RawRateDto> inputRates) {
+    public Optional<BaseRateDto> calculate(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates) {
         String scriptPath = rule.getImplementation(); // e.g., "scripts/eur_try_calculator.groovy"
         log.debug("Groovy betiği çalıştırılıyor, kural [{}]: {}", rule.getOutputSymbol(), scriptPath);
 
@@ -73,7 +73,8 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> resultMap = (Map<String, Object>) result;
                 
-                CalculatedRateDto dto = mapToCalculatedRateDto(resultMap, rule);
+                BaseRateDto dto = mapToBaseRateDto(resultMap, rule);
+                dto.setRateType(RateType.CALCULATED);
                 dto.setCalculatedByStrategy(scriptPath); // Assign script path
                 log.info("Groovy betiği [{}] başarıyla çalıştırıldı, kural [{}]: {}", scriptPath, rule.getOutputSymbol(), dto);
                 return Optional.of(dto);
@@ -96,9 +97,11 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
         return "groovyScriptCalculationStrategy";
     }
     
-    private CalculatedRateDto mapToCalculatedRateDto(Map<String, Object> resultMap, CalculationRuleDto rule) {
-        CalculatedRateDto dto = new CalculatedRateDto();
-        dto.setSymbol(rule.getOutputSymbol()); // Default to rule's output symbol, can be overridden by script
+    private BaseRateDto mapToBaseRateDto(Map<String, Object> resultMap, CalculationRuleDto rule) {
+        BaseRateDto dto = BaseRateDto.builder()
+            .rateType(RateType.CALCULATED)
+            .symbol(rule.getOutputSymbol())
+            .build();
         
         // Allow script to override symbol if provided
         if (resultMap.containsKey("symbol") && resultMap.get("symbol") instanceof String) {
@@ -113,7 +116,8 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
         if (inputsObj != null) {
             try {
                 // Use ObjectMapper for robust conversion of List<InputRateInfo>
-                List<InputRateInfo> calculationInputs = objectMapper.convertValue(inputsObj, new TypeReference<List<InputRateInfo>>() {});
+                List<InputRateInfo> calculationInputs = objectMapper.convertValue(inputsObj, 
+                    new TypeReference<List<InputRateInfo>>() {});
                 dto.setCalculationInputs(calculationInputs);
             } catch (IllegalArgumentException e) {
                 log.warn("Betikten 'calculationInputs' dönüştürülemedi, kural [{}]: {}. Girdiler: {}",
@@ -123,6 +127,11 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
         } else {
             dto.setCalculationInputs(new ArrayList<>());
         }
+        
+        if (resultMap.containsKey("calculatedByStrategy")) {
+            dto.setCalculatedByStrategy((String) resultMap.get("calculatedByStrategy"));
+        }
+        
         return dto;
     }
 

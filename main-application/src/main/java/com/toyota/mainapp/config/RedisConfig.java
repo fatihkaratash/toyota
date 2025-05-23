@@ -3,11 +3,9 @@ package com.toyota.mainapp.config;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
-import com.toyota.mainapp.dto.CalculatedRateDto;
-import com.toyota.mainapp.dto.RawRateDto;
+import com.toyota.mainapp.dto.BaseRateDto;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -15,7 +13,7 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 /**
@@ -57,7 +55,7 @@ public class RedisConfig {
     }
 
     @Bean
-    public ObjectMapper redisObjectMapper() {
+    public ObjectMapper redisObjectMapper() {  // Removed @Primary annotation
         ObjectMapper mapper = new ObjectMapper();
         // Enable default typing to handle deserialization correctly
         mapper.activateDefaultTyping(
@@ -70,40 +68,19 @@ public class RedisConfig {
     }
     
     @Bean
-    @Qualifier("rawRateRedisTemplate")
-    public RedisTemplate<String, RawRateDto> rawRateRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper redisObjectMapper) {
-        RedisTemplate<String, RawRateDto> template = new RedisTemplate<>();
+    public RedisTemplate<String, BaseRateDto> rateRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper redisObjectMapper) {
+        RedisTemplate<String, BaseRateDto> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
 
         // Configure key serializer
         template.setKeySerializer(new StringRedisSerializer());
         
         // Configure value serializer with proper type information
-        Jackson2JsonRedisSerializer<RawRateDto> serializer = new Jackson2JsonRedisSerializer<>(RawRateDto.class);
-        serializer.setObjectMapper(redisObjectMapper);
+        GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(redisObjectMapper);
         template.setValueSerializer(serializer);
         template.setHashValueSerializer(serializer);
         
-        log.info("RawRateDto RedisTemplate configured with Jackson2JsonRedisSerializer");
-        return template;
-    }
-
-    @Bean
-     @Qualifier("calculatedRateRedisTemplate")
-    public RedisTemplate<String, CalculatedRateDto> calculatedRateRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper redisObjectMapper) {
-        RedisTemplate<String, CalculatedRateDto> template = new RedisTemplate<>();
-        template.setConnectionFactory(connectionFactory);
-        
-        // Configure key serializer
-        template.setKeySerializer(new StringRedisSerializer());
-        
-        // Configure value serializer with proper type information
-        Jackson2JsonRedisSerializer<CalculatedRateDto> serializer = new Jackson2JsonRedisSerializer<>(CalculatedRateDto.class);
-        serializer.setObjectMapper(redisObjectMapper);
-        template.setValueSerializer(serializer);
-        template.setHashValueSerializer(serializer);
-        
-        log.info("CalculatedRateDto RedisTemplate configured with Jackson2JsonRedisSerializer");
+        log.info("BaseRateDto unified RedisTemplate configured with GenericJackson2JsonRedisSerializer");
         return template;
     }
 }

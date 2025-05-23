@@ -1,6 +1,6 @@
 package com.toyota.mainapp.validation.rules;
 
-import com.toyota.mainapp.dto.NormalizedRateDto;
+import com.toyota.mainapp.dto.BaseRateDto;
 import com.toyota.mainapp.dto.ValidationError;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -28,11 +28,17 @@ public class PriceRule implements ValidationRule {
     }
 
     @Override
-    public List<ValidationError> validate(NormalizedRateDto rate) {
+    public List<ValidationError> validate(BaseRateDto rate) {
         List<ValidationError> errors = new ArrayList<>();
         
         // Check bid is positive and above minimum
-        if (rate.getBid().compareTo(BigDecimal.ZERO) <= 0) {
+        if (rate.getBid() == null) {
+            errors.add(new ValidationError(
+                "bid",
+                null,
+                "Bid price cannot be null"
+            ));
+        } else if (rate.getBid().compareTo(BigDecimal.ZERO) <= 0) {
             errors.add(new ValidationError(
                 "bid",
                 rate.getBid(),
@@ -47,7 +53,13 @@ public class PriceRule implements ValidationRule {
         }
         
         // Check ask is positive and above minimum
-        if (rate.getAsk().compareTo(BigDecimal.ZERO) <= 0) {
+        if (rate.getAsk() == null) {
+            errors.add(new ValidationError(
+                "ask",
+                null,
+                "Ask price cannot be null"
+            ));
+        } else if (rate.getAsk().compareTo(BigDecimal.ZERO) <= 0) {
             errors.add(new ValidationError(
                 "ask",
                 rate.getAsk(),

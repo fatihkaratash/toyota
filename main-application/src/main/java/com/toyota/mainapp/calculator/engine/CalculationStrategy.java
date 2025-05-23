@@ -1,8 +1,7 @@
 package com.toyota.mainapp.calculator.engine;
 
-import com.toyota.mainapp.dto.CalculatedRateDto;
+import com.toyota.mainapp.dto.BaseRateDto;
 import com.toyota.mainapp.dto.CalculationRuleDto;
-import com.toyota.mainapp.dto.RawRateDto;
 
 import java.util.Map;
 import java.util.Optional;
@@ -19,7 +18,7 @@ public interface CalculationStrategy {
      * @param inputRates Hesaplama için gereken giriş kurları
      * @return Hesaplanmış kur (başarısız olursa boş)
      */
-    Optional<CalculatedRateDto> calculate(CalculationRuleDto rule, Map<String, RawRateDto> inputRates);
+    Optional<BaseRateDto> calculate(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates);
     
     /**
      * Stratejinin benzersiz adını döndür

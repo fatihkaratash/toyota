@@ -43,4 +43,7 @@ public interface PlatformSubscriber {
     String getProviderName();
 
     void init(SubscriberConfigDto config, PlatformCallback callback);
+
+
+
 }

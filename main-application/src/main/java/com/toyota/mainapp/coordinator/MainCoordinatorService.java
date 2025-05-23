@@ -2,16 +2,12 @@ package com.toyota.mainapp.coordinator;
 
 import com.toyota.mainapp.aggregator.TwoWayWindowAggregator;
 import com.toyota.mainapp.cache.RateCacheService;
-import com.toyota.mainapp.calculator.RateCalculatorService;
 import com.toyota.mainapp.coordinator.callback.PlatformCallback;
-import com.toyota.mainapp.dto.NormalizedRateDto;
+import com.toyota.mainapp.dto.BaseRateDto;
 import com.toyota.mainapp.dto.ProviderRateDto;
-import com.toyota.mainapp.dto.RateStatusDto;
-import com.toyota.mainapp.dto.RawRateDto;
-import com.toyota.mainapp.dto.payload.RawRatePayloadDto;
+import com.toyota.mainapp.dto.RateType;
 import com.toyota.mainapp.exception.AggregatedRateValidationException;
-import com.toyota.mainapp.kafka.producer.KafkaRateProducer;
-import com.toyota.mainapp.kafka.producer.SimpleFormatKafkaProducer;
+import com.toyota.mainapp.kafka.publisher.SequentialPublisher;
 import com.toyota.mainapp.mapper.RateMapper;
 import com.toyota.mainapp.subscriber.api.PlatformSubscriber;
 import com.toyota.mainapp.subscriber.dynamic.DynamicSubscriberLoader;
@@ -43,10 +39,8 @@ public class MainCoordinatorService implements PlatformCallback {
     private final RateMapper rateMapper;
     private final RateValidatorService rateValidatorService;
     private final RateCacheService rateCacheService;
-    private final KafkaRateProducer kafkaRateProducer;
-    private final SimpleFormatKafkaProducer simpleFormatProducer;
-    private final RateCalculatorService rateCalculatorService;
-    private final TwoWayWindowAggregator aggregator; // Yeni eklenen toplayıcı
+    private final SequentialPublisher sequentialPublisher;
+    private final TwoWayWindowAggregator aggregator;
 
     @Value("${subscribers.config.path}")
     private String subscribersConfigPath;
@@ -116,7 +110,7 @@ public class MainCoordinatorService implements PlatformCallback {
     }
 
     /**
-     * Abonelerden gelen kur verilerini işle
+     * Abonelerden gelen kur verilerini işle - BaseRateDto ile çalışacak şekilde güncellendi
      */
     @Override
     public void onRateAvailable(String providerName, ProviderRateDto providerRate) {
@@ -129,41 +123,30 @@ public class MainCoordinatorService implements PlatformCallback {
                 providerRate.setProviderName(providerName);
             }
 
-            // 1. Veriyi standartlaştır
-            NormalizedRateDto normalizedRate = rateMapper.toNormalizedDto(providerRate);
-            log.debug("Standartlaştırılmış kur: {}", normalizedRate);
+            // 1. Veriyi doğrudan BaseRateDto'ya dönüştür
+            BaseRateDto baseRate = rateMapper.toBaseRateDto(providerRate);
+            log.debug("ProviderRateDto'dan BaseRateDto oluşturuldu: {}", baseRate);
 
             // 2. Veriyi doğrula
-            rateValidatorService.validate(normalizedRate);
-            log.debug("Kur doğrulama başarılı: {}", normalizedRate.getSymbol());
+            rateValidatorService.validate(baseRate);
+            baseRate.setValidatedAt(System.currentTimeMillis());
+            log.debug("Kur doğrulama başarılı: {}", baseRate.getSymbol());
             
-            // 3. Önbellekleme ve Kafka için ham kur oluştur
-            RawRateDto rawRate = rateMapper.toRawDto(normalizedRate);
-            rawRate.setReceivedAt(System.currentTimeMillis());
-            rawRate.setValidatedAt(System.currentTimeMillis());
+            // 3. Ham kuru önbelleğe al
+            String rateCacheKey = baseRate.getProviderName() + "_" + baseRate.getSymbol();
+            log.debug("Önbellek anahtarı oluşturuldu: {}", rateCacheKey);
+            rateCacheService.cacheRawRate(rateCacheKey, baseRate);
             
-            // 4. Ham kuru önbelleğe al
-            String rawRateCacheKey = rawRate.getProviderName() + "_" + rawRate.getSymbol();
-            log.debug("Önbellek anahtarı oluşturuldu: {}", rawRateCacheKey);
-            rateCacheService.cacheRawRate(rawRateCacheKey, rawRate);
             log.info("Kur başarıyla işlendi ve önbelleğe alındı: {}, sağlayıcı: {}", 
-                    rawRate.getSymbol(), providerName);
+                    baseRate.getSymbol(), providerName);
 
-            // 5. Ham kuru Kafka'ya gönder - JSON formatı
-            RawRatePayloadDto payload = rateMapper.toRawRatePayloadDto(rawRate);
-            kafkaRateProducer.sendRawRate(payload);
-            
-            // 5b. Ham kuru Kafka'ya gönder - Basit metin formatı
-            simpleFormatProducer.sendRawRate(rawRate);
-            log.debug("Kur Kafka'ya gönderildi: {}", rawRateCacheKey);
+            // 4. Kuru Kafka'ya gönder
+            sequentialPublisher.publishRate(baseRate);
+            log.debug("Kur Kafka'ya gönderildi: {}", rateCacheKey);
 
-            // 6. YENİ: Toplayıcıya gönder - pencere bazlı hesaplama için
-            log.debug("Kur toplayıcıya gönderiliyor: {}", rawRateCacheKey);
-            aggregator.accept(rawRate);
-
-            // 7. Hesaplama motorunu tetikle - mevcut yöntem de tutulabilir veya kaldırılabilir
-            log.info("Güncellenen ham kura dayalı hesaplamalar tetikleniyor: {}", rawRateCacheKey);
-            rateCalculatorService.processRateUpdate(rawRateCacheKey, true);
+            // 5. Toplayıcıya gönder - tek hesaplama yaklaşımı olarak
+            log.debug("Kur toplayıcıya gönderiliyor: {}", rateCacheKey);
+            aggregator.accept(baseRate);
 
         } catch (AggregatedRateValidationException e) {
             log.warn("{} sağlayıcısından gelen veri doğrulanamadı: Sembol={}, Hatalar={}", 
@@ -199,15 +182,18 @@ public class MainCoordinatorService implements PlatformCallback {
      * Kur durumu güncellemelerini işle
      */
     @Override
-    public void onRateStatus(String providerName, RateStatusDto rateStatus) {
-        log.info("Kur durumu güncellendi, sağlayıcı: {}, durum: {}", providerName, rateStatus);
+    public void onRateStatus(String providerName, BaseRateDto statusRate) {
+        log.info("Kur durumu güncellendi, sağlayıcı: {}, durum: {}", providerName, statusRate.getStatus());
         
-        if (rateStatus.getStatus() == RateStatusDto.RateStatusEnum.ERROR) {
+        // Directly publish to Kafka since we already have a BaseRateDto
+        sequentialPublisher.publishRate(statusRate);
+        
+        if (statusRate.getStatus() == BaseRateDto.RateStatusEnum.ERROR) {
             log.warn("{} sembolü için {} sağlayıcısından hata durumu algılandı", 
-                    rateStatus.getSymbol(), rateStatus.getProviderName());
+                    statusRate.getSymbol(), statusRate.getProviderName());
         }
     }
-
+    
     /**
      * Sağlayıcı hatalarını işle
      */

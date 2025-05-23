@@ -2,9 +2,8 @@ package com.toyota.mainapp.calculator.impl;
 
 import com.toyota.mainapp.calculator.RuleEngineService;
 import com.toyota.mainapp.calculator.engine.CalculationStrategy;
-import com.toyota.mainapp.dto.CalculatedRateDto;
+import com.toyota.mainapp.dto.BaseRateDto;
 import com.toyota.mainapp.dto.CalculationRuleDto;
-import com.toyota.mainapp.dto.RawRateDto;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
@@ -15,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
- * Hesaplama kurallarını yöneten ve hesaplamaları yapan servis implementasyonu
+ * Implementation of the rule engine service
  */
 @Service
 @Slf4j
@@ -36,36 +35,35 @@ public class RuleEngineServiceImpl implements RuleEngineService {
     }
     
     private void loadStrategies() {
-        log.info("Hesaplama stratejileri yükleniyor...");
+        log.info("Loading calculation strategies...");
         
         Map<String, CalculationStrategy> strategyBeans = context.getBeansOfType(CalculationStrategy.class);
         strategyBeans.forEach((name, strategy) -> {
             String strategyName = strategy.getStrategyName();
             strategies.put(strategyName, strategy);
-            log.info("Strateji yüklendi: {} ({})", strategyName, strategy.getClass().getSimpleName());
+            log.info("Strategy loaded: {} ({})", strategyName, strategy.getClass().getSimpleName());
         });
         
-        log.info("Toplam {} hesaplama stratejisi yüklendi", strategies.size());
+        log.info("Total {} calculation strategies loaded", strategies.size());
     }
 
     @Override
     public void loadRules() {
-        // TODO: Rules should be loaded from configuration file
-        log.info("Hesaplama kuralları yükleniyor...");
+        log.info("Loading calculation rules...");
         
-        // Updated sample rule with correct provider symbols
+        // Sample rule for testing
         CalculationRuleDto sampleRule = CalculationRuleDto.builder()
-                .outputSymbol("USD/TRY_AVG")
-                .description("USD/TRY ortalaması")
+                .outputSymbol("USDTRY_AVG")
+                .description("USD/TRY average from multiple providers")
                 .strategyType("JAVA_CLASS")
-                .implementation("averageUsdTryStrategy")
-                .dependsOnRaw(new String[]{"PF1_USDTRY", "PF2_USDTRY"})
+                .implementation("averageCalculationStrategy")
+                .dependsOnRaw(new String[]{"TCPProvider2_USDTRY", "RESTProvider1_USDTRY"})
                 .priority(10)
                 .build();
                 
         rules.add(sampleRule);
         
-        log.info("Toplam {} hesaplama kuralı yüklendi", rules.size());
+        log.info("Total {} calculation rules loaded", rules.size());
     }
 
     @Override
@@ -97,7 +95,6 @@ public class RuleEngineServiceImpl implements RuleEngineService {
                     }
                     
                     for (String rawSymbol : dependsOnRaw) {
-                        // Sağlayıcı önekini kaldırarak temel sembolü elde et
                         String rawBaseSymbol = deriveBaseSymbol(rawSymbol);
                         if (rawBaseSymbol.equals(baseSymbol)) {
                             return true;
@@ -108,10 +105,6 @@ public class RuleEngineServiceImpl implements RuleEngineService {
                 .collect(Collectors.toList());
     }
     
-    /**
-     * Sağlayıcıya özgü sembolden temel sembolü türet
-     * Not: Bu metot, TwoWayWindowAggregator sınıfındaki aynı adlı metotla tutarlı olmalıdır.
-     */
     private String deriveBaseSymbol(String providerSymbol) {
         if (providerSymbol == null) {
             return "";
@@ -122,20 +115,20 @@ public class RuleEngineServiceImpl implements RuleEngineService {
     }
 
     @Override
-    public CalculatedRateDto executeRule(CalculationRuleDto rule, Map<String, RawRateDto> inputRates) {
+    public BaseRateDto executeRule(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates) {
         String strategyName = rule.getImplementation();
         CalculationStrategy strategy = strategies.get(strategyName);
         
         if (strategy == null) {
-            log.error("Kural için strateji bulunamadı: {}, strateji: {}", rule.getOutputSymbol(), strategyName);
+            log.error("Strategy not found for rule: {}, strategy: {}", rule.getOutputSymbol(), strategyName);
             return null;
         }
         
         try {
-            Optional<CalculatedRateDto> result = strategy.calculate(rule, inputRates);
+            Optional<BaseRateDto> result = strategy.calculate(rule, inputRates);
             return result.orElse(null);
         } catch (Exception e) {
-            log.error("Kural çalıştırılırken hata oluştu: {}", rule.getOutputSymbol(), e);
+            log.error("Error executing rule: {}", rule.getOutputSymbol(), e);
             return null;
         }
     }
@@ -149,7 +142,7 @@ public class RuleEngineServiceImpl implements RuleEngineService {
     public void addRule(CalculationRuleDto rule) {
         if (rule != null) {
             rules.add(rule);
-            log.info("Yeni kural eklendi: {}", rule.getOutputSymbol());
+            log.info("New rule added: {}", rule.getOutputSymbol());
         }
     }
 }

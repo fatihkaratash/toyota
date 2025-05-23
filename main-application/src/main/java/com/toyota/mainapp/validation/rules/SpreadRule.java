@@ -1,6 +1,6 @@
 package com.toyota.mainapp.validation.rules;
 
-import com.toyota.mainapp.dto.NormalizedRateDto;
+import com.toyota.mainapp.dto.BaseRateDto;
 import com.toyota.mainapp.dto.ValidationError;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -10,50 +10,55 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Validates that the spread (ask-bid) is reasonable
+ * Validates that the spread between bid and ask is within acceptable limits
  */
 @Component
 public class SpreadRule implements ValidationRule {
 
     /**
-     * Maximum allowed spread as a percentage (e.g., 0.05 for 5%)
+     * Maximum allowed spread percentage
      */
-    private final double maxSpreadPercentage;
-
+    private final BigDecimal maxSpreadPercentage;
+    
     /**
      * Constructor with configuration from application.properties
      */
-    public SpreadRule(@Value("${validation.spread.max-percentage:0.05}") double maxSpreadPercentage) {
+    public SpreadRule(@Value("${validation.spread.max-percentage:5.0}") BigDecimal maxSpreadPercentage) {
         this.maxSpreadPercentage = maxSpreadPercentage;
     }
 
     @Override
-    public List<ValidationError> validate(NormalizedRateDto rate) {
+    public List<ValidationError> validate(BaseRateDto rate) {
         List<ValidationError> errors = new ArrayList<>();
         
-        // Check if bid <= ask (basic check)
-        if (rate.getBid().compareTo(rate.getAsk()) > 0) {
-            errors.add(new ValidationError(
-                "spread",
-                "bid=" + rate.getBid() + ", ask=" + rate.getAsk(),
-                "Bid price must be less than or equal to ask price"
-            ));
-            return errors; // No need for further checks
+        // Skip validation if bid or ask is null
+        if (rate.getBid() == null || rate.getAsk() == null) {
+            return errors;
         }
         
-        // Check if spread is within acceptable percentage
-        if (rate.getBid().compareTo(BigDecimal.ZERO) > 0) { // Avoid division by zero
-            // Calculate spread percentage: (ask - bid) / bid
+        try {
+            // Calculate spread percentage
             BigDecimal spread = rate.getAsk().subtract(rate.getBid());
-            BigDecimal spreadPercentage = spread.divide(rate.getBid(), 6, BigDecimal.ROUND_HALF_UP);
             
-            if (spreadPercentage.doubleValue() > maxSpreadPercentage) {
+            // Use bid price as the base for percentage calculation
+            BigDecimal spreadPercentage = spread.multiply(BigDecimal.valueOf(100))
+                    .divide(rate.getBid(), 4, BigDecimal.ROUND_HALF_UP);
+            
+            // Check if spread exceeds limit
+            if (spreadPercentage.compareTo(maxSpreadPercentage) > 0) {
                 errors.add(new ValidationError(
                     "spread",
-                    spreadPercentage,
-                    "Spread percentage " + spreadPercentage + " exceeds maximum allowed " + maxSpreadPercentage
+                    spreadPercentage.toString(),
+                    String.format("Spread percentage %s%% exceeds max allowed %s%%", 
+                            spreadPercentage.toString(), maxSpreadPercentage.toString())
                 ));
             }
+        } catch (ArithmeticException e) {
+            errors.add(new ValidationError(
+                "spread-calculation",
+                String.format("bid=%s, ask=%s", rate.getBid(), rate.getAsk()),
+                "Error calculating spread: " + e.getMessage()
+            ));
         }
         
         return errors;

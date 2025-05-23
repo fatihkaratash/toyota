@@ -2,6 +2,7 @@ package com.toyota.mainapp.subscriber.impl;
 
 import com.toyota.mainapp.coordinator.callback.PlatformCallback;
 import com.toyota.mainapp.dto.ProviderRateDto;
+import com.toyota.mainapp.dto.BaseRateDto;
 import com.toyota.mainapp.subscriber.api.PlatformSubscriber;
 import com.toyota.mainapp.subscriber.api.SubscriberConfigDto;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -377,5 +378,21 @@ public class RestRateSubscriber implements PlatformSubscriber {
         
         log.info("[{}] Çözümlenen semboller: {}", providerName, parsedSymbols);
         return parsedSymbols.toArray(new String[0]);
+    }
+
+    // This method should be added if it doesn't exist:
+    public void sendRateStatus(String symbol, BaseRateDto.RateStatusEnum status, String statusMessage) {
+        if (callback != null) {
+            BaseRateDto statusRate = BaseRateDto.builder()
+                .rateType(com.toyota.mainapp.dto.RateType.STATUS)
+                .symbol(symbol)
+                .providerName(providerName)
+                .status(status)
+                .statusMessage(statusMessage)
+                .timestamp(System.currentTimeMillis())
+                .build();
+                
+            callback.onRateStatus(providerName, statusRate);
+        }
     }
 }

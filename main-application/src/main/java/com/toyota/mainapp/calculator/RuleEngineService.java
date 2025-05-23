@@ -1,59 +1,44 @@
 package com.toyota.mainapp.calculator;
 
-import com.toyota.mainapp.dto.CalculatedRateDto;
+import com.toyota.mainapp.dto.BaseRateDto;
 import com.toyota.mainapp.dto.CalculationRuleDto;
-import com.toyota.mainapp.dto.RawRateDto;
 
 import java.util.List;
 import java.util.Map;
 
 /**
- * Hesaplama kurallarını yöneten ve hesaplamaları yapan servis
+ * Service interface for the rule engine that manages calculation rules
  */
 public interface RuleEngineService {
-    
+
     /**
-     * Belirtilen giriş sembolünü kullanan tüm hesaplama kurallarını bul
-     * 
-     * @param symbol Aranacak giriş sembolü
-     * @return Bu sembolü kullanan hesaplama kurallarının listesi
-     */
-    List<CalculationRuleDto> getRulesByInputSymbol(String symbol);
-    
-    /**
-     * Belirtilen temel sembolü giriş olarak kullanan tüm hesaplama kurallarını bul.
-     * Bu, sağlayıcı önekini (örn. PF1_) içermeyen semboller için kullanılır.
-     * 
-     * @param baseSymbol Aranacak temel sembol (örn. "USDTRY")
-     * @return Bu temel sembolü kullanan hesaplama kurallarının listesi
-     */
-    List<CalculationRuleDto> getRulesByInputBaseSymbol(String baseSymbol);
-    
-    /**
-     * Bir hesaplama kuralını verilen giriş kurları ile çalıştır
-     * 
-     * @param rule Çalıştırılacak hesaplama kuralı
-     * @param inputRates Hesaplama için gereken giriş kurları
-     * @return Hesaplanmış kur (başarısız olursa null)
-     */
-    CalculatedRateDto executeRule(CalculationRuleDto rule, Map<String, RawRateDto> inputRates);
-    
-    /**
-     * Tüm hesaplama kurallarını yükle
+     * Load calculation rules from configuration
      */
     void loadRules();
     
     /**
-     * Tüm kayıtlı hesaplama kurallarını al
-     * 
-     * @return Tüm hesaplama kurallarının listesi
+     * Get rules that depend on the given input symbol
+     */
+    List<CalculationRuleDto> getRulesByInputSymbol(String symbol);
+    
+    /**
+     * Get rules that depend on the given base symbol 
+     * (base symbol is derived from provider-specific symbol)
+     */
+    List<CalculationRuleDto> getRulesByInputBaseSymbol(String baseSymbol);
+    
+    /**
+     * Execute a calculation rule with the provided input rates
+     */
+    BaseRateDto executeRule(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates);
+    
+    /**
+     * Get all rules
      */
     List<CalculationRuleDto> getAllRules();
     
     /**
-     * Bir hesaplama kuralını ekle veya güncelle
-     *
-     * @param rule Eklemek veya güncellemek için kural
+     * Add a new rule
      */
     void addRule(CalculationRuleDto rule);
 }
