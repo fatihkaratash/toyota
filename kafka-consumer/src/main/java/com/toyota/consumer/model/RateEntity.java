@@ -5,39 +5,34 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * Entity representing a financial rate record in the database
- */
 @Entity
-@Table(name = "tbl_rates")
+@Table(name = "rates")
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 public class RateEntity {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
-    @Column(name = "rate_name", length = 20, nullable = false)
-    private String rateName;
-    
-    @Column(name = "bid", precision = 19, scale = 8, nullable = false)
+
+    @Column(name = "rate_name", nullable = false)
+    private String rateName;  // Will store PF1_USDTRY, PF2_EURUSD, USD/TRY_AVG etc.
+
+    @Column(precision = 19, scale = 8)
     private BigDecimal bid;
-    
-    @Column(name = "ask", precision = 19, scale = 8, nullable = false)
+
+    @Column(precision = 19, scale = 8)
     private BigDecimal ask;
+
+    @Column(name = "rate_updatetime")
+    private LocalDateTime rateUpdatetime;  // The timestamp from the rate message
     
-    @Column(name = "rate_updatetime", nullable = false)
-    private LocalDateTime rateUpdatetime;
-    
-    @Column(name = "db_updatetime", nullable = false, updatable = false)
-    @CreationTimestamp
-    private LocalDateTime dbUpdatetime;
+    @Column(name = "db_updatetime")
+    private LocalDateTime dbUpdatetime;    // When it was stored in DB
 }

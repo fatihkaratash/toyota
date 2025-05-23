@@ -14,6 +14,6 @@ import java.util.List;
 public interface RateRepository extends JpaRepository<RateEntity, Long> {
     // Basic CRUD operations are automatically provided by JpaRepository
 
-    List<RateEntity> findByReceivedAtAfter(LocalDateTime dateTime);
+  List<RateEntity> findByRateUpdatetimeAfter(LocalDateTime dateTime);
     List<RateEntity> findByRateName(String rateName); 
 }

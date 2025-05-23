@@ -24,55 +24,48 @@ public class RateParser {
     
     /**
      * Parses a string message into a RateEntity object
+     *  * Parse pipe-delimited message to RateEntity
+     * Format: SYMBOL|BID|ASK|TIMESTAMP
+     * Example: PF1_USDTRY|33.60|35.90|2024-12-16T16:07:15.504
      * 
      * @param message the message to parse
      * @return an Optional containing the parsed RateEntity, or an empty Optional if parsing failed
      */
     public Optional<RateEntity> parseToEntity(String message) {
-        if (message == null || message.isBlank()) {
-            log.warn("Cannot parse null or empty message");
+        if (message == null || message.trim().isEmpty()) {
+            log.warn("Empty message received");
             return Optional.empty();
         }
-        
-        try {
-            String[] parts = message.split(DELIMITER);
-            if (parts.length < 4) {
-                log.error("Invalid message format, expected 4 parts but got {}: {}", parts.length, message);
-                return Optional.empty();
-            }
-            
-            // parts[0] is RateEntity.rateName
-            String rateName = parts[0];
-            
-            // Parse bid and ask
-            BigDecimal bid = parseDecimal(parts[1]);
-            BigDecimal ask = parseDecimal(parts[2]);
-            
-            // Parse timestamp
-            LocalDateTime rateUpdatetime = parseTimestamp(parts[3]);
 
-            if (bid == null || ask == null || rateUpdatetime == null) {
-                log.warn("Failed to parse one or more critical fields (bid, ask, timestamp) for message: {}", message);
+        try {
+            String[] parts = message.split("\\|");
+            if (parts.length < 4) {
+                log.warn("Invalid message format: {}", message);
                 return Optional.empty();
             }
-            
-            RateEntity rateEntity = RateEntity.builder()
-                    .rateName(rateName)
-                    .bid(bid)
-                    .ask(ask)
-                    .rateUpdatetime(rateUpdatetime)
-                    // dbUpdatetime will be set by @CreationTimestamp or PersistenceService
-                    .build();
-                    
-            return Optional.of(rateEntity);
-                    
+
+            String rateName = parts[0];
+            BigDecimal bid = new BigDecimal(parts[1]);
+            BigDecimal ask = new BigDecimal(parts[2]);
+            LocalDateTime timestamp = LocalDateTime.parse(
+                parts[3].substring(0, parts[3].length() - 4), // Remove milliseconds
+                DateTimeFormatter.ISO_LOCAL_DATE_TIME
+            );
+
+            return Optional.of(RateEntity.builder()
+                .rateName(rateName)
+                .bid(bid)
+                .ask(ask)
+                .rateUpdatetime(timestamp)
+                .dbUpdatetime(LocalDateTime.now())
+                .build());
         } catch (Exception e) {
-            log.error("Error parsing message to RateEntity: {}", message, e);
+            log.error("Failed to parse message: {}", message, e);
             return Optional.empty();
         }
     }
     
-    private BigDecimal parseDecimal(String value) {
+   /* private BigDecimal parseDecimal(String value) {
         if (value == null || value.isBlank()) {
             return null;
         }
@@ -94,5 +87,5 @@ public class RateParser {
             log.warn("Failed to parse timestamp value: {}", value);
             return null;
         }
-    }
+    }*/
 }

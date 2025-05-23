@@ -39,7 +39,7 @@ public class RestRateSubscriber implements PlatformSubscriber {
     private WebClient.Builder webClientBuilder;
     
     private String baseUrl = "http://localhost:8080/api"; // Default REST port is 8080
-    private long pollIntervalMs = 10000;
+    private long pollIntervalMs = 1000;
     private String[] symbols = new String[0];
 
     // Add default constructor
@@ -61,7 +61,7 @@ public class RestRateSubscriber implements PlatformSubscriber {
         if (config.getConnectionConfig() != null) {
             Map<String, Object> connConfig = config.getConnectionConfig();
             this.baseUrl = getConfigValue(connConfig, "baseUrl", "http://localhost:8080/api"); // Default REST port
-            this.pollIntervalMs = getConfigValue(connConfig, "pollInterval", 10000L);
+            this.pollIntervalMs = getConfigValue(connConfig, "pollInterval", 1000L);
             this.symbols = getSymbols(connConfig);
         }
         

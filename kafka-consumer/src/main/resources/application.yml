@@ -19,15 +19,15 @@ spring:
     password: ${OPENSEARCH_PASSWORD:}
     connection-timeout: 5s
     socket-timeout: 5s
-
+#
   datasource:
-    url: jdbc:postgresql://postgres:5432/${POSTGRES_DB:toyota_rates}
-    username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASSWORD:pgadmin}
+    url: jdbc:postgresql://postgres:5432/toyota_rates
+    username: postgres
+    password: pgadmin
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: create
     show-sql: false
     properties:
       hibernate:
@@ -53,3 +53,8 @@ app:
       simple-rates: financial-simple-rates
     consumer:
       group-id: simple-rate-db-persister-group
+      logging-group-id: simple-rate-logging-group
+  
+  # OpenSearch index adı
+  opensearch:
+    index-name: financial_rates_logs
