@@ -5,15 +5,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toyota.mainapp.coordinator.callback.PlatformCallback;
 import com.toyota.mainapp.exception.SubscriberInitializationException;
 import com.toyota.mainapp.subscriber.api.PlatformSubscriber;
-import com.toyota.mainapp.subscriber.api.SubscriberConfigDto;
+import com.toyota.mainapp.dto.config.SubscriberConfigDto;
 import com.toyota.mainapp.subscriber.impl.RestRateSubscriber;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -28,14 +29,23 @@ import java.util.List;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class DynamicSubscriberLoader {
 
     private final ObjectMapper objectMapper;
     private final ResourceLoader resourceLoader;
-    
-    @Autowired(required = false)
-    private WebClient.Builder webClientBuilder;
+    private final WebClient.Builder webClientBuilder;
+    private final TaskExecutor subscriberTaskExecutor;
+
+    @Autowired
+    public DynamicSubscriberLoader(ObjectMapper objectMapper,
+                                   ResourceLoader resourceLoader,
+                                   @Autowired(required = false) WebClient.Builder webClientBuilder,
+                                   @Qualifier("subscriberTaskExecutor") TaskExecutor subscriberTaskExecutor) {
+        this.objectMapper = objectMapper;
+        this.resourceLoader = resourceLoader;
+        this.webClientBuilder = webClientBuilder;
+        this.subscriberTaskExecutor = subscriberTaskExecutor;
+    }
 
     /**
      * Aboneleri yapılandırma dosyasından yükle
@@ -125,7 +135,7 @@ public class DynamicSubscriberLoader {
      * Abone örneği oluştur
      */
     private PlatformSubscriber createSubscriberInstance(SubscriberConfigDto config, PlatformCallback callback) 
-            throws ReflectiveOperationException {
+            throws ReflectiveOperationException, SubscriberInitializationException {
         
         if (config.getImplementationClass() == null || config.getImplementationClass().isEmpty()) {
             throw new IllegalArgumentException("Uygulama sınıfı belirtilmemiş: " + config.getName());
@@ -133,9 +143,20 @@ public class DynamicSubscriberLoader {
         
         // RestRateSubscriber için özel işlem
         if (config.getImplementationClass().contains("RestRateSubscriber")) {
-            log.debug("RestRateSubscriber için WebClient.Builder ile özel oluşturma: {}", config.getName());
-            RestRateSubscriber subscriber = webClientBuilder != null ? 
-                new RestRateSubscriber(webClientBuilder) : new RestRateSubscriber();
+            log.debug("RestRateSubscriber için WebClient.Builder, ObjectMapper, TaskExecutor ile özel oluşturma: {}", config.getName());
+            
+            // Ensure critical dependencies for RestRateSubscriber are present
+            if (this.objectMapper == null) {
+                log.error("ObjectMapper is null in DynamicSubscriberLoader. Cannot create RestRateSubscriber: {}", config.getName());
+                throw new SubscriberInitializationException("ObjectMapper is null, cannot create " + config.getName());
+            }
+            if (this.subscriberTaskExecutor == null) {
+                log.error("subscriberTaskExecutor is null in DynamicSubscriberLoader. Cannot create RestRateSubscriber: {}", config.getName());
+                throw new SubscriberInitializationException("TaskExecutor is null, cannot create " + config.getName());
+            }
+            // webClientBuilder can be null if not configured, RestRateSubscriber's init handles this.
+
+            RestRateSubscriber subscriber = new RestRateSubscriber(webClientBuilder, this.objectMapper, this.subscriberTaskExecutor);
             subscriber.init(config, callback);
             return subscriber;
         }

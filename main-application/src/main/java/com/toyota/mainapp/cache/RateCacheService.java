@@ -1,7 +1,7 @@
 package com.toyota.mainapp.cache;
 
-import com.toyota.mainapp.dto.BaseRateDto;
-import com.toyota.mainapp.dto.RateType;
+import com.toyota.mainapp.dto.model.BaseRateDto;
+import com.toyota.mainapp.dto.model.RateType;
 
 import java.util.List;
 import java.util.Optional;

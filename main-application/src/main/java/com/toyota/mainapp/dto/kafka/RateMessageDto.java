@@ -1,8 +1,8 @@
-package com.toyota.mainapp.dto;
+package com.toyota.mainapp.dto.kafka;
 
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.toyota.mainapp.dto.payload.RatePayloadDto;
+import com.toyota.mainapp.dto.kafka.RatePayloadDto;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;

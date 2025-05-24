@@ -37,6 +37,8 @@ services:
       KAFKA_CONFLUENT_BALANCER_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true" # Ensure this line is present and set to true
+
       # KAFKA_JMX_PORT: 9101
       # KAFKA_JMX_HOSTNAME: kafka
     networks: # EKLENDİ (Eskisinde yoksa)

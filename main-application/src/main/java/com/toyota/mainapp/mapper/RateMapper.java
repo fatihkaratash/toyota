@@ -1,9 +1,9 @@
 package com.toyota.mainapp.mapper;
 
-import com.toyota.mainapp.dto.BaseRateDto;
-import com.toyota.mainapp.dto.ProviderRateDto;
-import com.toyota.mainapp.dto.RateType;
-import com.toyota.mainapp.dto.payload.RatePayloadDto;
+import com.toyota.mainapp.dto.model.BaseRateDto;
+import com.toyota.mainapp.dto.model.ProviderRateDto;
+import com.toyota.mainapp.dto.model.RateType;
+import com.toyota.mainapp.dto.kafka.RatePayloadDto;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.Named;

@@ -6,8 +6,30 @@
       "strategyType": "JAVA_CLASS",
       "implementation": "averageUsdTryStrategy",
       "dependsOnRaw": [
-       "TCPProvider2_PF1_USDTRY",
-        "RESTProvider1_PF2_USDTRY"
+        "RESTProvider1_USDTRY",
+        "TCPProvider2_USDTRY"
+      ],
+      "priority": 10
+    },
+    {
+      "outputSymbol": "EURUSD_AVG",
+      "description": "EUR/USD ortalama kuru",
+      "strategyType": "JAVA_CLASS",
+      "implementation": "averageCalculationStrategy",
+      "dependsOnRaw": [
+        "RESTProvider1_EURUSD",
+        "TCPProvider2_EURUSD"
+      ],
+      "priority": 10
+    },
+    {
+      "outputSymbol": "GBPUSD_AVG",
+      "description": "GBP/USD ortalama kuru",
+      "strategyType": "JAVA_CLASS",
+      "implementation": "averageCalculationStrategy",
+      "dependsOnRaw": [
+        "RESTProvider1_GBPUSD",
+        "TCPProvider2_GBPUSD"
       ],
       "priority": 10
     },
@@ -16,20 +38,32 @@
       "description": "EUR/TRY çapraz kuru",
       "strategyType": "GROOVY_SCRIPT",
       "implementation": "scripts/eur_try_calculator.groovy",
-      "dependsOnRaw": [
-        "TCPProvider2_EURUSD",
-        "RESTProvider1_EURUSD"
-      ],
       "dependsOnCalculated": [
+        "EURUSD_AVG",
         "USD/TRY_AVG"
       ],
       "inputParameters": {
-        "eurUsdSource1Key": "PF1_EURUSD",
-        "eurUsdSource2Key": "PF2_EURUSD",
+        "eurUsdAvgKey": "EURUSD_AVG",
         "usdTryAvgSourceKey": "USD/TRY_AVG",
         "defaultScale": "8"
       },
       "priority": 20
+    },
+    {
+      "outputSymbol": "GBP/TRY",
+      "description": "GBP/TRY çapraz kuru",
+      "strategyType": "GROOVY_SCRIPT",
+      "implementation": "scripts/gbp_try_calculator.groovy",
+      "dependsOnCalculated": [
+        "GBPUSD_AVG",
+        "USD/TRY_AVG"
+      ],
+      "inputParameters": {
+        "gbpUsdAvgKey": "GBPUSD_AVG",
+        "usdTryAvgSourceKey": "USD/TRY_AVG",
+        "defaultScale": "8"
+      },
+      "priority": 30
     }
   ],
   "symbolConfigs": [

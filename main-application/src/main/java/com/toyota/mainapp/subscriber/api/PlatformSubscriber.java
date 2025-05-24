@@ -1,6 +1,7 @@
 package com.toyota.mainapp.subscriber.api;
 
 import com.toyota.mainapp.coordinator.callback.PlatformCallback;
+import com.toyota.mainapp.dto.config.SubscriberConfigDto;
 import com.toyota.mainapp.exception.ConnectionAttemptException;
 
 import java.util.List;

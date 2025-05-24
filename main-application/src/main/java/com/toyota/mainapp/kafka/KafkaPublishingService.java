@@ -1,9 +1,9 @@
-package com.toyota.mainapp.kafka.publisher;
+package com.toyota.mainapp.kafka;
 
-import com.toyota.mainapp.dto.BaseRateDto;
-import com.toyota.mainapp.dto.RateMessageDto;
-import com.toyota.mainapp.dto.RateType;
-import com.toyota.mainapp.dto.payload.RatePayloadDto;
+import com.toyota.mainapp.dto.model.BaseRateDto;
+import com.toyota.mainapp.dto.kafka.RateMessageDto;
+import com.toyota.mainapp.dto.model.RateType;
+import com.toyota.mainapp.dto.kafka.RatePayloadDto;
 import com.toyota.mainapp.mapper.RateMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,7 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class SequentialPublisher {
+public class KafkaPublishingService {
 
     private final KafkaTemplate<String, RateMessageDto> jsonKafkaTemplate;
     private final KafkaTemplate<String, String> stringKafkaTemplate;
@@ -41,7 +41,7 @@ public class SequentialPublisher {
     @Value("${app.kafka.topic.calculated-rates:financial-calculated-rates}")
     private String calculatedRatesTopic;
     
-    // Metin formatı için konu adı
+    // Metin formatı için konu adı (bu, simple text rate'ler için kullanılır)
     @Value("${app.kafka.topic.simple-rates:financial-simple-rates}")
     private String simpleRatesTopic;
 
@@ -54,7 +54,7 @@ public class SequentialPublisher {
     private static final long MIN_SEND_INTERVAL_MS = 1000; // 1 saniye
 
     /**
-     * Genel kur yayınlama metodu - Tüm kur tiplerini (RAW, CALCULATED, STATUS) işler
+     * Genel kur yayınlama metodu - RAW ve CALCULATED kur tiplerini işler
      */
     public void publishRate(BaseRateDto rate) {
         if (rate == null) {
@@ -78,11 +78,9 @@ public class SequentialPublisher {
                 case CALCULATED:
                     publishCalculatedRate(rate);
                     break;
-                case STATUS:
-                    publishStatusRate(rate);
-                    break;
+                // STATUS case removed
                 default:
-                    log.warn("Desteklenmeyen kur tipi: {}, yayınlanamıyor", rateType);
+                    log.warn("Desteklenmeyen kur tipi: {}, yayınlanamıyor. Sadece RAW ve CALCULATED desteklenir.", rateType);
             }
         } catch (Exception e) {
             log.error("Kuru yayınlarken hata: {} ({}) - {}", 
@@ -103,19 +101,21 @@ public class SequentialPublisher {
         
         // 2. Basit metin formatında gönder (throttling ile)
         if (shouldSendRawRateToSimpleTopic(rawRate)) {
-            String simpleKey = providerSymbol;
+            String simpleKey = providerSymbol; // Key for throttling raw rates
             long currentTime = System.currentTimeMillis();
             Long lastSentTime = lastSentTimestamps.get(simpleKey);
             
             if (lastSentTime == null || (currentTime - lastSentTime) >= MIN_SEND_INTERVAL_MS) {
                 lastSentTimestamps.put(simpleKey, currentTime);
                 String formattedMessage = formatRate(
-                        providerSymbol,
+                        providerSymbol, // Use providerSymbol for simple text message
                         rawRate.getBid(),
                         rawRate.getAsk(),
                         rawRate.getTimestamp());
                 
                 sendTextMessage(simpleRatesTopic, rawRate.getSymbol(), formattedMessage);
+            } else {
+                log.trace("Ham kur için basit metin gönderimi atlandı (throttled): {}", simpleKey);
             }
         }
         
@@ -135,7 +135,7 @@ public class SequentialPublisher {
         
         // 2. Basit metin formatında gönder (throttling ile)
         if (shouldSendCalculatedRateToSimpleTopic(calculatedRate)) {
-            String simpleKey = "AVG_" + symbol;
+            String simpleKey = "CALC_SIMPLE_" + symbol; // Key for throttling calculated rates to simple topic
             long currentTime = System.currentTimeMillis();
             Long lastSentTime = lastSentTimestamps.get(simpleKey);
             
@@ -148,42 +148,37 @@ public class SequentialPublisher {
                         calculatedRate.getTimestamp());
                 
                 sendTextMessage(simpleRatesTopic, symbol, formattedMessage);
+            } else {
+                log.trace("Hesaplanmış kur için basit metin gönderimi atlandı (throttled): {}", simpleKey);
             }
         }
         
         log.debug("Hesaplanmış kur başarıyla yayınlandı: {}", symbol);
     }
 
-    /**
-     * Durum kur bilgisini Kafka'ya yayınlar
-     */
-    private void publishStatusRate(BaseRateDto statusRate) {
-        String providerSymbol = statusRate.getProviderName() + "_" + statusRate.getSymbol();
-        log.debug("Durum kuru yayınlanıyor: {}, durum: {}", providerSymbol, statusRate.getStatus());
-        
-        // Sadece JSON formatında gönder
-        RatePayloadDto payload = rateMapper.toRatePayloadDto(statusRate);
-        sendJsonMessage(rawRatesTopic, providerSymbol, buildJsonMessage("STATUS", payload));
-        
-        log.debug("Durum kuru başarıyla yayınlandı: {}", providerSymbol);
-    }
+    // publishStatusRate method removed
     
     /**
      * Belirli bir ham kurun basit metin formatında gönderilip gönderilmeyeceğini belirler
      */
     private boolean shouldSendRawRateToSimpleTopic(BaseRateDto rawRate) {
         String providerName = rawRate.getProviderName();
+        // Sadece belirli sağlayıcılardan gelen ham kurları simple topic'e gönder
         return "TCPProvider2".equals(providerName) || "RESTProvider1".equals(providerName);
     }
     
     /**
      * Belirli bir hesaplanmış kurun basit metin formatında gönderilip gönderilmeyeceğini belirler
      */
-    private boolean shouldSendCalculatedRateToSimpleTopic(BaseRateDto calculatedRate) {
+   private boolean shouldSendCalculatedRateToSimpleTopic(BaseRateDto calculatedRate) {
         String symbol = calculatedRate.getSymbol();
-        return symbol.contains("AVG") || symbol.endsWith("_AVG");
+        // AVG içeren veya _AVG ile biten hesaplanmış kurları VE belirli çapraz kurları gönder
+        return symbol.contains("AVG") || 
+               symbol.endsWith("_AVG") ||
+               "EUR/TRY".equals(symbol) || 
+               "GBP/TRY".equals(symbol);
     }
-    
+ 
     /**
      * JSON formatında mesaj oluştur
      */

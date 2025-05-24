@@ -35,10 +35,10 @@ public class AppConfig {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
         // Enable default typing to preserve type information
-        mapper.activateDefaultTyping(
-            mapper.getPolymorphicTypeValidator(), 
-            ObjectMapper.DefaultTyping.NON_FINAL, 
-            JsonTypeInfo.As.PROPERTY);
+      //  mapper.activateDefaultTyping(
+        //    mapper.getPolymorphicTypeValidator(), 
+          //  ObjectMapper.DefaultTyping.NON_FINAL, 
+            //JsonTypeInfo.As.PROPERTY);
         return mapper;
     }
 

@@ -1,7 +1,7 @@
 package com.toyota.mainapp.coordinator.callback;
 
-import com.toyota.mainapp.dto.BaseRateDto;
-import com.toyota.mainapp.dto.ProviderRateDto;
+import com.toyota.mainapp.dto.model.BaseRateDto;
+import com.toyota.mainapp.dto.model.ProviderRateDto;
 
 /**
  * Callback interface for platform events

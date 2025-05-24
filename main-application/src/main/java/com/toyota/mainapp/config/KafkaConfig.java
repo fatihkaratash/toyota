@@ -2,7 +2,7 @@
 package com.toyota.mainapp.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.toyota.mainapp.dto.RateMessageDto;
+import com.toyota.mainapp.dto.kafka.RateMessageDto;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.NewTopic;
@@ -33,8 +33,9 @@ public class KafkaConfig {
     @Value("${app.kafka.topic.calculated-rates:financial-calculated-rates}")
     private String calculatedRatesTopicName;
 
-    @Value("${app.kafka.topic.simple-rates:financial-simple-rates}")
-    private String statusRatesTopicName;
+    @Value("${app.kafka.topic.simple-rates:financial-simple-rates}") // Renamed for clarity, was financial-status-rates
+    private String simpleRatesTopicName;
+
 
     @Value("${app.kafka.topic.partitions:3}")
     private Integer topicPartitions;
@@ -111,9 +112,11 @@ public class KafkaConfig {
     }
 
     @Bean
-    public NewTopic statusTopic() {
+    public NewTopic simpleRatesTopicBean() { // Renamed from statusTopic()
         log.info("Creating Kafka topic: {}, partitions: {}, replication: {}",
-                statusRatesTopicName, topicPartitions, topicReplication);
-        return new NewTopic(statusRatesTopicName, topicPartitions, (short) topicReplication.intValue());
+                simpleRatesTopicName, topicPartitions, topicReplication);
+        return new NewTopic(simpleRatesTopicName, topicPartitions, (short) topicReplication.intValue());
     }
+
+
 }

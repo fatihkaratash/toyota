@@ -1,4 +1,4 @@
-package com.toyota.mainapp.dto;
+package com.toyota.mainapp.dto.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

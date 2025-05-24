@@ -1,8 +1,9 @@
 package com.toyota.mainapp.aggregator;
 
 import com.toyota.mainapp.calculator.RateCalculatorService;
-import com.toyota.mainapp.dto.BaseRateDto;
-import com.toyota.mainapp.dto.RateType;
+import com.toyota.mainapp.dto.model.BaseRateDto;
+import com.toyota.mainapp.dto.model.RateType;
+
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,6 +14,7 @@ import jakarta.annotation.PostConstruct;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * İki yönlü pencere bazlı kur verisi toplayıcı.
@@ -50,16 +52,18 @@ public class TwoWayWindowAggregator {
      */
     @PostConstruct
     public void initializeDefaultConfig() {
-        // Initialize default configuration for USDTRY
+        // Initialize with provider names that match what you're actually using
         List<String> usdTryProviders = List.of("RESTProvider1", "TCPProvider2");
         expectedProvidersConfig.put("USDTRY", usdTryProviders);
         
-        // Initialize default configuration for EURUSD
         List<String> eurUsdProviders = List.of("RESTProvider1", "TCPProvider2");
         expectedProvidersConfig.put("EURUSD", eurUsdProviders);
         
-        log.info("TwoWayWindowAggregator initialized with default configuration for USDTRY and EURUSD with providers: {}", 
-                usdTryProviders);
+        List<String> gbpUsdProviders = List.of("RESTProvider1", "TCPProvider2"); 
+        expectedProvidersConfig.put("GBPUSD", gbpUsdProviders);
+        
+        log.info("TwoWayWindowAggregator initialized with default configuration for currencies with providers: {}", 
+                String.join(", ", usdTryProviders));
         
         // Schedule periodic cleanup using Spring's TaskScheduler
         taskScheduler.scheduleAtFixedRate(
@@ -94,14 +98,17 @@ public class TwoWayWindowAggregator {
         log.info("Toplayıcı kur aldı: sağlayıcı={}, orijinal sembol={}, temelSembol={}",
                 providerName, providerSymbol, baseSymbol);
         
+        // Add debug info about expected providers
+        List<String> expectedProviders = getExpectedProviders(baseSymbol);
+        log.debug("Beklenen sağlayıcılar {} için: {}", baseSymbol, expectedProviders);
+        
         // Save to window structure
         window.computeIfAbsent(baseSymbol, k -> new ConcurrentHashMap<>())
               .put(providerName, baseRateDto);
-              
+        
         // Debug log for current window state
         Map<String, BaseRateDto> currentBucket = window.getOrDefault(baseSymbol, new ConcurrentHashMap<>());
         int currentCount = currentBucket.size();
-        List<String> expectedProviders = getExpectedProviders(baseSymbol);
         
         log.info("Window state for {}: Collected {}/{} providers. Current providers: {}, Expected providers: {}", 
                 baseSymbol, currentCount, expectedProviders.size(),
@@ -116,36 +123,62 @@ public class TwoWayWindowAggregator {
      * Bir temel sembol için pencere, hesaplama kriterlerini karşılıyor mu kontrol eder
      * ve karşılıyorsa hesaplamayı tetikler - basitleştirilmiş sürüm
      */
-    private void checkWindowAndCalculate(String baseSymbol) {
-        // Bu temel sembol için sepeti al
-        Map<String, BaseRateDto> symbolBucket = window.get(baseSymbol);
-        if (symbolBucket == null || symbolBucket.isEmpty()) {
+     private void checkWindowAndCalculate(String baseSymbol) {
+        Map<String, BaseRateDto> currentSymbolBucketByProviderName = window.get(baseSymbol); // This is Map<providerName, BaseRateDto>
+        if (currentSymbolBucketByProviderName == null || currentSymbolBucketByProviderName.isEmpty()) {
             return;
         }
         
-        // Bu sembol için beklenen sağlayıcıları al
-        List<String> expectedProviders = getExpectedProviders(baseSymbol);
-        if (expectedProviders.isEmpty()) {
+        List<String> expectedProviderBaseNames = getExpectedProviders(baseSymbol);
+        if (expectedProviderBaseNames.isEmpty()) {
+            log.warn("{} için beklenen sağlayıcı yapılandırması bulunamadı.", baseSymbol);
             return;
         }
-        
-        // Tüm beklenen sağlayıcılara sahip miyiz?
-        if (symbolBucket.keySet().containsAll(expectedProviders)) {
-            log.info("Tüm beklenen sağlayıcılar {} için bulundu: {} - İşleme başlanabilir", 
-                    baseSymbol, expectedProviders);
-            
-            // Kurlar arasındaki zaman kayması kabul edilebilir mi?
-            if (isTimeSkewAcceptable(symbolBucket, expectedProviders)) {
-                // Hesaplamayı tetikle ve pencereyi temizle
-                triggerCalculation(baseSymbol, new HashMap<>(symbolBucket));
-                symbolBucket.clear();
-                log.debug("Hesaplama sonrası {} için pencere temizlendi", baseSymbol);
+
+        // Ensure we only consider rates from the expected providers for this baseSymbol
+        Map<String, BaseRateDto> relevantRatesByProviderName = new HashMap<>();
+        boolean allExpectedProvidersPresent = true;
+        for (String providerName : expectedProviderBaseNames) {
+            if (currentSymbolBucketByProviderName.containsKey(providerName)) {
+                relevantRatesByProviderName.put(providerName, currentSymbolBucketByProviderName.get(providerName));
             } else {
-                log.debug("{} için zaman kayması çok fazla, hesaplama erteleniyor", baseSymbol);
+                allExpectedProvidersPresent = false;
+                break;
+            }
+        }
+
+        if (allExpectedProvidersPresent && relevantRatesByProviderName.size() == expectedProviderBaseNames.size()) {
+            log.info("Tüm beklenen sağlayıcı grupları ({}) {} için veri gönderdi: {} - İşleme başlanabilir",
+                    String.join(", ",expectedProviderBaseNames), baseSymbol, String.join(", ", relevantRatesByProviderName.keySet()));
+            
+            // isTimeSkewAcceptable expects a map keyed by provider name
+            if (isTimeSkewAcceptable(relevantRatesByProviderName, expectedProviderBaseNames)) { 
+                // Construct the map for RateCalculatorService, keyed by providerSpecificSymbol
+                Map<String, BaseRateDto> ratesForCalculatorService = relevantRatesByProviderName.values().stream()
+                    .collect(Collectors.toMap(
+                        BaseRateDto::getSymbol, // Key: providerSpecificSymbol
+                        rate -> rate,           // Value: BaseRateDto
+                        (rate1, rate2) -> {     // Merge function for rare duplicate providerSpecificSymbol
+                            log.warn("Duplicate providerSpecificSymbol {} encountered for baseSymbol {}. Using the first one.", rate1.getSymbol(), baseSymbol);
+                            return rate1;
+                        }
+                    ));
+
+                triggerCalculation(ratesForCalculatorService); 
+                
+                // Remove the processed rates from the window using providerName
+                for (String providerName : expectedProviderBaseNames) {
+                    currentSymbolBucketByProviderName.remove(providerName);
+                }
+                if (currentSymbolBucketByProviderName.isEmpty()) {
+                    window.remove(baseSymbol);
+                }
+                log.info("Pencere {} için temizlendi ve hesaplama tetiklendi.", baseSymbol);
+            } else {
+                log.warn("Zaman kayması {} için çok yüksek, hesaplama atlandı.", baseSymbol);
             }
         }
     }
-    
     /**
      * Eski pencere verilerini temizle - zamanla oluşabilecek hafıza sızıntılarını önler
      */
@@ -221,11 +254,13 @@ public class TwoWayWindowAggregator {
     /**
      * Toplanan kurlar için hesaplamayı tetikle
      */
-    private void triggerCalculation(String baseSymbol, Map<String, BaseRateDto> symbolBucket) {
+    private void triggerCalculation(Map<String, BaseRateDto> newlyCompletedRawRatesInWindow) { // Parameter changed
         try {
-            rateCalculatorService.calculateFromAggregatedData(baseSymbol, symbolBucket);
+            // Pass the map where keys are providerSpecificSymbol
+            log.debug("Triggering calculation with {} raw rates: {}", newlyCompletedRawRatesInWindow.size(), newlyCompletedRawRatesInWindow.keySet());
+            rateCalculatorService.processWindowCompletion(newlyCompletedRawRatesInWindow);
         } catch (Exception e) {
-            log.error("{} için hesaplama tetiklenirken hata: {}", baseSymbol, e.getMessage(), e);
+            log.error("Hesaplama tetiklenirken hata: {}", e.getMessage(), e);
         }
     }
     
@@ -246,13 +281,7 @@ public class TwoWayWindowAggregator {
      * Bir temel sembol için beklenen sağlayıcıların listesini al
      */
     private List<String> getExpectedProviders(String baseSymbol) {
-        return expectedProvidersConfig.computeIfAbsent(baseSymbol, k -> {
-            // Varsayılan örnek yapılandırma
-            if ("USDTRY".equals(baseSymbol)) {
-                return List.of("PF1","PF2");
-            }
-            return List.of();
-        });
+        return expectedProvidersConfig.getOrDefault(baseSymbol, Collections.emptyList());
     }
     
     /**

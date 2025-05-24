@@ -1,6 +1,6 @@
 package com.toyota.mainapp.validation;
 
-import com.toyota.mainapp.dto.BaseRateDto;
+import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.dto.ValidationError;
 import com.toyota.mainapp.exception.AggregatedRateValidationException;
 import com.toyota.mainapp.validation.rules.ValidationRule;
@@ -35,45 +35,48 @@ public class RateValidatorService {
             throw new AggregatedRateValidationException(List.of("Rate object is null"));
         }
         
-        // Pre-validation basic checks
-        List<String> basicErrors = validateBasicFields(rate);
-        if (!basicErrors.isEmpty()) {
-            throw new AggregatedRateValidationException(basicErrors);
-        }
+        List<String> allPreliminaryErrors = new ArrayList<>(validateBasicFields(rate));
         
         // Handle missing bid/ask values
-        if (rate.getBid() == null || rate.getAsk() == null) {
-            List<String> priceErrors = new ArrayList<>();
-            if (rate.getBid() == null) priceErrors.add("Bid price is null");
-            if (rate.getAsk() == null) priceErrors.add("Ask price is null");
-            throw new AggregatedRateValidationException(priceErrors);
+        if (rate.getBid() == null) {
+            allPreliminaryErrors.add("Bid price is null");
+        }
+        if (rate.getAsk() == null) {
+            allPreliminaryErrors.add("Ask price is null");
         }
         
-        // Check simple price validation before passing to complex rules
-        if (rate.getBid().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new AggregatedRateValidationException(List.of("Bid price must be positive"));
+        // Only perform further price checks if both bid and ask are non-null
+        if (rate.getBid() != null && rate.getAsk() != null) {
+            // Check simple price validation
+            if (rate.getBid().compareTo(BigDecimal.ZERO) <= 0) {
+                allPreliminaryErrors.add("Bid price must be positive");
+            }
+            
+            if (rate.getAsk().compareTo(BigDecimal.ZERO) <= 0) {
+                allPreliminaryErrors.add("Ask price must be positive");
+            }
+            
+            if (rate.getBid().compareTo(rate.getAsk()) > 0) {
+                allPreliminaryErrors.add("Bid price cannot be greater than ask price");
+            }
         }
         
-        if (rate.getAsk().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new AggregatedRateValidationException(List.of("Ask price must be positive"));
+        if (!allPreliminaryErrors.isEmpty()) {
+            throw new AggregatedRateValidationException(allPreliminaryErrors);
         }
         
-        if (rate.getBid().compareTo(rate.getAsk()) > 0) {
-            throw new AggregatedRateValidationException(List.of("Bid price cannot be greater than ask price"));
-        }
-        
-        // Apply all validation rules
-        List<ValidationError> errors = new ArrayList<>();
+        // Apply all complex validation rules
+        List<ValidationError> complexErrors = new ArrayList<>();
         for (ValidationRule rule : validationRules) {
             try {
                 List<ValidationError> ruleErrors = rule.validate(rate);
                 if (ruleErrors != null && !ruleErrors.isEmpty()) {
-                    errors.addAll(ruleErrors);
+                    complexErrors.addAll(ruleErrors);
                 }
             } catch (Exception e) {
                 log.error("Error executing validation rule {}: {}", 
                         rule.getClass().getSimpleName(), e.getMessage(), e);
-                errors.add(new ValidationError(
+                complexErrors.add(new ValidationError(
                     "rule-execution",
                     rule.getClass().getSimpleName(),
                     "Validation rule execution error: " + e.getMessage()
@@ -81,9 +84,9 @@ public class RateValidatorService {
             }
         }
         
-        // If there are errors, throw an exception
-        if (!errors.isEmpty()) {
-            List<String> errorMessages = errors.stream()
+        // If there are complex errors, throw an exception
+        if (!complexErrors.isEmpty()) {
+            List<String> errorMessages = complexErrors.stream()
                 .map(e -> e.getField() + ": " + e.getMessage())
                 .collect(Collectors.toList());
                 

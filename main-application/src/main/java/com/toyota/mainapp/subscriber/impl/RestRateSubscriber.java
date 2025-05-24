@@ -1,10 +1,12 @@
 package com.toyota.mainapp.subscriber.impl;
 
 import com.toyota.mainapp.coordinator.callback.PlatformCallback;
-import com.toyota.mainapp.dto.ProviderRateDto;
-import com.toyota.mainapp.dto.BaseRateDto;
+import com.toyota.mainapp.dto.model.ProviderRateDto;
+import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.subscriber.api.PlatformSubscriber;
-import com.toyota.mainapp.subscriber.api.SubscriberConfigDto;
+import com.toyota.mainapp.dto.config.SubscriberConfigDto;
+import com.toyota.mainapp.subscriber.util.SubscriberUtils;
+
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
@@ -13,12 +15,10 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.time.Instant;
+import org.springframework.core.task.TaskExecutor;
 
-import java.time.Duration;
-import java.util.ArrayList;
+import java.time.Instant;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -32,26 +32,32 @@ public class RestRateSubscriber implements PlatformSubscriber {
     private PlatformCallback callback;
     private final AtomicBoolean connected = new AtomicBoolean(false);
     private final AtomicBoolean running = new AtomicBoolean(false);
-    private Thread pollThread;
-    
+
     private WebClient webClient;
     private Retry retry;
     private CircuitBreaker circuitBreaker;
     private WebClient.Builder webClientBuilder;
-    
-    private String baseUrl = "http://localhost:8080/api"; // Default REST port is 8080
+    private final ObjectMapper objectMapper; 
+    private final TaskExecutor subscriberTaskExecutor; 
+
+    private String baseUrl = "http://localhost:8080/api"; 
     private long pollIntervalMs = 1000;
     private String[] symbols = new String[0];
 
-    // Add default constructor
+    // Default constructor
     public RestRateSubscriber() {
-        log.debug("RestRateSubscriber created with default constructor");
+        log.warn("RestRateSubscriber created with default constructor. Dependencies (WebClient.Builder, ObjectMapper, TaskExecutor) must be set via setters or this instance may not function correctly.");
+        this.webClientBuilder = null; // Must be set
+        this.objectMapper = new ObjectMapper(); // Fallback, not ideal. Prefer injected.
+        this.subscriberTaskExecutor = null; // Must be set
     }
     
-    // Add constructor with WebClient.Builder
-    public RestRateSubscriber(WebClient.Builder webClientBuilder) {
+    // Constructor with WebClient.Builder, ObjectMapper, and TaskExecutor
+    public RestRateSubscriber(WebClient.Builder webClientBuilder, ObjectMapper objectMapper, TaskExecutor subscriberTaskExecutor) {
         this.webClientBuilder = webClientBuilder;
-        log.debug("RestRateSubscriber created with WebClientBuilder");
+        this.objectMapper = objectMapper; // Injected ObjectMapper
+        this.subscriberTaskExecutor = subscriberTaskExecutor; // Injected TaskExecutor
+        log.debug("RestRateSubscriber created with WebClientBuilder, ObjectMapper, and TaskExecutor");
     }
 
     @Override
@@ -61,9 +67,9 @@ public class RestRateSubscriber implements PlatformSubscriber {
         
         if (config.getConnectionConfig() != null) {
             Map<String, Object> connConfig = config.getConnectionConfig();
-            this.baseUrl = getConfigValue(connConfig, "baseUrl", "http://localhost:8080/api"); // Default REST port
-            this.pollIntervalMs = getConfigValue(connConfig, "pollInterval", 1000L);
-            this.symbols = getSymbols(connConfig);
+            this.baseUrl = SubscriberUtils.getConfigValue(connConfig, "baseUrl", "http://localhost:8080/api");
+            this.pollIntervalMs = SubscriberUtils.getConfigValue(connConfig, "pollIntervalMs", 1000L);
+            this.symbols = SubscriberUtils.getSymbols(connConfig, this.providerName);
         }
         
         // Initialize WebClient if builder is available
@@ -132,7 +138,9 @@ public class RestRateSubscriber implements PlatformSubscriber {
         // Make sure WebClient is initialized
         if (webClient == null && webClientBuilder != null) {
             webClient = webClientBuilder.baseUrl(baseUrl).build();
-            log.info("[{}] WebClient initialized during connect() call with baseUrl: {}", providerName, baseUrl);
+            log.warn("[{}] WebClient initialized during connect() call as a fallback. Ideally, it should be initialized in init() or setWebClient(). BaseUrl: {}", providerName, baseUrl);
+        } else if (webClient == null && webClientBuilder == null) {
+            log.error("[{}] CRITICAL: WebClient cannot be initialized in connect() because webClientBuilder is null.", providerName);
         }
         
         log.info("[{}] REST API 'connect' called. Connected status: {}, WebClient status: {}", 
@@ -151,21 +159,27 @@ public class RestRateSubscriber implements PlatformSubscriber {
 
     @Override
     public void startMainLoop() {
+        if (subscriberTaskExecutor == null) {
+            log.error("[{}] TaskExecutor is null. Cannot start main polling loop.", providerName);
+            running.set(false);
+            return;
+        }
         if (running.compareAndSet(false, true)) {
             log.info("[{}] REST ana döngüsü başlatılıyor. Poll interval: {}ms", providerName, pollIntervalMs);
-            pollThread = new Thread(() -> {
-                log.info("[{}] REST poll thread'i başlatıldı.", providerName);
+            
+            subscriberTaskExecutor.execute(() -> { // Use TaskExecutor
+                log.info("[{}] REST poll task started.", providerName);
                 while (running.get()) {
                     try {
-                        log.info("[{}] REST poll döngüsü başladı.", providerName);
+                        log.debug("[{}] REST poll döngüsü başladı.", providerName); // Changed to debug
                         if (connected.get() && symbols.length > 0) {
-                            log.info("[{}] Toplam {} sembol için REST sorgusu yapılacak", providerName, symbols.length);
+                            log.debug("[{}] Toplam {} sembol için REST sorgusu yapılacak", providerName, symbols.length); // Changed to debug
                             for (String symbol : symbols) {
-                                if (!running.get()) break; // Check running status before fetching each symbol
-                                log.info("[{}] Fetching rate for symbol: {}", providerName, symbol);
+                                if (!running.get()) break; 
+                                log.debug("[{}] Fetching rate for symbol: {}", providerName, symbol); // Changed to debug
                                 fetchRate(symbol);
                             }
-                            log.info("[{}] Tüm semboller sorgulandı, sonraki poll çevrimine kadar {}ms bekleniyor", 
+                            log.debug("[{}] Tüm semboller sorgulandı, sonraki poll çevrimine kadar {}ms bekleniyor", // Changed to debug
                                     providerName, pollIntervalMs);
                         } else {
                             if (!connected.get()) {
@@ -178,19 +192,18 @@ public class RestRateSubscriber implements PlatformSubscriber {
                         
                         Thread.sleep(pollIntervalMs);
                     } catch (InterruptedException e) {
-                        log.warn("[{}] REST poll thread'i kesintiye uğradı.", providerName, e);
-                        Thread.currentThread().interrupt();
+                        log.warn("[{}] REST poll task kesintiye uğradı.", providerName, e);
+                        Thread.currentThread().interrupt(); // Preserve interrupt status
+                        running.set(false); // Ensure loop terminates
                         break;
                     } catch (Exception e) {
                         log.error("[{}] REST sorgu döngüsünde beklenmedik hata: {}", providerName, e.getMessage(), e);
+                        // Consider a small delay here to prevent rapid-fire errors in a tight loop
+                        try { Thread.sleep(1000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
                     }
                 }
-                log.info("[{}] REST poll thread'i sonlandırılıyor.", providerName);
+                log.info("[{}] REST poll task sonlandırılıyor.", providerName);
             });
-            
-            pollThread.setName("RestPoll-" + providerName);
-            pollThread.setDaemon(true);
-            pollThread.start();
         } else {
             log.warn("[{}] REST ana döngüsü zaten çalışıyor veya başlatılamadı.", providerName);
         }
@@ -199,10 +212,9 @@ public class RestRateSubscriber implements PlatformSubscriber {
     @Override
     public void stopMainLoop() {
         log.info("[{}] REST ana döngüsü durduruluyor...", providerName);
-        if (running.compareAndSet(true, false) && pollThread != null) {
-            pollThread.interrupt();
-            log.info("[{}] REST poll thread'i kesme isteği gönderildi.", providerName);
-        }
+        running.set(false); // Signal the polling loop to stop
+        // No direct thread interruption needed as TaskExecutor manages the thread.
+        // The running flag will cause the loop to exit.
         log.info("[{}] REST ana döngüsü durduruldu.", providerName);
     }
 
@@ -248,8 +260,8 @@ public class RestRateSubscriber implements PlatformSubscriber {
                             log.trace("[{}] Raw JSON response for {}: {}", providerName, symbol, jsonResponse);
                             try {
                                 // Parse JSON manually to handle timestamp format
-                                ObjectMapper mapper = new ObjectMapper();
-                                JsonNode rootNode = mapper.readTree(jsonResponse);
+                                // ObjectMapper mapper = new ObjectMapper(); // Use injected ObjectMapper
+                                JsonNode rootNode = this.objectMapper.readTree(jsonResponse); // Use injected objectMapper
                                 
                                 log.debug("[{}] JSON parsed successfully for {}: Node type: {}", 
                                          providerName, symbol, rootNode.getNodeType());
@@ -311,88 +323,6 @@ public class RestRateSubscriber implements PlatformSubscriber {
             log.error("[{}] REST request oluşturulurken beklenmedik hata: {} - Symbol: {}", 
                      providerName, e.getMessage(), symbol, e);
             callback.onProviderError(providerName, "REST request hatası: " + symbol, e);
-        }
-    }
-    
-    @SuppressWarnings("unchecked")
-    private <T> T getConfigValue(Map<String, Object> config, String key, T defaultValue) {
-        if (config == null || !config.containsKey(key)) return defaultValue;
-        Object value = config.get(key);
-        return (value != null && value.getClass().isAssignableFrom(defaultValue.getClass())) ? 
-            (T)value : defaultValue;
-    }
-    
-    private String[] getSymbols(Map<String, Object> config) {
-        if (config == null || !config.containsKey("symbols")) {
-            log.warn("[{}] Yapılandırmada 'symbols' anahtarı bulunamadı", providerName);
-            return new String[0];
-        }
-        
-        Object symbolsObj = config.get("symbols");
-        log.debug("[{}] Yapılandırmadan alınan ham symbols nesnesi: {}", 
-                providerName, symbolsObj);
-        
-        List<String> parsedSymbols = new ArrayList<>();
-        
-        // Handle List type (most common from JSON)
-        if (symbolsObj instanceof List) {
-            @SuppressWarnings("unchecked")
-            List<String> symbolsList = (List<String>) symbolsObj;
-            for (String item : symbolsList) {
-                if (item != null) {
-                    String[] parts = item.split(",");
-                    for (String part : parts) {
-                        String trimmed = part.trim();
-                        if (!trimmed.isEmpty()) {
-                            parsedSymbols.add(trimmed);
-                        }
-                    }
-                }
-            }
-        } 
-        // Handle simple String
-        else if (symbolsObj instanceof String) {
-            String symbolsStr = (String) symbolsObj;
-            String[] parts = symbolsStr.split(",");
-            for (String part : parts) {
-                String trimmed = part.trim();
-                if (!trimmed.isEmpty()) {
-                    parsedSymbols.add(trimmed);
-                }
-            }
-        }
-        // Handle String[] (less common)
-        else if (symbolsObj instanceof String[]) {
-            for (String s : (String[]) symbolsObj) {
-                if (s != null) {
-                    String[] parts = s.split(",");
-                    for (String part : parts) {
-                        String trimmed = part.trim();
-                        if (!trimmed.isEmpty()) {
-                            parsedSymbols.add(trimmed);
-                        }
-                    }
-                }
-            }
-        }
-        
-        log.info("[{}] Çözümlenen semboller: {}", providerName, parsedSymbols);
-        return parsedSymbols.toArray(new String[0]);
-    }
-
-    // This method should be added if it doesn't exist:
-    public void sendRateStatus(String symbol, BaseRateDto.RateStatusEnum status, String statusMessage) {
-        if (callback != null) {
-            BaseRateDto statusRate = BaseRateDto.builder()
-                .rateType(com.toyota.mainapp.dto.RateType.STATUS)
-                .symbol(symbol)
-                .providerName(providerName)
-                .status(status)
-                .statusMessage(statusMessage)
-                .timestamp(System.currentTimeMillis())
-                .build();
-                
-            callback.onRateStatus(providerName, statusRate);
         }
     }
 }

@@ -1,10 +1,11 @@
 package com.toyota.mainapp.calculator.engine.impl;
 
 import com.toyota.mainapp.calculator.engine.CalculationStrategy;
-import com.toyota.mainapp.dto.BaseRateDto;
-import com.toyota.mainapp.dto.CalculationRuleDto;
-import com.toyota.mainapp.dto.RateType;
-import com.toyota.mainapp.dto.common.InputRateInfo;
+import com.toyota.mainapp.dto.model.BaseRateDto;
+import com.toyota.mainapp.dto.config.CalculationRuleDto;
+import com.toyota.mainapp.dto.model.InputRateInfo;
+import com.toyota.mainapp.dto.model.RateType;
+
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 

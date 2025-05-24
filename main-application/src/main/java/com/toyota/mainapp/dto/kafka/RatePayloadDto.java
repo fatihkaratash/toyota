@@ -1,6 +1,6 @@
-package com.toyota.mainapp.dto.payload;
+package com.toyota.mainapp.dto.kafka; // MODIFIED package
 
-import com.toyota.mainapp.dto.BaseRateDto;
+import com.toyota.mainapp.dto.model.BaseRateDto; // Correct import
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;

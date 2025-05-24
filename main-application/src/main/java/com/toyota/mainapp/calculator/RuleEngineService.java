@@ -1,15 +1,23 @@
 package com.toyota.mainapp.calculator;
 
-import com.toyota.mainapp.dto.BaseRateDto;
-import com.toyota.mainapp.dto.CalculationRuleDto;
+import com.toyota.mainapp.dto.model.BaseRateDto;
+import com.toyota.mainapp.dto.config.CalculationRuleDto;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Service interface for the rule engine that manages calculation rules
  */
 public interface RuleEngineService {
+    
+    
+    // YENİ METOT: Hesaplama kurallarını ayarlamak için
+    void setCalculationRules(List<CalculationRuleDto> rules);
+
+    // YENİ METOT: Yüklenmiş kuralları almak için (RateCalculatorService tarafından kullanılabilir)
+    List<CalculationRuleDto> getCalculationRules();
 
     /**
      * Load calculation rules from configuration

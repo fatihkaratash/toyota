@@ -1,4 +1,4 @@
-package com.toyota.mainapp.dto;
+package com.toyota.mainapp.dto.model;
 
 /**
  * Enum to represent different types of rate data

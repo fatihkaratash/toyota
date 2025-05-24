@@ -1,17 +1,19 @@
 package com.toyota.mainapp.subscriber.impl;
 
 import com.toyota.mainapp.coordinator.callback.PlatformCallback;
-import com.toyota.mainapp.dto.BaseRateDto;
-import com.toyota.mainapp.dto.ProviderRateDto;
+import com.toyota.mainapp.dto.model.BaseRateDto;
+import com.toyota.mainapp.dto.model.ProviderRateDto;
 import com.toyota.mainapp.subscriber.api.PlatformSubscriber;
-import com.toyota.mainapp.subscriber.api.SubscriberConfigDto;
+import com.toyota.mainapp.dto.config.SubscriberConfigDto;
+import com.toyota.mainapp.subscriber.util.SubscriberUtils;
+
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.*;
 import java.net.Socket;
-import java.time.Instant;
+// import java.time.Instant; // No longer directly used here
 import java.util.Arrays;
-import java.util.List;
+// import java.util.List; // No longer directly used here
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -26,10 +28,10 @@ public class TcpRateSubscriber implements PlatformSubscriber {
     private BufferedReader reader;
     private PrintWriter writer;
     
-    private String host = "tcp-rate-provider"; // Default host updated to "tcp-rate-provider"
-    private int port = 8081; // Default TCP port updated to 8081
+    private String host = "tcp-rate-provider"; 
+    private int port = 8081; 
     private int timeout = 30000;
-    private int retries = 10;
+    private int retries = 10; // Default retries was 10, config default was 3. Let's keep 10 as class default.
     private String[] symbols = new String[0];
 
     @Override
@@ -39,11 +41,11 @@ public class TcpRateSubscriber implements PlatformSubscriber {
         
         if (config.getConnectionConfig() != null) {
             Map<String, Object> connConfig = config.getConnectionConfig();
-            this.host = getString(connConfig, "host", "tcp-rate-provider"); // Default host updated to "tcp-rate-provider"
-            this.port = getInt(connConfig, "port", 8081); // Default TCP port updated to 8081
-            this.timeout = getInt(connConfig, "connectionTimeoutMs", 30000);
-            this.retries = getInt(connConfig, "retryAttempts", 3);
-            this.symbols = getSymbols(connConfig);
+            this.host = SubscriberUtils.getConfigValue(connConfig, "host", "tcp-rate-provider");
+            this.port = SubscriberUtils.getConfigValue(connConfig, "port", 8081);
+            this.timeout = SubscriberUtils.getConfigValue(connConfig, "connectionTimeoutMs", 30000);
+            this.retries = SubscriberUtils.getConfigValue(connConfig, "retryAttempts", 10); // Default to 10
+            this.symbols = SubscriberUtils.getSymbols(connConfig, this.providerName);
         }
         
         log.debug("[{}] TCP Subscriber initialized with config: host={}, port={}, timeout={}, retries={}, symbols={}",
@@ -312,99 +314,5 @@ private void handleConnectionLost(String reason) {
             log.error("[{}] TCP kaynakları kapatılırken hata: {}", providerName, e.getMessage(), e);
         }
         log.debug("[{}] TCP kaynakları kapatıldı.", providerName);
-    }
-    
-    private String getString(Map<String, Object> config, String key, String defaultVal) {
-        if (config == null || !config.containsKey(key)) return defaultVal;
-        Object val = config.get(key);
-        return (val instanceof String) ? (String)val : defaultVal;
-    }
-    
-    private int getInt(Map<String, Object> config, String key, int defaultVal) {
-        if (config == null || !config.containsKey(key)) return defaultVal;
-        Object val = config.get(key);
-        if (val instanceof Number) return ((Number)val).intValue();
-        if (val instanceof String) {
-            try {
-                return Integer.parseInt((String)val);
-            } catch (NumberFormatException e) {
-                return defaultVal;
-            }
-        }
-        return defaultVal;
-    }
-    
-    private String[] getSymbols(Map<String, Object> config) {
-        if (config == null || !config.containsKey("symbols")) {
-            log.warn("[{}] Yapılandırmada 'symbols' anahtarı bulunamadı", providerName);
-            return new String[0];
-        }
-        
-        Object symbolsObj = config.get("symbols");
-        log.debug("[{}] Yapılandırmadan alınan ham symbols nesnesi: {}", 
-                providerName, symbolsObj);
-        
-        List<String> parsedSymbols = new java.util.ArrayList<>();
-        
-        // Handle List type (most common from JSON)
-        if (symbolsObj instanceof List) {
-            @SuppressWarnings("unchecked")
-            List<String> symbolsList = (List<String>) symbolsObj;
-            for (String item : symbolsList) {
-                if (item != null) {
-                    String[] parts = item.split(",");
-                    for (String part : parts) {
-                        String trimmed = part.trim();
-                        if (!trimmed.isEmpty()) {
-                            parsedSymbols.add(trimmed);
-                        }
-                    }
-                }
-            }
-        } 
-        // Handle simple String
-        else if (symbolsObj instanceof String) {
-            String symbolsStr = (String) symbolsObj;
-            String[] parts = symbolsStr.split(",");
-            for (String part : parts) {
-                String trimmed = part.trim();
-                if (!trimmed.isEmpty()) {
-                    parsedSymbols.add(trimmed);
-                }
-            }
-        }
-        // Handle String[] (less common)
-        else if (symbolsObj instanceof String[]) {
-            for (String s : (String[]) symbolsObj) {
-                if (s != null) {
-                    String[] parts = s.split(",");
-                    for (String part : parts) {
-                        String trimmed = part.trim();
-                        if (!trimmed.isEmpty()) {
-                            parsedSymbols.add(trimmed);
-                        }
-                    }
-                }
-            }
-        }
-        
-        log.info("[{}] Çözümlenen semboller: {}", providerName, parsedSymbols);
-        return parsedSymbols.toArray(new String[0]);
-    }
-
-    // This method should be added if it doesn't exist:
-    public void sendRateStatus(String symbol, BaseRateDto.RateStatusEnum status, String statusMessage) {
-        if (callback != null) {
-            BaseRateDto statusRate = BaseRateDto.builder()
-                .rateType(com.toyota.mainapp.dto.RateType.STATUS)
-                .symbol(symbol)
-                .providerName(providerName)
-                .status(status)
-                .statusMessage(statusMessage)
-                .timestamp(System.currentTimeMillis())
-                .build();
-                
-            callback.onRateStatus(providerName, statusRate);
-        }
     }
 }

@@ -3,7 +3,7 @@ package com.toyota.mainapp.config;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
-import com.toyota.mainapp.dto.BaseRateDto;
+import com.toyota.mainapp.dto.model.BaseRateDto;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;

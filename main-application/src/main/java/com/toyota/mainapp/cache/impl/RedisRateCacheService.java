@@ -1,8 +1,9 @@
 package com.toyota.mainapp.cache.impl;
 
 import com.toyota.mainapp.cache.RateCacheService;
-import com.toyota.mainapp.dto.BaseRateDto;
-import com.toyota.mainapp.dto.RateType;
+import com.toyota.mainapp.dto.model.BaseRateDto;
+import com.toyota.mainapp.dto.model.RateType;
+
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;

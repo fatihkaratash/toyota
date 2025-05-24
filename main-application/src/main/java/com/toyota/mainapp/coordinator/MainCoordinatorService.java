@@ -3,11 +3,11 @@ package com.toyota.mainapp.coordinator;
 import com.toyota.mainapp.aggregator.TwoWayWindowAggregator;
 import com.toyota.mainapp.cache.RateCacheService;
 import com.toyota.mainapp.coordinator.callback.PlatformCallback;
-import com.toyota.mainapp.dto.BaseRateDto;
-import com.toyota.mainapp.dto.ProviderRateDto;
-import com.toyota.mainapp.dto.RateType;
+import com.toyota.mainapp.dto.model.BaseRateDto;
+import com.toyota.mainapp.dto.model.ProviderRateDto;
+import com.toyota.mainapp.dto.model.RateType;
 import com.toyota.mainapp.exception.AggregatedRateValidationException;
-import com.toyota.mainapp.kafka.publisher.SequentialPublisher;
+import com.toyota.mainapp.kafka.KafkaPublishingService;
 import com.toyota.mainapp.mapper.RateMapper;
 import com.toyota.mainapp.subscriber.api.PlatformSubscriber;
 import com.toyota.mainapp.subscriber.dynamic.DynamicSubscriberLoader;
@@ -39,7 +39,7 @@ public class MainCoordinatorService implements PlatformCallback {
     private final RateMapper rateMapper;
     private final RateValidatorService rateValidatorService;
     private final RateCacheService rateCacheService;
-    private final SequentialPublisher sequentialPublisher;
+    private final KafkaPublishingService sequentialPublisher;
     private final TwoWayWindowAggregator aggregator;
 
     @Value("${subscribers.config.path}")

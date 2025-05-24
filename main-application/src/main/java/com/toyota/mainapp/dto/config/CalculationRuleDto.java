@@ -1,4 +1,4 @@
-package com.toyota.mainapp.calculator.config;
+package com.toyota.mainapp.dto.config;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

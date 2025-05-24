@@ -1,6 +1,6 @@
 package com.toyota.mainapp.calculator.dependency;
 
-import com.toyota.mainapp.calculator.config.CalculationRuleDto;
+import com.toyota.mainapp.dto.config.CalculationRuleDto; // ADDED new import
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 

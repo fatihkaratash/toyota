@@ -1,7 +1,6 @@
-package com.toyota.mainapp.dto;
+package com.toyota.mainapp.dto.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.toyota.mainapp.dto.common.InputRateInfo;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -64,6 +63,7 @@ public class BaseRateDto {
     /**
      * For CALCULATED rates: source rates used for calculation
      */
+    @lombok.Builder.Default // Keep @Builder.Default if SuperBuilder doesn't initialize it
     private List<InputRateInfo> calculationInputs = new ArrayList<>();
     
     /**

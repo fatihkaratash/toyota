@@ -1,6 +1,6 @@
 package com.toyota.mainapp.validation.rules;
 
-import com.toyota.mainapp.dto.BaseRateDto;
+import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.dto.ValidationError;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;

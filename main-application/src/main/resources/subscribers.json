@@ -23,7 +23,7 @@
       "port": 8081,
       "connectionTimeoutMs": 5000,
       "retryAttempts": 10,
-      "symbols": ["PF1_USDTRY", "PF1_EURUSD"]
+      "symbols": ["PF1_USDTRY", "PF1_EURUSD", "PF1_GBPUSD"]
     }
   }
 ]

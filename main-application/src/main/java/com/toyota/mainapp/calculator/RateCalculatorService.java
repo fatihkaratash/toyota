@@ -1,11 +1,12 @@
 package com.toyota.mainapp.calculator;
 
 import com.toyota.mainapp.cache.RateCacheService;
-import com.toyota.mainapp.dto.BaseRateDto;
-import com.toyota.mainapp.dto.CalculationRuleDto;
-import com.toyota.mainapp.dto.RateType;
-import com.toyota.mainapp.dto.common.InputRateInfo;
-import com.toyota.mainapp.kafka.publisher.SequentialPublisher;
+import com.toyota.mainapp.calculator.dependency.RateDependencyManager;
+import com.toyota.mainapp.dto.model.BaseRateDto;
+import com.toyota.mainapp.dto.config.CalculationRuleDto;
+import com.toyota.mainapp.dto.model.RateType;
+import com.toyota.mainapp.dto.model.InputRateInfo;
+import com.toyota.mainapp.kafka.KafkaPublishingService;
 import com.toyota.mainapp.mapper.RateMapper;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
@@ -28,52 +29,73 @@ public class RateCalculatorService {
     private final RateCacheService rateCacheService;
     private final RuleEngineService ruleEngineService;
     private final RateMapper rateMapper;
+    private final RateDependencyManager rateDependencyManager; 
     
     // Break circular dependency with setter injection
-    private SequentialPublisher sequentialPublisher;
+    private KafkaPublishingService sequentialPublisher;
 
     public RateCalculatorService(RateCacheService rateCacheService,
                                 RuleEngineService ruleEngineService,
-                                RateMapper rateMapper) {
+                                RateMapper rateMapper,
+                                RateDependencyManager rateDependencyManager) { 
         this.rateCacheService = rateCacheService;
         this.ruleEngineService = ruleEngineService;
         this.rateMapper = rateMapper;
+        this.rateDependencyManager = rateDependencyManager; 
         log.info("RateCalculatorService initialized");
     }
     
     @Autowired
-    public void setSequentialPublisher(SequentialPublisher sequentialPublisher) {
+    public void setSequentialPublisher(KafkaPublishingService sequentialPublisher) {
         this.sequentialPublisher = sequentialPublisher;
         log.info("SequentialPublisher set in RateCalculatorService");
     }
     
     /**
-     * Calculate derived rates from aggregated data collected by the window aggregator
+     * Processes a window of raw rates that have just been completed by the aggregator.
+     * This method will find rules triggered by these raw rates and attempt to execute them.
+     * @param newlyCompletedRawRatesInWindow A map of providerSpecificSymbol to BaseRateDto.
      */
     @CircuitBreaker(name = "calculatorService")
     @Retry(name = "calculatorRetry")
-    public void calculateFromAggregatedData(String baseSymbol, Map<String, BaseRateDto> aggregatedRates) {
-        log.info("Calculating rates from aggregated data for symbol: {}, providers: {}", 
-                baseSymbol, String.join(", ", aggregatedRates.keySet()));
+    public void processWindowCompletion(Map<String, BaseRateDto> newlyCompletedRawRatesInWindow) {
+        if (newlyCompletedRawRatesInWindow == null || newlyCompletedRawRatesInWindow.isEmpty()) {
+            log.debug("processWindowCompletion called with no new raw rates.");
+            return;
+        }
+        log.info("Processing window completion with {} raw rates: {}", 
+                newlyCompletedRawRatesInWindow.size(), newlyCompletedRawRatesInWindow.keySet());
+
+        Set<CalculationRuleDto> rulesToProcess = new HashSet<>();
+        for (String providerSpecificSymbol : newlyCompletedRawRatesInWindow.keySet()) {
+            // For each raw rate that completed the window, find rules that depend on it.
+            // These should be the _AVG rules.
+            log.debug("Checking rules triggered by raw symbol: {}", providerSpecificSymbol);
+            rulesToProcess.addAll(rateDependencyManager.getCalculationsToTrigger(providerSpecificSymbol, true));
+        }
         
-        try {
-            // Find calculation rules for this base symbol
-            List<CalculationRuleDto> rules = ruleEngineService.getRulesByInputBaseSymbol(baseSymbol);
-            
-            if (rules.isEmpty()) {
-                log.info("No calculation rules found for base symbol: {}", baseSymbol);
-                return;
+        if (rulesToProcess.isEmpty()) {
+            log.info("No calculation rules triggered by the completed window for symbols: {}", newlyCompletedRawRatesInWindow.keySet());
+            return;
+        }
+
+        log.info("Triggering {} rules based on window completion: {}", rulesToProcess.size(),
+                rulesToProcess.stream().map(CalculationRuleDto::getOutputSymbol).collect(Collectors.joining(", ")));
+        
+        // Sort rules by priority before execution
+        List<CalculationRuleDto> sortedRulesToProcess = rulesToProcess.stream()
+            .sorted(Comparator.comparingInt(CalculationRuleDto::getPriority))
+            .collect(Collectors.toList());
+
+        for (CalculationRuleDto rule : sortedRulesToProcess) {
+            // Use RuleEngineService to execute the rule
+            try {
+                // You need to provide the required aggregatedRates map as the second argument.
+                // Replace 'newlyCompletedRawRatesInWindow' with the appropriate rates map if needed.
+                ruleEngineService.executeRule(rule, newlyCompletedRawRatesInWindow);
+            } catch (Exception e) {
+                log.error("Error executing rule {}: {}", rule.getOutputSymbol(), e.getMessage(), e);
             }
-            
-            log.debug("Found {} calculation rules for base symbol: {}", rules.size(), baseSymbol);
-            
-            // Process each rule
-            for (CalculationRuleDto rule : rules) {
-                calculateRateFromRule(rule, aggregatedRates);
-            }
-            
-        } catch (Exception e) {
-            log.error("Error calculating rates from aggregated data: {}", e.getMessage(), e);
         }
     }
     
