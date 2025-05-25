@@ -49,11 +49,14 @@ logging:
 # Application specific Kafka configuration
 app:
   kafka:
-    topic:
-      simple-rates: financial-simple-rates
-    consumer:
-      group-id: simple-rate-db-persister-group
-      logging-group-id: simple-rate-logging-group
+      consumer:
+       group-id: toyota-consumer-group
+       group-id-usdtry: toyota-consumer-usdtry
+       group-id-eurtry: toyota-consumer-eurtry
+       group-id-gbptry: toyota-consumer-gbptry
+      topic:
+        simple-rates: financial-simple-rates
+        json-rates: financial-rates-json
   
   # OpenSearch index adı
   opensearch:

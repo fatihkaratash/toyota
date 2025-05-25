@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Component("groovyScriptCalculationStrategy")
 @Slf4j
@@ -42,61 +43,90 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
         this.objectMapper = objectMapper;
     }
 
-    @Override
-    public Optional<BaseRateDto> calculate(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates) {
-        String scriptPath = rule.getImplementation(); // e.g., "scripts/eur_try_calculator.groovy"
-        log.debug("Groovy betiği çalıştırılıyor, kural [{}]: {}", rule.getOutputSymbol(), scriptPath);
+  @Override
+public Optional<BaseRateDto> calculate(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates) {
+    String scriptPath = rule.getImplementation(); // e.g., "scripts/eur_try_calculator.groovy"
+    log.info("GROOVY-CALC-START: Kural [{}] için '{}' betiği çalıştırılıyor", 
+        rule.getOutputSymbol(), scriptPath);
 
-        try {
-            Resource scriptResource = resourceLoader.getResource("classpath:" + scriptPath);
-            if (!scriptResource.exists()) {
-                log.error("Groovy betiği bulunamadı, dizin: {}", scriptPath);
-                return Optional.empty();
-            }
-
-            String scriptContent = new String(scriptResource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-
-            CompilerConfiguration compilerConfig = new CompilerConfiguration();
-
-            Binding binding = new Binding();
-            binding.setVariable("cache", this.rateCacheService); // Injected cache service
-            binding.setVariable("log", log); // This class's logger is passed to the script
-            binding.setVariable("outputSymbol", rule.getOutputSymbol());
-            
-            // Convert input rates to ensure symbol consistency for scripts
-            Map<String, BaseRateDto> adaptedInputRates = adaptInputRatesForScript(inputRates);
-            binding.setVariable("inputRates", adaptedInputRates); // Pass adapted rates to the script
-            
-            if (rule.getInputParameters() != null) {
-                rule.getInputParameters().forEach(binding::setVariable);
-            }
-
-            GroovyShell shell = new GroovyShell(getClass().getClassLoader(), binding, compilerConfig);
-            Object result = shell.evaluate(scriptContent);
-
-            if (result instanceof Map) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> resultMap = (Map<String, Object>) result;
-                
-                BaseRateDto dto = mapToBaseRateDto(resultMap, rule);
-                dto.setRateType(RateType.CALCULATED);
-                dto.setCalculatedByStrategy(scriptPath); // Assign script path
-                log.info("Groovy betiği [{}] başarıyla çalıştırıldı, kural [{}]: {}", scriptPath, rule.getOutputSymbol(), dto);
-                return Optional.of(dto);
-            } else {
-                log.error("Groovy betiği [{}], kural [{}] için Map dönmedi. Dönen değer: {}", scriptPath, rule.getOutputSymbol(), result);
-                return Optional.empty();
-            }
-
-        } catch (IOException e) {
-            log.error("Groovy betiği [{}] okunamadı: {}", scriptPath, e.getMessage(), e);
-            return Optional.empty();
-        } catch (Exception e) {
-            log.error("Groovy betiği [{}] çalıştırılırken hata oluştu, kural [{}]: {}", scriptPath, rule.getOutputSymbol(), e.getMessage(), e);
+    try {
+        // 1. Script kaynağını kontrol et
+        Resource scriptResource = resourceLoader.getResource("classpath:" + scriptPath);
+        if (!scriptResource.exists()) {
+            log.error("GROOVY-MISSING: '{}' betiği bulunamadı!", scriptPath);
             return Optional.empty();
         }
-    }
 
+        // 2. Script içeriğini oku
+        String scriptContent = new String(scriptResource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        log.debug("GROOVY-LOADED: '{}' betiği yüklendi ({} bytes)", 
+            scriptPath, scriptContent.length());
+
+        // 3. Script bağlamını hazırla ve değişkenleri logla
+        CompilerConfiguration compilerConfig = new CompilerConfiguration();
+        Binding binding = new Binding();
+        binding.setVariable("cache", this.rateCacheService);
+        binding.setVariable("log", log);
+        binding.setVariable("outputSymbol", rule.getOutputSymbol());
+        
+        // 4. Input parameters'ı logla
+        if (rule.getInputParameters() != null && !rule.getInputParameters().isEmpty()) {
+            log.info("GROOVY-PARAMS: {} input parametresi scripte geçiliyor", 
+                rule.getInputParameters().size());
+            for (Map.Entry<String, String> param : rule.getInputParameters().entrySet()) {
+                binding.setVariable(param.getKey(), param.getValue());
+                log.debug("GROOVY-PARAM: {} = {}", param.getKey(), param.getValue());
+            }
+        } else {
+            log.warn("GROOVY-NO-PARAMS: Script için input parametresi yok!");
+        }
+        
+        // 5. Mevcut kurları logla
+        Map<String, BaseRateDto> adaptedInputRates = adaptInputRatesForScript(inputRates);
+        binding.setVariable("inputRates", adaptedInputRates);
+        
+        if (adaptedInputRates == null || adaptedInputRates.isEmpty()) {
+            log.error("GROOVY-NO-INPUTS: Script için input kurlar yok!");
+            return Optional.empty();
+        }
+        
+        log.info("GROOVY-RATES: {} adet giriş kuru scripte geçiliyor: {}", 
+            adaptedInputRates.size(),
+            adaptedInputRates.keySet().stream()
+                .map(k -> k + "(bid=" + adaptedInputRates.get(k).getBid() + 
+                     ",ask=" + adaptedInputRates.get(k).getAsk() + ")")
+                .collect(Collectors.joining(", ")));
+        
+        // 6. Script'i çalıştır
+        GroovyShell shell = new GroovyShell(getClass().getClassLoader(), binding, compilerConfig);
+        log.debug("GROOVY-EXECUTING: Script çalıştırılıyor...");
+        Object result = shell.evaluate(scriptContent);
+        log.debug("GROOVY-EXECUTED: Script çalıştırıldı, sonuç: {}", result);
+        
+        // 7. Sonucu işle
+        if (result instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> resultMap = (Map<String, Object>) result;
+            
+            if (!resultMap.containsKey("bid") || !resultMap.containsKey("ask")) {
+                log.error("GROOVY-INVALID-RESULT: Script bid/ask sonuçları döndürmedi: {}", resultMap);
+                return Optional.empty();
+            }
+            
+            BaseRateDto dto = mapToBaseRateDto(resultMap, rule);
+            log.info("GROOVY-SUCCESS: Hesaplama başarılı: {} -> bid={}, ask={}", 
+                dto.getSymbol(), dto.getBid(), dto.getAsk());
+            return Optional.of(dto);
+        } else {
+            log.error("GROOVY-WRONG-RETURN: Script Map dönmedi, dönen tip: {}", 
+                result != null ? result.getClass().getName() : "null");
+            return Optional.empty();
+        }
+    } catch (Exception e) {
+        log.error("GROOVY-ERROR: Script çalıştırılırken hata: {}", e.getMessage(), e);
+        return Optional.empty();
+    }
+}
     @Override
     public String getStrategyName() {
         return "groovyScriptCalculationStrategy";
@@ -187,6 +217,11 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
     private Map<String, BaseRateDto> adaptInputRatesForScript(Map<String, BaseRateDto> originalInputRates) {
         Map<String, BaseRateDto> adaptedRates = new HashMap<>();
         
+        if (originalInputRates == null || originalInputRates.isEmpty()) {
+            log.warn("adaptInputRatesForScript: Orijinal inputRates boş veya null");
+            return adaptedRates;
+        }
+        
         // First pass: add all original entries
         adaptedRates.putAll(originalInputRates);
         
@@ -195,8 +230,8 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
             String originalKey = entry.getKey();
             BaseRateDto rate = entry.getValue();
             
-            // Skip empty keys
-            if (originalKey == null || originalKey.isEmpty()) {
+            if (originalKey == null || originalKey.isEmpty() || rate == null) {
+                log.warn("adaptInputRatesForScript: Geçersiz giriş, anahtar={}, rate={}", originalKey, rate);
                 continue;
             }
             
@@ -206,17 +241,41 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
                 String slashedSymbol = com.toyota.mainapp.util.SymbolUtils.formatWithSlash(originalKey);
                 if (!originalKey.equals(slashedSymbol) && !adaptedRates.containsKey(slashedSymbol)) {
                     adaptedRates.put(slashedSymbol, rate);
-                    log.debug("Added alternative slashed symbol mapping: {} -> {}", originalKey, slashedSymbol);
+                    log.debug("adaptInputRatesForScript: Alternatif eğik çizgili sembol eklendi: {} -> {}", originalKey, slashedSymbol);
                 }
             } else {
                 // Add version without slashes for scripts that expect it
                 String unslashedSymbol = com.toyota.mainapp.util.SymbolUtils.removeSlash(originalKey);
-                if (!adaptedRates.containsKey(unslashedSymbol)) {
+                if (!originalKey.equals(unslashedSymbol) && !adaptedRates.containsKey(unslashedSymbol)) {
                     adaptedRates.put(unslashedSymbol, rate);
-                    log.debug("Added alternative unslashed symbol mapping: {} -> {}", originalKey, unslashedSymbol);
+                    log.debug("adaptInputRatesForScript: Alternatif eğik çizgisiz sembol eklendi: {} -> {}", originalKey, unslashedSymbol);
+                }
+            }
+            
+            // Also handle _AVG suffix variants
+            if (originalKey.endsWith("_AVG")) {
+                String baseSymbol = originalKey.substring(0, originalKey.length() - 4);
+                // Add version with slashes for base symbol if needed
+                if (!baseSymbol.contains("/")) {
+                    String slashedBase = com.toyota.mainapp.util.SymbolUtils.formatWithSlash(baseSymbol);
+                    String slashedKeyWithAvg = slashedBase + "_AVG";
+                    if (!adaptedRates.containsKey(slashedKeyWithAvg)) {
+                        adaptedRates.put(slashedKeyWithAvg, rate);
+                        log.debug("adaptInputRatesForScript: _AVG için alternatif sembol eklendi: {} -> {}", originalKey, slashedKeyWithAvg);
+                    }
+                } else {
+                    String unslashedBase = com.toyota.mainapp.util.SymbolUtils.removeSlash(baseSymbol);
+                    String unslashedKeyWithAvg = unslashedBase + "_AVG";
+                    if (!adaptedRates.containsKey(unslashedKeyWithAvg)) {
+                        adaptedRates.put(unslashedKeyWithAvg, rate);
+                        log.debug("adaptInputRatesForScript: _AVG için alternatif sembol eklendi: {} -> {}", originalKey, unslashedKeyWithAvg);
+                    }
                 }
             }
         }
+        
+        log.debug("adaptInputRatesForScript: {} orijinal sembole karşılık toplam {} sembol oluşturuldu", 
+                originalInputRates.size(), adaptedRates.size());
         
         return adaptedRates;
     }

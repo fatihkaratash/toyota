@@ -8,9 +8,10 @@ import com.toyota.mainapp.dto.config.CalculationRuleDto; // ADDED new import
 import com.toyota.mainapp.calculator.RuleEngineService; // Import RuleEngineService
 import lombok.Getter; 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.slf4j.Slf4j; // This annotation provides the 'log' variable
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
@@ -25,13 +26,14 @@ import java.util.Map;
 /**
  * Hesaplama yapılandırmalarını yükleyen servis
  */
+@Slf4j
 @Component
 @RequiredArgsConstructor
-@Slf4j
 public class CalculationConfigLoader {
 
     private final ObjectMapper objectMapper;
     private final TwoWayWindowAggregator aggregator;
+    private final ResourceLoader resourceLoader; // Inject ResourceLoader
     private final RuleEngineService ruleEngineService; // Inject RuleEngineService
 
     @Value("classpath:calculation-config.json")
@@ -96,35 +98,55 @@ public class CalculationConfigLoader {
     /**
      * Hesaplama kurallarını JSON'dan yükle
      */
-    private void loadCalculationRules(JsonNode rootNode) {
-        JsonNode rulesNode = rootNode.path("calculationRules");
-        if (rulesNode.isArray() && !rulesNode.isEmpty()) {
-            try {
-                // ObjectMapper'ı kullanarak doğrudan List<CalculationRuleDto>'ya dönüştür
-                loadedCalculationRules = objectMapper.convertValue(
-                    rulesNode, 
-                    new TypeReference<List<CalculationRuleDto>>() {}
-                );
-                log.info("{} adet hesaplama kuralı başarıyla yüklendi.", loadedCalculationRules.size());
-                for (CalculationRuleDto rule : loadedCalculationRules) {
-                    log.debug("Yüklenen kural: OutputSymbol={}, Strategy={}, Implementation={}", 
-                        rule.getOutputSymbol(), rule.getStrategyType(), rule.getImplementation());
-                }
-                // RuleEngineServiceImpl'e kuralları set et
-                if (ruleEngineService != null) {
-                    ruleEngineService.setCalculationRules(loadedCalculationRules);
-                    log.info("Hesaplama kuralları RuleEngineService'e set edildi.");
-                } else {
-                    log.warn("RuleEngineService is null, cannot set calculation rules.");
-                }
+  // CalculationConfigLoader içinde loadCalculationRules metodunu geliştirme
+private void loadCalculationRules(JsonNode rootNode) {
+    JsonNode rulesNode = rootNode.path("calculationRules");
+    if (rulesNode.isArray() && !rulesNode.isEmpty()) {
+        try {
+            // Log öncesi başlangıç
+            log.info("RULES-LOADING: {} adet hesaplama kuralı yükleniyor...", rulesNode.size());
+            
+            // ObjectMapper'ı kullanarak doğrudan List<CalculationRuleDto>'ya dönüştür
+            loadedCalculationRules = objectMapper.convertValue(
+                rulesNode, 
+                new TypeReference<List<CalculationRuleDto>>() {}
+            );
+            // Her kural için kısa log ve Groovy script kontrolü
+            for (CalculationRuleDto rule : loadedCalculationRules) {
+                log.info("RULE-LOADED: Çıktı={}, Strateji={}, Uygulama={}",
+                    rule.getOutputSymbol(),
+                    rule.getStrategyType(),
+                    rule.getImplementation());
 
-            } catch (IllegalArgumentException e) {
-                log.error("Hesaplama kuralları CalculationRuleDto listesine dönüştürülürken hata: {}", e.getMessage(), e);
-                loadedCalculationRules = Collections.emptyList();
+                if ("groovyScriptCalculationStrategy".equals(rule.getStrategyType())) {
+                    try {
+                        Resource scriptResource = resourceLoader.getResource("classpath:" + rule.getImplementation());
+                        if (!scriptResource.exists()) {
+                            log.error("SCRIPT-MISSING: '{}' betiği bulunamadı!", rule.getImplementation());
+                        }
+                    } catch (Exception e) {
+                        log.error("SCRIPT-ERROR: '{}' kontrol edilirken hata: {}", 
+                            rule.getImplementation(), e.getMessage());
+                    }
+                }
             }
-        } else {
-            log.warn("calculation-config.json dosyasında 'calculationRules' dizisi bulunamadı veya boş.");
+            
+            // RuleEngineService'e kuralları set et
+            if (ruleEngineService != null) {
+                ruleEngineService.setCalculationRules(loadedCalculationRules);
+                log.info("RULES-SET: {} adet hesaplama kuralı RuleEngineService'e başarıyla set edildi.", 
+                    loadedCalculationRules.size());
+            } else {
+                log.warn("RULES-ERROR: RuleEngineService null, kurallar set edilemedi!");
+            }
+        } catch (Exception e) {
+            log.error("RULES-PARSE-ERROR: Hesaplama kurallarını yüklerken hata: {}", e.getMessage(), e);
+            log.error("Detaylı hata:", e);
             loadedCalculationRules = Collections.emptyList();
         }
+    } else {
+        log.warn("RULES-MISSING: 'calculationRules' yapılandırması bulunamadı veya boş!");
+        loadedCalculationRules = Collections.emptyList();
     }
+}
 }

@@ -1,10 +1,12 @@
 package com.toyota.mainapp.aggregator;
 
 import com.toyota.mainapp.calculator.RateCalculatorService;
+import com.toyota.mainapp.dto.config.CalculationRuleDto;
 import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.dto.model.RateType;
 import com.toyota.mainapp.util.SymbolUtils;
 
+import com.toyota.mainapp.calculator.RuleEngineService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,11 +25,12 @@ import java.util.stream.Collectors;
 @Component
 @Slf4j
 public class TwoWayWindowAggregator {
-
     // Use field injection to break circular dependency
     @Autowired
     private RateCalculatorService rateCalculatorService;
-    
+
+    @Autowired
+    private RuleEngineService ruleEngineService;
     private final TaskScheduler taskScheduler;
 
     public TwoWayWindowAggregator(TaskScheduler taskScheduler) {
@@ -281,15 +284,52 @@ public class TwoWayWindowAggregator {
     /**
      * Toplanan kurlar için hesaplamayı tetikle
      */
-    private void triggerCalculation(Map<String, BaseRateDto> newlyCompletedRawRatesInWindow) { // Parameter changed
-        try {
-            // Pass the map where keys are providerSpecificSymbol
-            log.debug("Triggering calculation with {} raw rates: {}", newlyCompletedRawRatesInWindow.size(), newlyCompletedRawRatesInWindow.keySet());
-            rateCalculatorService.processWindowCompletion(newlyCompletedRawRatesInWindow);
-        } catch (Exception e) {
-            log.error("Hesaplama tetiklenirken hata: {}", e.getMessage(), e);
+    // TwoWayWindowAggregator içinde eklenecek veya değiştirilecek bölüm
+private void triggerCalculation(Map<String, BaseRateDto> newlyCompletedRawRatesInWindow) {
+    try {
+        // 1. Log all available rates for diagnosis
+        log.info("CALCULATION-TRIGGER: {} adet ham kur hesaplamaya gönderiliyor: {}", 
+                newlyCompletedRawRatesInWindow.size(), 
+                String.join(", ", newlyCompletedRawRatesInWindow.keySet()));
+                
+        // 2. Extract base symbols from the provider-specific symbols
+        Set<String> baseSymbols = newlyCompletedRawRatesInWindow.values().stream()
+                .map(rate -> deriveBaseSymbol(rate.getSymbol()))
+                .collect(Collectors.toSet());
+                
+        log.info("CALCULATION-SYMBOLS: Hesaplama için temel semboller: {}", 
+                String.join(", ", baseSymbols));
+                
+        // 3. Check if we have any calculation rules for these base symbols
+        boolean hasRules = false;
+        for (String baseSymbol : baseSymbols) {
+            List<CalculationRuleDto> rules = ruleEngineService.getRulesByInputBaseSymbol(baseSymbol);
+            if (rules != null && !rules.isEmpty()) {
+                hasRules = true;
+                log.info("CALCULATION-RULES: {} temel sembolü için {} hesaplama kuralı bulundu", 
+                        baseSymbol, rules.size());
+                
+            } else {
+                log.warn("CALCULATION-NO-RULES: {} temel sembolü için hesaplama kuralı bulunamadı", baseSymbol);
+            }
         }
+        
+        if (!hasRules) {
+            log.error("CALCULATION-FATAL: Hiçbir temel sembol ({}) için hesaplama kuralı bulunamadı!", 
+                    String.join(", ", baseSymbols));
+            // Burada manuel olarak varsayılan kural oluşturabilirsiniz
+            return;
+        }
+        
+        // 4. Now actually trigger the calculation with proper diagnostics
+        rateCalculatorService.processWindowCompletion(newlyCompletedRawRatesInWindow);
+        
+    } catch (Exception e) {
+        log.error("CALCULATION-ERROR: Hesaplama tetiklenirken hata: {}", e.getMessage(), e);
+        // Stack trace'i log'a ekleyin
+        log.error("Detaylı hata:", e);
     }
+}
     
     /**
      * Sağlayıcıya özgü sembolden temel sembolü türet

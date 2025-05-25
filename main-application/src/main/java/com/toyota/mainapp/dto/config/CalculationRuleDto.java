@@ -13,6 +13,7 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CalculationRuleDto {
+    private List<String> inputSymbols;
     private String outputSymbol;
     private String description;
     private String strategyType; // e.g., "JAVA_CLASS", "GROOVY_SCRIPT"

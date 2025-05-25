@@ -10,50 +10,163 @@ import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
-
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class KafkaConsumerService {
 
-    private final RateParser rateParser;
     private final PersistenceService persistenceService;
-    // private final RateDocumentRepository rateDocumentRepository; // Bu satırı kaldır
-
+    private final RateParser rateParser;
+    
+    // USDTRY listener
     @KafkaListener(
         topics = "${app.kafka.topic.simple-rates}",
-        groupId = "${app.kafka.consumer.group-id}"
+        groupId = "${app.kafka.consumer.group-id-usdtry}",
+        containerFactory = "kafkaListenerContainerFactory"
     )
-    public void consumeRates(String message, Acknowledgment acknowledgment) {
-        log.debug("Received message: {}", message);
-        
+    public void consumeUsdTryRates(String message, Acknowledgment acknowledgment) {
         try {
             Optional<RateEntity> entityOptional = rateParser.parseToEntity(message);
             
             if (entityOptional.isPresent()) {
                 RateEntity rateEntity = entityOptional.get();
                 
-                // PostgreSQL'e kaydet
-                RateEntity persistedEntity = persistenceService.saveRate(rateEntity);
-                log.info("Successfully persisted rate to PostgreSQL: {}", persistedEntity.getRateName());
-
-                // OpenSearch'e indeksleme kısmını kaldır
-                // RateDocument rateDocument = RateDocument.fromEntity(persistedEntity, null); 
-                // if (rateDocument != null) {
-                //     rateDocumentRepository.save(rateDocument);
-                //     log.info("Successfully indexed rate to OpenSearch: {}", rateDocument.getRateName());
-                // } else {
-                //     log.warn("RateDocument conversion resulted in null for entity: {}", persistedEntity.getRateName());
-                // }
-                
+                // Sadece USDTRY ile ilgili olanları işle
+                if (isUsdTryRate(rateEntity.getRateName())) {
+                    // PostgreSQL'e kaydet
+                    RateEntity persistedEntity = persistenceService.saveRate(rateEntity);
+                    log.info("USDTRY birim kaydedildi: {} - Bid: {}, Ask: {}", 
+                            persistedEntity.getRateName(), 
+                            persistedEntity.getBid(), 
+                            persistedEntity.getAsk());
+                    
+                    // Ortalamaysa özel işleme
+                    if (persistedEntity.getRateName().contains("_AVG")) {
+                        log.info("USDTRY ORTALAMA: {} - Bid: {}, Ask: {}", 
+                                persistedEntity.getRateName(), 
+                                persistedEntity.getBid(), 
+                                persistedEntity.getAsk());
+                    }
+                }
                 acknowledgment.acknowledge();
             } else {
-                log.warn("Message could not be parsed, skipping: '{}'", message);
-                acknowledgment.acknowledge(); // Ayrıştırılamayan mesajları acknowledge et (veya DLQ'ya gönder)
+                log.warn("Mesaj ayrıştırılamadı, atlanıyor: '{}'", message);
+                acknowledgment.acknowledge();
             }
         } catch (Exception e) {
-            log.error("Error processing or persisting message: '{}'. Not Acknowledging.", message, e);
-            // Acknowledge etme, Kafka'nın hata işleme mekanizmasını çalıştır (yeniden deneme, DLQ)
+            log.error("Mesaj işlenirken hata oluştu: '{}'. Acknowledge edilmiyor.", message, e);
+            // Burada acknowledge edilmezse, mesaj tekrar işlenecektir
         }
+    }
+    
+    // EURUSD listener
+   // EURTRY listener (önceki EURUSD)
+@KafkaListener(
+    topics = "${app.kafka.topic.simple-rates}",
+    groupId = "${app.kafka.consumer.group-id-eurtry}",  // Bu ID application.yml'de güncellendi
+    containerFactory = "kafkaListenerContainerFactory"
+)
+public void consumeEurTryRates(String message, Acknowledgment acknowledgment) {
+    try {
+        Optional<RateEntity> entityOptional = rateParser.parseToEntity(message);
+        
+        if (entityOptional.isPresent()) {
+            RateEntity rateEntity = entityOptional.get();
+            
+            // Sadece EURTRY ile ilgili olanları işle
+            if (isEurTryRate(rateEntity.getRateName())) {
+                // PostgreSQL'e kaydet
+                RateEntity persistedEntity = persistenceService.saveRate(rateEntity);
+                log.info("EURTRY birim kaydedildi: {} - Bid: {}, Ask: {}", 
+                        persistedEntity.getRateName(), 
+                        persistedEntity.getBid(), 
+                        persistedEntity.getAsk());
+                
+                // Ortalamaysa özel işleme
+                if (persistedEntity.getRateName().contains("_AVG")) {
+                    log.info("EURTRY ORTALAMA: {} - Bid: {}, Ask: {}", 
+                            persistedEntity.getRateName(), 
+                            persistedEntity.getBid(), 
+                            persistedEntity.getAsk());
+                }
+            }
+            acknowledgment.acknowledge();
+        } else {
+            log.warn("Mesaj ayrıştırılamadı, atlanıyor: '{}'", message);
+            acknowledgment.acknowledge();
+        }
+    } catch (Exception e) {
+        log.error("Mesaj işlenirken hata oluştu: '{}'. Acknowledge edilmiyor.", message, e);
+    }
+}
+
+
+    
+    // GBPTRY listener
+    @KafkaListener(
+        topics = "${app.kafka.topic.simple-rates}",
+        groupId = "${app.kafka.consumer.group-id-gbptry}",
+        containerFactory = "kafkaListenerContainerFactory"
+    )
+    public void consumeGbpTryRates(String message, Acknowledgment acknowledgment) {
+        try {
+            Optional<RateEntity> entityOptional = rateParser.parseToEntity(message);
+            
+            if (entityOptional.isPresent()) {
+                RateEntity rateEntity = entityOptional.get();
+                
+                // Sadece GBPTRY ve ilişkili olanları işle (GBPUSD ve ilgili çapraz kurları dahil)
+                if (isGbpRelatedRate(rateEntity.getRateName())) {
+                    // PostgreSQL'e kaydet
+                    RateEntity persistedEntity = persistenceService.saveRate(rateEntity);
+                    log.info("GBP ilişkili birim kaydedildi: {} - Bid: {}, Ask: {}", 
+                            persistedEntity.getRateName(), 
+                            persistedEntity.getBid(), 
+                            persistedEntity.getAsk());
+                    
+                    // GBPTRY ise özel işleme
+                    if (persistedEntity.getRateName().equals("GBPTRY_AVG") || 
+                        persistedEntity.getRateName().equals("GBP/TRY")) {
+                        log.info("GBPTRY ÇAPRAZ KUR: {} - Bid: {}, Ask: {}", 
+                                persistedEntity.getRateName(), 
+                                persistedEntity.getBid(), 
+                                persistedEntity.getAsk());
+                    }
+                }
+                acknowledgment.acknowledge();
+            } else {
+                log.warn("Mesaj ayrıştırılamadı, atlanıyor: '{}'", message);
+                acknowledgment.acknowledge();
+            }
+        } catch (Exception e) {
+            log.error("Mesaj işlenirken hata oluştu: '{}'. Acknowledge edilmiyor.", message, e);
+        }
+    }
+    
+    // Yardımcı Metodlar
+    private boolean isUsdTryRate(String rateName) {
+        return rateName.contains("USDTRY") || 
+               rateName.contains("USD/TRY") || 
+               rateName.contains("PF1_USDTRY") || 
+               rateName.contains("PF2_USDTRY");
+    }
+    
+   // Yardımcı metodu da değiştir:
+    private boolean isEurTryRate(String rateName) {
+    return rateName.contains("EURTRY") || 
+           rateName.contains("EUR/TRY") || 
+           rateName.contains("PF1_EURTRY") || 
+           rateName.contains("PF2_EURTRY") ||
+           // Çapraz kur hesaplanmış değerler için:
+           rateName.contains("EURTRY_AVG");
+}
+    
+    private boolean isGbpRelatedRate(String rateName) {
+        return rateName.contains("GBPTRY") || 
+               rateName.contains("GBP/TRY") || 
+               rateName.contains("GBPUSD") || 
+               rateName.contains("GBP/USD") || 
+               rateName.contains("PF1_GBPUSD") || 
+               rateName.contains("PF2_GBPUSD");
     }
 }

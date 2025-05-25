@@ -5,35 +5,56 @@ import com.toyota.mainapp.dto.common.InputRateInfo
 import java.math.BigDecimal
 import java.math.RoundingMode
 
-// These variables are injected by GroovyScriptCalculationStrategy:
-// cache (RateCacheService) - Still available but might not be needed for primary inputs
-// log (Logger)
-// outputSymbol (String, e.g., "EUR/TRY")
-// inputRates (Map<String, BaseRateDto>) // This map will contain EURUSD_AVG and USD/TRY_AVG
-// eurUsdAvgKey (String, from inputParameters, e.g., "EURUSD_AVG") 
-// usdTryAvgSourceKey (String, from inputParameters, e.g., "USD/TRY_AVG")
-// defaultScale (String, from inputParameters, e.g., "8")
+// Log all input variables at the start of the script
+log.info("EUR/TRY çapraz kur hesaplaması başlatılıyor: {}", outputSymbol)
+log.info("İşlem parametreleri: eurUsdAvgKey={}, usdTryAvgSourceKey={}, defaultScale={}",
+    eurUsdAvgKey, usdTryAvgSourceKey, defaultScale)
 
-log.info("EUR/TRY çapraz kur hesaplaması başlatılıyor: ${outputSymbol}")
-log.debug("Input parameters: eurUsdAvgKey=${eurUsdAvgKey}, usdTryAvgSourceKey=${usdTryAvgSourceKey}, defaultScale=${defaultScale}")
-log.debug("Available input rates: ${inputRates.keySet()}")
+// Log all available input rates for debugging
+if (inputRates) {
+    log.info("Kullanılabilir giriş kurları ({}): {}", inputRates.size(),
+        inputRates.keySet().join(", "))
+} else {
+    log.warn("EUR/TRY için inputRates null veya boş!")
+}
 
 def scale = defaultScale.toInteger()
 def roundingMode = RoundingMode.HALF_UP
 def calculationInputs = []
 
-// 1. Get USD/TRY average rate from inputRates map (passed by RuleEngine)
+// 1. Get USD/TRY average rate from inputRates map
 def usdTryAvgRate = inputRates.get(usdTryAvgSourceKey)
+log.debug("İlk bakışta USD/TRY kuru için {} anahtarı ile sonuç: {}", 
+    usdTryAvgSourceKey, usdTryAvgRate != null ? "BULUNDU" : "BULUNAMADI")
 
 if (!usdTryAvgRate) {
-    log.warn("EUR/TRY hesaplaması için gerekli ortalama USD/TRY kuru eksik: ${usdTryAvgSourceKey} (inputRates üzerinden alınamadı)")
-    log.debug("Available keys in inputRates: ${inputRates.keySet()}")
-    return null
+    // Try both with and without slash format
+    def altUsdTryKey = usdTryAvgSourceKey.contains("/") ? 
+        usdTryAvgSourceKey.replace("/", "") : 
+        usdTryAvgSourceKey.substring(0, 3) + "/" + usdTryAvgSourceKey.substring(3)
+    
+    log.info("USD/TRY kuru '{}' anahtarıyla bulunamadı, alternatif anahtar deneniyor: {}", 
+        usdTryAvgSourceKey, altUsdTryKey)
+    usdTryAvgRate = inputRates.get(altUsdTryKey)
+    
+    if (!usdTryAvgRate) {
+        log.error("EUR/TRY hesaplaması için gerekli ortalama USD/TRY kuru eksik: {} ve {} (inputRates üzerinden alınamadı)", 
+            usdTryAvgSourceKey, altUsdTryKey)
+        log.debug("Kullanılabilir anahtarlar: {}", inputRates.keySet().join(", "))
+        return null
+    }
+    log.info("USD/TRY kuru '{}' alternatif anahtarıyla BULUNDU", altUsdTryKey)
 }
+
 if (usdTryAvgRate.bid == null || usdTryAvgRate.ask == null) {
-    log.warn("USD/TRY_AVG rate (${usdTryAvgSourceKey}) has null bid/ask. Cannot calculate ${outputSymbol}.")
+    log.error("USD/TRY_AVG kuru ({}) için bid/ask değerleri null. {} hesaplanamıyor.", 
+        usdTryAvgSourceKey, outputSymbol)
     return null
 }
+
+log.info("USD/TRY Kuru BULUNDU: bid={}, ask={}, timestamp={}", 
+    usdTryAvgRate.bid, usdTryAvgRate.ask, usdTryAvgRate.timestamp)
+
 calculationInputs.add(
     InputRateInfo.builder()
         .symbol(usdTryAvgRate.symbol)
@@ -41,22 +62,43 @@ calculationInputs.add(
         .providerName(usdTryAvgRate.providerName ?: "Calculated")
         .bid(usdTryAvgRate.bid)
         .ask(usdTryAvgRate.ask)
-        .timestamp(usdTryAvgRate.timestamp) // Use the timestamp from the DTO
+        .timestamp(usdTryAvgRate.timestamp)
         .build()
 )
 
-// 2. Get EUR/USD average rate from inputRates map (passed by RuleEngine)
+// 2. Get EUR/USD average rate from inputRates map
 def eurUsdAvgRate = inputRates.get(eurUsdAvgKey)
+log.debug("İlk bakışta EUR/USD kuru için {} anahtarı ile sonuç: {}", 
+    eurUsdAvgKey, eurUsdAvgRate != null ? "BULUNDU" : "BULUNAMADI")
 
 if (!eurUsdAvgRate) {
-    log.warn("EUR/TRY hesaplaması için gerekli ortalama EUR/USD kuru eksik: ${eurUsdAvgKey} (inputRates üzerinden alınamadı)")
-    log.debug("Available keys in inputRates: ${inputRates.keySet()}")
-    return null
+    // Try both with and without slash format
+    def altEurUsdKey = eurUsdAvgKey.contains("/") ? 
+        eurUsdAvgKey.replace("/", "") : 
+        eurUsdAvgKey.substring(0, 3) + "/" + eurUsdAvgKey.substring(3)
+    
+    log.info("EUR/USD kuru '{}' anahtarıyla bulunamadı, alternatif anahtar deneniyor: {}", 
+        eurUsdAvgKey, altEurUsdKey)
+    eurUsdAvgRate = inputRates.get(altEurUsdKey)
+    
+    if (!eurUsdAvgRate) {
+        log.error("EUR/TRY hesaplaması için gerekli ortalama EUR/USD kuru eksik: {} ve {} (inputRates üzerinden alınamadı)", 
+            eurUsdAvgKey, altEurUsdKey)
+        log.debug("Kullanılabilir anahtarlar: {}", inputRates.keySet().join(", "))
+        return null
+    }
+    log.info("EUR/USD kuru '{}' alternatif anahtarıyla BULUNDU", altEurUsdKey)
 }
+
 if (eurUsdAvgRate.bid == null || eurUsdAvgRate.ask == null) {
-    log.warn("EUR/USD_AVG rate (${eurUsdAvgKey}) has null bid/ask. Cannot calculate ${outputSymbol}.")
+    log.error("EUR/USD_AVG kuru ({}) için bid/ask değerleri null. {} hesaplanamıyor.", 
+        eurUsdAvgKey, outputSymbol)
     return null
 }
+
+log.info("EUR/USD Kuru BULUNDU: bid={}, ask={}, timestamp={}", 
+    eurUsdAvgRate.bid, eurUsdAvgRate.ask, eurUsdAvgRate.timestamp)
+
 calculationInputs.add(
     InputRateInfo.builder()
         .symbol(eurUsdAvgRate.symbol)
@@ -64,7 +106,7 @@ calculationInputs.add(
         .providerName(eurUsdAvgRate.providerName ?: "Calculated")
         .bid(eurUsdAvgRate.bid)
         .ask(eurUsdAvgRate.ask)
-        .timestamp(eurUsdAvgRate.timestamp) // Use the timestamp from the DTO
+        .timestamp(eurUsdAvgRate.timestamp)
         .build()
 )
 
@@ -73,7 +115,7 @@ def calculatedBid = (eurUsdAvgRate.bid * usdTryAvgRate.bid).setScale(scale, roun
 def calculatedAsk = (eurUsdAvgRate.ask * usdTryAvgRate.ask).setScale(scale, roundingMode)
 def currentTimestamp = System.currentTimeMillis()
 
-log.info("Hesaplanan EUR/TRY (${outputSymbol}): Bid=${calculatedBid}, Ask=${calculatedAsk}")
+log.info("Hesaplanan EUR/TRY ({}): Bid={}, Ask={}", outputSymbol, calculatedBid, calculatedAsk)
 
 return [
     symbol: outputSymbol,

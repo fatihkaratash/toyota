@@ -17,8 +17,13 @@ public class KafkaConsumerConfig {
         ConcurrentKafkaListenerContainerFactory<String, String> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory);
-        // Enable manual acknowledgment mode
+        
+        // Manuel onaylama modu etkinleştir
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+        
+        // Paralel işlem için yapılandırma (isteğe bağlı)
+        factory.setConcurrency(3); // 3 paralel tüketici thread
+        
         return factory;
     }
 }
