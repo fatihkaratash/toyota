@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -38,9 +39,19 @@ public class RateDependencyManager {
             return;
         }
 
-        this.allRulesSortedByPriority.addAll(rules); // Assuming rules are already sorted
+        // Double-check sort the rules by priority as a safety measure
+        List<CalculationRuleDto> sortedRules = new ArrayList<>(rules);
+        sortedRules.sort(Comparator.comparing(CalculationRuleDto::getPriority));
+        
+        // Log the rules in their sorted order to verify
+        log.debug("Building dependency graph with rules in priority order:");
+        for (CalculationRuleDto rule : sortedRules) {
+            log.debug("  Rule: {} (priority: {})", rule.getOutputSymbol(), rule.getPriority());
+        }
+        
+        this.allRulesSortedByPriority.addAll(sortedRules);
 
-        for (CalculationRuleDto rule : rules) {
+        for (CalculationRuleDto rule : sortedRules) {
             if (rule.getDependsOnRaw() != null) {
                 for (String rawSymbolKey : rule.getDependsOnRaw()) {
                     directRawDependencies.computeIfAbsent(rawSymbolKey, k -> new ArrayList<>()).add(rule);
@@ -54,8 +65,36 @@ public class RateDependencyManager {
         }
         log.info("Built dependency graph. Raw dependencies: {}, Calculated dependencies: {}. Total rules: {}",
                 directRawDependencies.size(), directCalculatedDependencies.size(), allRulesSortedByPriority.size());
-        log.debug("Direct Raw Dependencies: {}", directRawDependencies);
-        log.debug("Direct Calculated Dependencies: {}", directCalculatedDependencies);
+        
+        // Add detailed logging of the dependency graph
+        logDependencyGraph();
+    }
+    
+    /**
+     * Logs detailed information about the dependency graph for debugging
+     */
+    private void logDependencyGraph() {
+        log.debug("=== Dependency Graph Details ===");
+        
+        // Log raw rate dependencies
+        log.debug("Raw rate dependencies:");
+        directRawDependencies.forEach((rawSymbol, dependentRules) -> {
+            String rulesList = dependentRules.stream()
+                .map(r -> r.getOutputSymbol() + " (priority: " + r.getPriority() + ")")
+                .collect(Collectors.joining(", "));
+            log.debug("  {} triggers: {}", rawSymbol, rulesList);
+        });
+        
+        // Log calculated rate dependencies
+        log.debug("Calculated rate dependencies:");
+        directCalculatedDependencies.forEach((calcSymbol, dependentRules) -> {
+            String rulesList = dependentRules.stream()
+                .map(r -> r.getOutputSymbol() + " (priority: " + r.getPriority() + ")")
+                .collect(Collectors.joining(", "));
+            log.debug("  {} triggers: {}", calcSymbol, rulesList);
+        });
+        
+        log.debug("================================");
     }
 
     /**

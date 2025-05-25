@@ -4,8 +4,8 @@ import com.toyota.mainapp.coordinator.callback.PlatformCallback;
 import com.toyota.mainapp.dto.model.ProviderRateDto;
 import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.subscriber.api.PlatformSubscriber;
+import com.toyota.mainapp.util.SubscriberUtils;
 import com.toyota.mainapp.dto.config.SubscriberConfigDto;
-import com.toyota.mainapp.subscriber.util.SubscriberUtils;
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.retry.Retry;

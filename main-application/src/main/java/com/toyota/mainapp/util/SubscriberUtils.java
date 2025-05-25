@@ -1,4 +1,4 @@
-package com.toyota.mainapp.subscriber.util;
+package com.toyota.mainapp.util;
 
 import com.toyota.mainapp.coordinator.callback.PlatformCallback;
 import com.toyota.mainapp.dto.model.BaseRateDto;

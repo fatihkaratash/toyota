@@ -7,6 +7,8 @@ import com.toyota.mainapp.dto.config.CalculationRuleDto;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
+import com.toyota.mainapp.util.SymbolUtils;
+
 
 // Add import for RateDependencyManager
 import com.toyota.mainapp.calculator.dependency.RateDependencyManager;
@@ -93,42 +95,9 @@ public class RuleEngineServiceImpl implements RuleEngineService {
                 .collect(Collectors.toList());
     }
     
-    private String deriveBaseSymbol(String providerSymbol) {
-        if (providerSymbol == null || providerSymbol.isEmpty()) {
-            log.warn("deriveBaseSymbol called with null or empty providerSymbol.");
-            return "";
-        }
-        // Handles symbols like "TCPProvider2_PF1_USDTRY" -> "USDTRY"
-        // or "RESTProvider1_EURUSD" -> "EURUSD"
-        // or "SOMEPROVIDER_USDTRY" -> "USDTRY"
-        int firstUnderscoreIndex = providerSymbol.indexOf('_');
-        if (firstUnderscoreIndex == -1) {
-            // No underscore, could be a direct base symbol or a misconfiguration.
-            // Or it could be a calculated symbol like "USD/TRY_AVG" which is already a base.
-            log.trace("No underscore in provider symbol '{}', returning as is for base symbol derivation.", providerSymbol);
-            return providerSymbol; 
-        }
-        
-        // Attempt to find the common base currency pair (e.g., USDTRY, EURUSD)
-        // This logic assumes the base currency pair is typically 6 characters (e.g., EURUSD)
-        // or includes a slash (e.g., EUR/TRY).
-        // A more robust solution might involve checking against a known list of base pairs
-        // or using a more consistent naming convention for provider-specific symbols.
-
-        String partAfterFirstUnderscore = providerSymbol.substring(firstUnderscoreIndex + 1);
-        // Example: "PF1_USDTRY" or "EURUSD" (if original was "PROVIDER_EURUSD")
-
-        int secondUnderscoreIndexInPart = partAfterFirstUnderscore.indexOf('_');
-        if (secondUnderscoreIndexInPart != -1) {
-            // Example: "PF1_USDTRY" -> "USDTRY"
-            return partAfterFirstUnderscore.substring(secondUnderscoreIndexInPart + 1);
-        } else {
-            // Example: "EURUSD" (from "PROVIDER_EURUSD") or "USDTRY" (from "PROVIDER_USDTRY")
-            // It could also be something like "PF1" if the symbol was "PROVIDER_PF1" (not a currency pair)
-            // For now, we return this part. If it's not a valid base symbol for rules, it won't match.
-            return partAfterFirstUnderscore;
-        }
-    }
+   private String deriveBaseSymbol(String providerSymbol) {
+    return SymbolUtils.deriveBaseSymbol(providerSymbol);
+}
 
     @Override
     public BaseRateDto executeRule(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates) {
@@ -187,7 +156,11 @@ public class RuleEngineServiceImpl implements RuleEngineService {
     public void setCalculationRules(List<CalculationRuleDto> rules) {
         this.activeRules.clear();
         if (rules != null) {
-            this.activeRules.addAll(rules);
+            // Sort rules by priority (lower value = higher priority) before adding to activeRules
+            List<CalculationRuleDto> sortedRules = new ArrayList<>(rules);
+            sortedRules.sort(Comparator.comparing(CalculationRuleDto::getPriority));
+            this.activeRules.addAll(sortedRules);
+            
             log.info("{} adet hesaplama kuralı RuleEngineService'e set edildi.", this.activeRules.size());
             if (rateDependencyManager != null) {
                 rateDependencyManager.buildDependencyGraph(this.activeRules);

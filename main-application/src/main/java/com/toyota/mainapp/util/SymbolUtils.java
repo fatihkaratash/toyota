@@ -1,0 +1,170 @@
+package com.toyota.mainapp.util;
+
+import lombok.extern.slf4j.Slf4j;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * Sembol formatlarını standartlaştırmak için yardımcı sınıf.
+ * İki tip sembol formatı vardır:
+ * 1. Ham Kurlar (Provider'dan Gelen): PROVIDERADI_BAZDOVIZKARŞITDOVIZ (örn: PF1_USDTRY, RESTPROVIDER_EURUSD)
+ * 2. Hesaplanmış Kurlar: BAZDOVIZKARŞITDOVIZ_HESAPLAMATİPİ (örn: USDTRY_AVG, EURUSD_DIRECT, EURTRY_CROSS)
+ */
+@Slf4j
+public class SymbolUtils {
+
+    // USDTRY veya USD/TRY formatındaki semboller için regex
+    private static final Pattern CURRENCY_PAIR_PATTERN = Pattern.compile("([A-Z]{3})/?([A-Z]{3})");
+    
+    // PROVIDERADI_BAZDOVIZKARŞITDOVIZ formatındaki semboller için regex (örn: PF1_USDTRY)
+    private static final Pattern RAW_RATE_PATTERN = Pattern.compile("([A-Za-z0-9]+)_([A-Z]{3})/?([A-Z]{3})");
+    
+    // BAZDOVIZKARŞITDOVIZ_HESAPLAMATİPİ formatındaki semboller için regex (örn: USDTRY_AVG)
+    private static final Pattern CALCULATED_RATE_PATTERN = Pattern.compile("([A-Z]{3})/?([A-Z]{3})_([A-Z]+)");
+    
+    /**
+     * Sembolden temel sembolü türetir (sağlayıcıyı ve hesaplama tipi soneklerini kaldırır)
+     * Örn: "PF1_USDTRY" -> "USDTRY" veya "USDTRY_AVG" -> "USDTRY" veya "USD/TRY" -> "USDTRY"
+     */
+    public static String deriveBaseSymbol(String symbol) {
+        if (symbol == null || symbol.isEmpty()) {
+            return "";
+        }
+        
+        // Ham kur formatı kontrolü (PROVIDERADI_BAZDOVIZKARŞITDOVIZ)
+        Matcher rawRateMatcher = RAW_RATE_PATTERN.matcher(symbol);
+        if (rawRateMatcher.matches()) {
+            String baseCurrency = rawRateMatcher.group(2);
+            String quoteCurrency = rawRateMatcher.group(3);
+            return baseCurrency + quoteCurrency;
+        }
+        
+        // Hesaplanmış kur formatı kontrolü (BAZDOVIZKARŞITDOVIZ_HESAPLAMATİPİ)
+        Matcher calculatedRateMatcher = CALCULATED_RATE_PATTERN.matcher(symbol);
+        if (calculatedRateMatcher.matches()) {
+            String baseCurrency = calculatedRateMatcher.group(1);
+            String quoteCurrency = calculatedRateMatcher.group(2);
+            return baseCurrency + quoteCurrency;
+        }
+        
+        // Para birimi çifti formatı (USDTRY veya USD/TRY)
+        Matcher currencyPairMatcher = CURRENCY_PAIR_PATTERN.matcher(symbol);
+        if (currencyPairMatcher.matches()) {
+            String baseCurrency = currencyPairMatcher.group(1);
+            String quoteCurrency = currencyPairMatcher.group(2);
+            return baseCurrency + quoteCurrency;
+        }
+        
+        // Eğer hiçbir formata uymuyorsa, sembolü olduğu gibi döndür
+        log.warn("Sembol formatı tanınmadı, olduğu gibi döndürülüyor: {}", symbol);
+        return symbol;
+    }
+    
+    /**
+     * Temel sembolden eğik çizgili formatı üretir
+     * Örn: "USDTRY" -> "USD/TRY"
+     */
+    public static String formatWithSlash(String baseSymbol) {
+        if (baseSymbol == null || baseSymbol.length() != 6) {
+            return baseSymbol;
+        }
+        
+        return baseSymbol.substring(0, 3) + "/" + baseSymbol.substring(3);
+    }
+    
+    /**
+     * Eğik çizgili sembolden temel sembolü üretir
+     * Örn: "USD/TRY" -> "USDTRY"
+     */
+    public static String removeSlash(String slashedSymbol) {
+        if (slashedSymbol == null) {
+            return null;
+        }
+        return slashedSymbol.replace("/", "");
+    }
+    
+    /**
+     * Bir sembolün format türünü belirler
+     */
+    public static SymbolFormatType determineSymbolFormat(String symbol) {
+        if (symbol == null || symbol.isEmpty()) {
+            return SymbolFormatType.UNKNOWN;
+        }
+        
+        if (RAW_RATE_PATTERN.matcher(symbol).matches()) {
+            return SymbolFormatType.RAW_RATE;
+        }
+        
+        if (CALCULATED_RATE_PATTERN.matcher(symbol).matches()) {
+            return SymbolFormatType.CALCULATED_RATE;
+        }
+        
+        if (CURRENCY_PAIR_PATTERN.matcher(symbol).matches()) {
+            return SymbolFormatType.CURRENCY_PAIR;
+        }
+        
+        return SymbolFormatType.UNKNOWN;
+    }
+    
+    /**
+     * Ham kur formatından sağlayıcı adını çıkarır
+     * Örn: "PF1_USDTRY" -> "PF1"
+     */
+    public static String extractProviderName(String rawRateSymbol) {
+        if (rawRateSymbol == null || rawRateSymbol.isEmpty()) {
+            return "";
+        }
+        
+        Matcher matcher = RAW_RATE_PATTERN.matcher(rawRateSymbol);
+        if (matcher.matches()) {
+            return matcher.group(1);
+        }
+        
+        // Eğer format uyuşmazsa null dön
+        return null;
+    }
+    
+    /**
+     * Hesaplanmış kur formatından hesaplama tipini çıkarır
+     * Örn: "USDTRY_AVG" -> "AVG"
+     */
+    public static String extractCalculationType(String calculatedRateSymbol) {
+        if (calculatedRateSymbol == null || calculatedRateSymbol.isEmpty()) {
+            return "";
+        }
+        
+        Matcher matcher = CALCULATED_RATE_PATTERN.matcher(calculatedRateSymbol);
+        if (matcher.matches()) {
+            return matcher.group(3);
+        }
+        
+        // Eğer format uyuşmazsa null dön
+        return null;
+    }
+    
+    /**
+     * Ham kur formatı oluşturur
+     * Örn: "PF1", "USDTRY" -> "PF1_USDTRY"
+     */
+    public static String createRawRateSymbol(String providerName, String baseSymbol) {
+        return providerName + "_" + baseSymbol;
+    }
+    
+    /**
+     * Hesaplanmış kur formatı oluşturur
+     * Örn: "USDTRY", "AVG" -> "USDTRY_AVG"
+     */
+    public static String createCalculatedRateSymbol(String baseSymbol, String calculationType) {
+        return baseSymbol + "_" + calculationType;
+    }
+    
+    /**
+     * Sembol format türleri
+     */
+    public enum SymbolFormatType {
+        RAW_RATE,           // PROVIDERADI_BAZDOVIZKARŞITDOVIZ (örn: PF1_USDTRY)
+        CALCULATED_RATE,    // BAZDOVIZKARŞITDOVIZ_HESAPLAMATİPİ (örn: USDTRY_AVG)
+        CURRENCY_PAIR,      // BAZDOVIZKARŞITDOVIZ veya BAZDOVIZ/KARŞITDOVIZ (örn: USDTRY veya USD/TRY)
+        UNKNOWN             // Bilinmeyen format
+    }
+}

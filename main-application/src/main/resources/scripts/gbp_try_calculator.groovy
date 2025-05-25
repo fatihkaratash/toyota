@@ -16,6 +16,7 @@ import java.math.RoundingMode
 
 log.info("GBP/TRY hesaplaması başlatılıyor: ${outputSymbol}")
 log.debug("Input parameters: gbpUsdAvgKey=${gbpUsdAvgKey}, usdTryAvgSourceKey=${usdTryAvgSourceKey}, defaultScale=${defaultScale}")
+log.debug("Available input rates: ${inputRates.keySet()}")
 
 def scale = defaultScale.toInteger()
 def roundingMode = RoundingMode.HALF_UP
@@ -26,6 +27,7 @@ def usdTryAvgRate = inputRates.get(usdTryAvgSourceKey)
 
 if (!usdTryAvgRate) {
     log.warn("GBP/TRY hesaplaması için gerekli ortalama USD/TRY kuru eksik: ${usdTryAvgSourceKey} (inputRates üzerinden alınamadı)")
+    log.debug("Available keys in inputRates: ${inputRates.keySet()}")
     return null
 }
 if (usdTryAvgRate.bid == null || usdTryAvgRate.ask == null) {
@@ -48,6 +50,7 @@ def gbpUsdAvgRate = inputRates.get(gbpUsdAvgKey)
 
 if (!gbpUsdAvgRate) {
     log.warn("GBP/TRY hesaplaması için gerekli ortalama GBP/USD kuru eksik: ${gbpUsdAvgKey} (inputRates üzerinden alınamadı)")
+    log.debug("Available keys in inputRates: ${inputRates.keySet()}")
     return null
 }
 if (gbpUsdAvgRate.bid == null || gbpUsdAvgRate.ask == null) {

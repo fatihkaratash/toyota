@@ -3,6 +3,7 @@ package com.toyota.mainapp.aggregator;
 import com.toyota.mainapp.calculator.RateCalculatorService;
 import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.dto.model.RateType;
+import com.toyota.mainapp.util.SymbolUtils;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -154,31 +155,52 @@ public class TwoWayWindowAggregator {
             // isTimeSkewAcceptable expects a map keyed by provider name
             if (isTimeSkewAcceptable(relevantRatesByProviderName, expectedProviderBaseNames)) { 
                 // Construct the map for RateCalculatorService, keyed by providerSpecificSymbol
-                Map<String, BaseRateDto> ratesForCalculatorService = relevantRatesByProviderName.values().stream()
-                    .collect(Collectors.toMap(
-                        BaseRateDto::getSymbol, // Key: providerSpecificSymbol
-                        rate -> rate,           // Value: BaseRateDto
-                        (rate1, rate2) -> {     // Merge function for rare duplicate providerSpecificSymbol
-                            log.warn("Duplicate providerSpecificSymbol {} encountered for baseSymbol {}. Using the first one.", rate1.getSymbol(), baseSymbol);
-                            return rate1;
-                        }
-                    ));
+                Map<String, BaseRateDto> ratesForCalculatorService = new HashMap<>();
+                for (BaseRateDto rate : relevantRatesByProviderName.values()) {
+                    // Clone the rate before adding to prevent window rates from being modified
+                    BaseRateDto clonedRate = cloneRateDto(rate);
+                    ratesForCalculatorService.put(rate.getSymbol(), clonedRate);
+                }
 
-                triggerCalculation(ratesForCalculatorService); 
+                // Trigger calculation with a copy of the rates, preserving originals
+                triggerCalculation(ratesForCalculatorService);
                 
-                // Remove the processed rates from the window using providerName
-                for (String providerName : expectedProviderBaseNames) {
-                    currentSymbolBucketByProviderName.remove(providerName);
+                // Mark these rates as processed without removing them
+                // This allows them to be used for other calculations that might need the same rates
+                // We'll track the last calculation time to know when to clean them up
+                for (BaseRateDto rate : relevantRatesByProviderName.values()) {
+                    rate.setLastCalculationTimestamp(System.currentTimeMillis());
                 }
-                if (currentSymbolBucketByProviderName.isEmpty()) {
-                    window.remove(baseSymbol);
-                }
-                log.info("Pencere {} için temizlendi ve hesaplama tetiklendi.", baseSymbol);
+                
+                log.info("Window için hesaplama tetiklendi, ancak kurlar korundu: {}", baseSymbol);
             } else {
                 log.warn("Zaman kayması {} için çok yüksek, hesaplama atlandı.", baseSymbol);
             }
         }
     }
+    
+    /**
+     * Create a clone of a BaseRateDto to avoid mutating window data
+     */
+    private BaseRateDto cloneRateDto(BaseRateDto original) {
+        // Create a basic clone with essential fields
+        BaseRateDto cloned = BaseRateDto.builder()
+            .symbol(original.getSymbol())
+            .bid(original.getBid())
+            .ask(original.getAsk())
+            .timestamp(original.getTimestamp())
+            .providerName(original.getProviderName())
+            .rateType(original.getRateType())
+            .build();
+            
+        // Copy other important fields if present
+        if (original.getCalculationInputs() != null) {
+            cloned.setCalculationInputs(new ArrayList<>(original.getCalculationInputs()));
+        }
+        
+        return cloned;
+    }
+    
     /**
      * Eski pencere verilerini temizle - zamanla oluşabilecek hafıza sızıntılarını önler
      */
@@ -200,8 +222,13 @@ public class TwoWayWindowAggregator {
                     Map.Entry<String, BaseRateDto> providerEntry = it.next();
                     BaseRateDto rate = providerEntry.getValue();
                     
-                    // Zaman damgası null veya çok eski olan kurları temizle
-                    if (rate.getTimestamp() == null || rate.getTimestamp() < staleCutoffTime) {
+                    // Check both original timestamp and last calculation timestamp (if it exists)
+                    Long lastCalcTime = rate.getLastCalculationTimestamp();
+                    boolean isStaleByTimestamp = rate.getTimestamp() == null || rate.getTimestamp() < staleCutoffTime;
+                    boolean isStaleByCalcTime = lastCalcTime != null && lastCalcTime < staleCutoffTime;
+                    
+                    // Zaman damgası null veya çok eski olan kurları ve ayrıca son hesaplama zamanı çok eski olanları temizle
+                    if (isStaleByTimestamp || isStaleByCalcTime) {
                         it.remove();
                         cleanedRates++;
                         log.debug("{} sembolü için {} sağlayıcısından eski kur temizlendi", 
@@ -268,15 +295,8 @@ public class TwoWayWindowAggregator {
      * Sağlayıcıya özgü sembolden temel sembolü türet
      */
     private String deriveBaseSymbol(String providerSymbol) {
-        if (providerSymbol == null) {
-            return null;
-        }
-        
-        int underscoreIndex = providerSymbol.indexOf('_');
-        String baseSymbol = underscoreIndex > 0 ? providerSymbol.substring(underscoreIndex + 1) : providerSymbol;
-        return baseSymbol;
+        return com.toyota.mainapp.util.SymbolUtils.deriveBaseSymbol(providerSymbol);
     }
-    
     /**
      * Bir temel sembol için beklenen sağlayıcıların listesini al
      */

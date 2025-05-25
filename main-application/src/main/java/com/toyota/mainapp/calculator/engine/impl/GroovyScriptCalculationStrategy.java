@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -61,7 +62,10 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
             binding.setVariable("cache", this.rateCacheService); // Injected cache service
             binding.setVariable("log", log); // This class's logger is passed to the script
             binding.setVariable("outputSymbol", rule.getOutputSymbol());
-            binding.setVariable("inputRates", inputRates); // Pass the input rates directly to the script
+            
+            // Convert input rates to ensure symbol consistency for scripts
+            Map<String, BaseRateDto> adaptedInputRates = adaptInputRatesForScript(inputRates);
+            binding.setVariable("inputRates", adaptedInputRates); // Pass adapted rates to the script
             
             if (rule.getInputParameters() != null) {
                 rule.getInputParameters().forEach(binding::setVariable);
@@ -174,5 +178,46 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
             log.warn("Long'a dönüştürülemedi: {}. Varsayılan kullanılıyor: {}", value, defaultValue, e);
             return defaultValue;
         }
+    }
+
+    /**
+     * Adapts input rates map to ensure symbol format consistency for scripts
+     * Using SymbolUtils to convert between formats
+     */
+    private Map<String, BaseRateDto> adaptInputRatesForScript(Map<String, BaseRateDto> originalInputRates) {
+        Map<String, BaseRateDto> adaptedRates = new HashMap<>();
+        
+        // First pass: add all original entries
+        adaptedRates.putAll(originalInputRates);
+        
+        // Second pass: add entries with alternative symbols (add but don't replace)
+        for (Map.Entry<String, BaseRateDto> entry : originalInputRates.entrySet()) {
+            String originalKey = entry.getKey();
+            BaseRateDto rate = entry.getValue();
+            
+            // Skip empty keys
+            if (originalKey == null || originalKey.isEmpty()) {
+                continue;
+            }
+            
+            // Add both slashed and unslashed versions for compatibility
+            if (!originalKey.contains("/")) {
+                // Add version with slashes for scripts that expect it
+                String slashedSymbol = com.toyota.mainapp.util.SymbolUtils.formatWithSlash(originalKey);
+                if (!originalKey.equals(slashedSymbol) && !adaptedRates.containsKey(slashedSymbol)) {
+                    adaptedRates.put(slashedSymbol, rate);
+                    log.debug("Added alternative slashed symbol mapping: {} -> {}", originalKey, slashedSymbol);
+                }
+            } else {
+                // Add version without slashes for scripts that expect it
+                String unslashedSymbol = com.toyota.mainapp.util.SymbolUtils.removeSlash(originalKey);
+                if (!adaptedRates.containsKey(unslashedSymbol)) {
+                    adaptedRates.put(unslashedSymbol, rate);
+                    log.debug("Added alternative unslashed symbol mapping: {} -> {}", originalKey, unslashedSymbol);
+                }
+            }
+        }
+        
+        return adaptedRates;
     }
 }

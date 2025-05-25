@@ -1,6 +1,7 @@
 package com.toyota.mainapp.dto.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.toyota.mainapp.dto.model.InputRateInfo;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -88,5 +89,21 @@ public class BaseRateDto {
         ACTIVE,
         PENDING,
         ERROR
+    }
+    
+    /**
+     * Last used timestamp for calculations (for window management)
+     */
+    private Long lastCalculationTimestamp;
+    public boolean isCalculatedRate() {
+        return RateType.CALCULATED.equals(this.rateType);
+    }
+    
+    /**
+     * Bu kurun ham bir kur olup olmadığını kontrol eder
+     * @return true eğer ham kursa, false değilse
+     */
+    public boolean isRawRate() {
+        return RateType.RAW.equals(this.rateType);
     }
 }
