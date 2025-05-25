@@ -117,8 +117,11 @@ def currentTimestamp = System.currentTimeMillis()
 
 log.info("Hesaplanan EUR/TRY ({}): Bid={}, Ask={}", outputSymbol, calculatedBid, calculatedAsk)
 
+// Make sure we're always using the expected format
+String finalOutputSymbol = outputSymbol ?: "EUR/TRY"
+
 return [
-    symbol: outputSymbol,
+    symbol: finalOutputSymbol,
     bid: calculatedBid,
     ask: calculatedAsk,
     rateTimestamp: currentTimestamp,

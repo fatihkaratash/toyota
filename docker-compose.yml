@@ -61,9 +61,9 @@ services:
     container_name: postgres
     hostname: postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
-      POSTGRES_DB: ${POSTGRES_DB:-financialdata}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pgadmin
+      POSTGRES_DB: toyota_rates
     ports:
       - "5432:5432"
     volumes:
@@ -187,9 +187,9 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       SERVER_PORT: 8084 # Eğer bir API sunuyorsa (genellikle sunmaz)
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-financialdata}
-      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-user}
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/toyota_rates
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: pgadmin
       SPRING_ELASTICSEARCH_URIS: http://opensearch:9200 # Veya spring.opensearch.uris
       OPENSEARCH_USERNAME: ${OPENSEARCH_USERNAME:-}
       OPENSEARCH_PASSWORD: ${OPENSEARCH_PASSWORD:-}

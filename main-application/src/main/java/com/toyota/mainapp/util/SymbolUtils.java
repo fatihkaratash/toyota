@@ -143,6 +143,29 @@ public class SymbolUtils {
     }
     
     /**
+     * Alternative symbol check - checks if two symbols represent the same currency pair
+     * regardless of format (e.g., "EURTRY" and "EUR/TRY")
+     * @param symbol1 First symbol
+     * @param symbol2 Second symbol 
+     * @return true if symbols represent the same currency pair
+     */
+    public static boolean symbolsEquivalent(String symbol1, String symbol2) {
+        if (symbol1 == null || symbol2 == null) {
+            return false;
+        }
+        
+        // First try direct comparison
+        if (symbol1.equals(symbol2)) {
+            return true;
+        }
+        
+        // Try with/without slash comparison
+        String symbol1Base = removeSlash(symbol1);
+        String symbol2Base = removeSlash(symbol2);
+        return symbol1Base.equals(symbol2Base);
+    }
+    
+    /**
      * Ham kur formatı oluşturur
      * Örn: "PF1", "USDTRY" -> "PF1_USDTRY"
      */

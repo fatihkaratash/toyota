@@ -171,12 +171,25 @@ public class KafkaPublishingService {
      * Belirli bir hesaplanmış kurun basit metin formatında gönderilip gönderilmeyeceğini belirler
      */
    private boolean shouldSendCalculatedRateToSimpleTopic(BaseRateDto calculatedRate) {
+        if (calculatedRate == null || calculatedRate.getSymbol() == null) {
+            return false;
+        }
+        
         String symbol = calculatedRate.getSymbol();
-        // AVG içeren veya _AVG ile biten hesaplanmış kurları VE belirli çapraz kurları gönder
-        return symbol.contains("AVG") || 
-               symbol.endsWith("_AVG") ||
-               "EUR/TRY".equals(symbol) || 
-               "GBP/TRY".equals(symbol);
+        
+        // AVG içeren veya _AVG ile biten hesaplanmış kurları gönder
+        if (symbol.contains("AVG") || symbol.endsWith("_AVG")) {
+            return true;
+        }
+        
+        // Check for both slashed and non-slashed formats of cross rates using our utility
+        if (com.toyota.mainapp.util.SymbolUtils.symbolsEquivalent("EUR/TRY", symbol) ||
+            com.toyota.mainapp.util.SymbolUtils.symbolsEquivalent("GBP/TRY", symbol)) {
+            log.debug("Cross rate detected for simple topic: {}", symbol);
+            return true;
+        }
+        
+        return false;
     }
  
     /**
