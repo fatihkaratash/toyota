@@ -1,4 +1,4 @@
-package com.toyota.market.trend;
+package com.toyota.market.trend.core;
 
 /**
  * Represents different market trend modes that can be simulated.

@@ -1,4 +1,4 @@
-package com.toyota.market.trend;
+package com.toyota.market.trend.core;
 
 /**
  * Configuration parameters for market trend simulation.
@@ -12,8 +12,8 @@ public class TrendConfiguration {
     }
     
     public TrendConfiguration(MarketTrendMode mode, double strength) {
-        this.currentMode = mode;
-        setCurrentStrength(strength); // Use setter to validate
+        this.currentMode = mode != null ? mode : MarketTrendMode.NEUTRAL;
+        setCurrentStrength(strength); // Use setter for validation
     }
     
     public MarketTrendMode getCurrentMode() {
@@ -37,6 +37,15 @@ public class TrendConfiguration {
         } else {
             this.currentStrength = currentStrength;
         }
+    }
+    
+    /**
+     * Creates a copy of this configuration
+     * 
+     * @return A new TrendConfiguration with the same values
+     */
+    public TrendConfiguration copy() {
+        return new TrendConfiguration(this.currentMode, this.currentStrength);
     }
     
     @Override
