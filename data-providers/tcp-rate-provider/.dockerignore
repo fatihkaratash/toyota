@@ -1,0 +1,16 @@
+# Maven/Java specific
+**/target/
+**/*.class
+
+# Logs
+**/logs/
+
+# IDE specific
+**/.idea/
+**/.vscode/
+**/*.iml
+
+# Keep only what's needed
+!**/src/
+!**/pom.xml
+!**/config/

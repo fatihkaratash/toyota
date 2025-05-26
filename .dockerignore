@@ -1,0 +1,8 @@
+# General files to ignore
+.git/
+.idea/
+.vscode/
+**/.DS_Store
+**/*.log
+logs/
+.history/

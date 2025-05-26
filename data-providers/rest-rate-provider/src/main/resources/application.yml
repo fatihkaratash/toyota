@@ -1,0 +1,21 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: rest-rate-provider
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
+
+logging:
+  level:
+    root: INFO
+    com.toyota: INFO
+
+rate:
+  simulation:
+    volatility: ${RATE_SIMULATION_VOLATILITY:0.001}
+    minSpread: ${RATE_SIMULATION_MIN_SPREAD:0.0001}
+    maxRetries: ${RATE_SIMULATION_MAX_RETRIES:10}
