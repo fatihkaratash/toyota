@@ -2,6 +2,8 @@ package com.toyota.mainapp.calculator;
 
 import com.toyota.mainapp.cache.RateCacheService;
 import com.toyota.mainapp.calculator.dependency.RateDependencyManager;
+import com.toyota.mainapp.calculator.collector.CrossRateCollector;
+import com.toyota.mainapp.calculator.collector.CrossRateCalculationCallback;
 import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.dto.config.CalculationRuleDto;
 import com.toyota.mainapp.dto.model.RateType;
@@ -9,25 +11,27 @@ import com.toyota.mainapp.dto.model.InputRateInfo;
 import com.toyota.mainapp.kafka.KafkaPublishingService;
 import com.toyota.mainapp.mapper.RateMapper;
 import com.toyota.mainapp.util.SymbolUtils;
+import com.toyota.mainapp.util.RateCalculationUtils;
 
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.*;
 import java.util.stream.Collectors;
+import jakarta.annotation.PostConstruct; // Changed from javax to jakarta
 
 /**
  * Service for calculating derived rates from raw rates
  */
 @Service
 @Slf4j
-public class RateCalculatorService {
-
+public class RateCalculatorService implements CrossRateCalculationCallback {
     private final RateCacheService rateCacheService;
     private final RuleEngineService ruleEngineService;
     private final RateMapper rateMapper;
@@ -35,18 +39,34 @@ public class RateCalculatorService {
     
     // Break circular dependency with setter injection
     private KafkaPublishingService sequentialPublisher;
-
-    public RateCalculatorService(RateCacheService rateCacheService,
-                                RuleEngineService ruleEngineService,
-                                RateMapper rateMapper,
-                                RateDependencyManager rateDependencyManager) { 
+    
+    // Use @Lazy to break circular dependency
+    private final CrossRateCollector crossRateCollector;
+    
+    public RateCalculatorService(
+            RateCacheService rateCacheService,
+            RuleEngineService ruleEngineService,
+            RateMapper rateMapper,
+            RateDependencyManager rateDependencyManager,
+            @Lazy CrossRateCollector crossRateCollector) { 
         this.rateCacheService = rateCacheService;
         this.ruleEngineService = ruleEngineService;
         this.rateMapper = rateMapper;
-        this.rateDependencyManager = rateDependencyManager; 
+        this.rateDependencyManager = rateDependencyManager;
+        this.crossRateCollector = crossRateCollector;
         log.info("RateCalculatorService initialized");
     }
     
+    @PostConstruct
+    public void init() {
+        // Register this service as the calculation callback with the collector
+        if (crossRateCollector != null) {
+            crossRateCollector.setCalculationCallback(this);
+            log.info("RateCalculatorService registered as callback with CrossRateCollector");
+        } else {
+            log.warn("CrossRateCollector is null, callback not registered");
+        }
+    }
     @Autowired
     public void setSequentialPublisher(KafkaPublishingService sequentialPublisher) {
         this.sequentialPublisher = sequentialPublisher;
@@ -58,153 +78,145 @@ public class RateCalculatorService {
      * This method will find rules triggered by these raw rates and attempt to execute them.
      * @param newlyCompletedRawRatesInWindow A map of providerSpecificSymbol to BaseRateDto.
      */
-   @CircuitBreaker(name = "calculatorService")
-@Retry(name = "calculatorRetry")
-public void processWindowCompletion(Map<String, BaseRateDto> newlyCompletedRawRatesInWindow) {
-    if (newlyCompletedRawRatesInWindow == null || newlyCompletedRawRatesInWindow.isEmpty()) {
-        log.warn("processWindowCompletion boş/null pencere ile çağrıldı");
-        return;
-    }
-    
-    log.info("Processing window completion with {} raw rates: {}", 
-            newlyCompletedRawRatesInWindow.size(),
-            newlyCompletedRawRatesInWindow.keySet());
-    
-    // Güvenlik ek kontrolü: Tüm giriş kurlarının RAW tipinde olduğundan emin olalım
-    for (Map.Entry<String, BaseRateDto> entry : newlyCompletedRawRatesInWindow.entrySet()) {
-        if (entry.getValue().getRateType() != RateType.RAW) {
-            log.warn("processWindowCompletion içinde RAW olmayan kur bulundu, düzeltiliyor: {} (tip={})", 
-                    entry.getKey(), entry.getValue().getRateType());
-            entry.getValue().setRateType(RateType.RAW);
+    @CircuitBreaker(name = "calculatorService")
+    @Retry(name = "calculatorRetry")
+    public void processWindowCompletion(Map<String, BaseRateDto> newlyCompletedRawRatesInWindow) {
+        if (newlyCompletedRawRatesInWindow == null || newlyCompletedRawRatesInWindow.isEmpty()) {
+            log.warn("processWindowCompletion boş/null pencere ile çağrıldı");
+            return;
         }
-    }
+        
+        log.info("Processing window completion with {} raw rates", newlyCompletedRawRatesInWindow.size());
+        
+        // Ensure all input rates are RAW type
+        for (BaseRateDto rate : newlyCompletedRawRatesInWindow.values()) {
+            if (rate.getRateType() != RateType.RAW) {
+                log.warn("Fixing non-RAW rate type in window: {}", rate.getSymbol());
+                rate.setRateType(RateType.RAW);
+            }
+        }
 
-    // İLK SORUN BURADA: Sembol dönüşümleri başlangıçta yapılmalı
-    // Ham kurları temel sembol haritasına gruplayarak organize edelim
-    Map<String, List<BaseRateDto>> ratesByBaseSymbol = new HashMap<>();
-    
-    for (Map.Entry<String, BaseRateDto> entry : newlyCompletedRawRatesInWindow.entrySet()) {
-        String providerSpecificSymbol = entry.getKey();
-        BaseRateDto rate = entry.getValue();
+        // Group rates by base symbol
+        Map<String, List<BaseRateDto>> ratesByBaseSymbol = groupRatesByBaseSymbol(newlyCompletedRawRatesInWindow);
         
-        // Temel sembolü çıkart (PF1_USDTRY -> USDTRY)
-        String baseSymbol = SymbolUtils.deriveBaseSymbol(providerSpecificSymbol);
+        // Find rules to trigger
+        Set<CalculationRuleDto> triggeredRules = findTriggeredRules(ratesByBaseSymbol.keySet());
         
-        // Temel sembole göre grupla
-        ratesByBaseSymbol
-            .computeIfAbsent(baseSymbol, k -> new ArrayList<>())
-            .add(rate);
-            
-        log.debug("Ham kur gruplandı: {} -> temel sembol: {}", providerSpecificSymbol, baseSymbol);
-    }
-    
-    // ŞİMDİ TEMEL SEMBOL BAZINDA KURALLARA BAKALIM
-    Set<CalculationRuleDto> triggeredRules = new HashSet<>();
-    
-    // Her temel sembol için kuralları kontrol et
-    for (String baseSymbol : ratesByBaseSymbol.keySet()) {
-        List<CalculationRuleDto> rules = ruleEngineService.getRulesByInputBaseSymbol(baseSymbol);
-        
-        if (rules != null && !rules.isEmpty()) {
-            log.info("Temel sembol {} için {} hesaplama kuralı bulundu", baseSymbol, rules.size());
-            triggeredRules.addAll(rules);
-        } else {
-            log.debug("Temel sembol {} için hesaplama kuralı bulunamadı", baseSymbol);
+        if (triggeredRules.isEmpty()) {
+            log.info("No calculation rules triggered by the completed window");
+            return;
         }
+        
+        // Calculate each triggered rule
+        for (CalculationRuleDto rule : triggeredRules) {
+            calculateRateFromRule(rule, newlyCompletedRawRatesInWindow);
+        }
+
+        // Process any pending cross rate calculations
+        if (crossRateCollector != null) {
+            crossRateCollector.processAllPendingChainCalculations();
+        } 
     }
-    
-    if (triggeredRules.isEmpty()) {
-        log.info("No calculation rules triggered by the completed window for symbols: {}", 
-                newlyCompletedRawRatesInWindow.keySet());
-        return;
-    }
-    
-    log.info("Tetiklenen hesaplama kuralları: {}", 
-            triggeredRules.stream().map(CalculationRuleDto::getOutputSymbol).collect(Collectors.joining(", ")));
-    
-    // Tetiklenen her kural için hesaplama yap
-    for (CalculationRuleDto rule : triggeredRules) {
-        calculateRateFromRule(rule, newlyCompletedRawRatesInWindow);
-    }
-}
     
     /**
-     * Check if a rule depends only on raw rates (no calculated rates)
+     * Groups rates by their base symbol
      */
-    private boolean dependsOnlyOnRawRates(CalculationRuleDto rule) {
-        return rule.getDependsOnCalculated() == null || rule.getDependsOnCalculated().isEmpty();
+    private Map<String, List<BaseRateDto>> groupRatesByBaseSymbol(Map<String, BaseRateDto> rates) {
+        Map<String, List<BaseRateDto>> ratesByBaseSymbol = new HashMap<>();
+        
+        for (Map.Entry<String, BaseRateDto> entry : rates.entrySet()) {
+            String providerSpecificSymbol = entry.getKey();
+            BaseRateDto rate = entry.getValue();
+            String baseSymbol = SymbolUtils.deriveBaseSymbol(providerSpecificSymbol);
+            
+            ratesByBaseSymbol
+                .computeIfAbsent(baseSymbol, k -> new ArrayList<>())
+                .add(rate);
+        }
+        
+        return ratesByBaseSymbol;
+    }
+    
+    /**
+     * Find rules triggered by the given base symbols
+     */
+    private Set<CalculationRuleDto> findTriggeredRules(Set<String> baseSymbols) {
+        Set<CalculationRuleDto> triggeredRules = new HashSet<>();
+        
+        for (String baseSymbol : baseSymbols) {
+            List<CalculationRuleDto> rules = ruleEngineService.getRulesByInputBaseSymbol(baseSymbol);
+            
+            if (rules != null && !rules.isEmpty()) {
+                log.info("Found {} calculation rules for base symbol {}", rules.size(), baseSymbol);
+                triggeredRules.addAll(rules);
+            }
+        }
+        
+        return triggeredRules;
     }
     
     /**
      * Calculate a single rate using the provided rule and aggregated data
+     * Now implements CrossRateCalculationCallback interface
      */
-    private void calculateRateFromRule(CalculationRuleDto rule, Map<String, BaseRateDto> aggregatedRates) {
+    @Override
+    public boolean calculateRateFromRule(CalculationRuleDto rule, Map<String, BaseRateDto> aggregatedRates) {
         try {
             log.debug("Executing calculation rule: {}", rule.getOutputSymbol());
             
-            if (aggregatedRates.isEmpty()) {
+            if (aggregatedRates == null || aggregatedRates.isEmpty()) {
                 log.warn("No aggregated rates available for calculation: {}", rule.getOutputSymbol());
-                return;
+                return false;
             }
             
-            // Create calculated rate DTO
-            BaseRateDto calculatedRate = BaseRateDto.builder()
-                .rateType(RateType.CALCULATED)
-                .symbol(rule.getOutputSymbol())
-                .timestamp(System.currentTimeMillis())
-                .build();
-            
-            // Simple average calculation for bid and ask 
-            BigDecimal totalBid = BigDecimal.ZERO;
-            BigDecimal totalAsk = BigDecimal.ZERO;
-            List<InputRateInfo> inputs = new ArrayList<>();
-            
-            // Process each provider's data
-            for (Map.Entry<String, BaseRateDto> entry : aggregatedRates.entrySet()) {
-                BaseRateDto rate = entry.getValue();
-                
-                // Validate rates before using in calculation
-                if (rate.getBid() != null && rate.getAsk() != null) {
-                    totalBid = totalBid.add(rate.getBid());
-                    totalAsk = totalAsk.add(rate.getAsk());
+            // Use the utility for average calculation
+            Optional<RateCalculationUtils.AverageResult> avgResult = 
+                    RateCalculationUtils.calculateAverage(aggregatedRates);
                     
-                    // Track input sources
-                    inputs.add(new InputRateInfo(
-                        rate.getSymbol(),
-                        rate.getRateType().name(),
-                        rate.getProviderName(),
-                        rate.getBid(),
-                        rate.getAsk(),
-                        rate.getTimestamp()
-                    ));
-                } else {
-                    log.warn("Skipping rate with null bid/ask in calculation. Provider: {}, Symbol: {}",
-                          rate.getProviderName(), rate.getSymbol());
-                }
-            }
-            
-            // Calculate average if we have data
-            int validRateCount = inputs.size();
-            if (validRateCount > 0) {
-                calculatedRate.setBid(totalBid.divide(BigDecimal.valueOf(validRateCount), 6, RoundingMode.HALF_UP));
-                calculatedRate.setAsk(totalAsk.divide(BigDecimal.valueOf(validRateCount), 6, RoundingMode.HALF_UP));
-                calculatedRate.setCalculationInputs(inputs);
-                calculatedRate.setCalculatedByStrategy("AVERAGE");
-                
-                // Cache the calculated rate
-                rateCacheService.cacheCalculatedRate(calculatedRate);
-                
-                // Publish to Kafka
-                sequentialPublisher.publishRate(calculatedRate);
-                
-                log.info("Successfully calculated and published rate: {} using {} input rates", 
-                      calculatedRate.getSymbol(), validRateCount);
-            } else {
+            if (avgResult.isEmpty()) {
                 log.warn("Could not calculate rate: {}. No valid inputs available.", rule.getOutputSymbol());
+                return false;
             }
             
+            // Create the rate DTO from the result
+            BaseRateDto calculatedRate = RateCalculationUtils.createAverageRate(
+                    rule.getOutputSymbol(), 
+                    avgResult.get(), 
+                    "AVERAGE");
+            
+            // Cache the calculated rate
+            rateCacheService.cacheCalculatedRate(calculatedRate);
+            
+            // Publish to Kafka
+            if (sequentialPublisher != null) {
+                sequentialPublisher.publishRate(calculatedRate);
+            } else {
+                log.warn("Publisher not available, rate not published: {}", rule.getOutputSymbol());
+            }
+            
+            log.info("Successfully calculated rate: {} using {} inputs", 
+                    calculatedRate.getSymbol(), avgResult.get().validRateCount());
+            
+            // Process chain calculations if this is a base rate (not a cross rate)
+            if (crossRateCollector != null && !RateCalculationUtils.isCrossRate(calculatedRate.getSymbol())) {
+                crossRateCollector.processChainCalculationsForRate(calculatedRate);
+            }
+            
+            return true;
         } catch (Exception e) {
             log.error("Error calculating rate for rule {}: {}", rule.getOutputSymbol(), e.getMessage(), e);
+            return false;
         }
+    }
+    
+    /**
+     * Check if a symbol is a cross rate (like EUR/TRY or GBP/TRY)
+     */
+    private boolean isCrossRate(String symbol) {
+        if (symbol == null) return false;
+        
+        String normalized = symbol.toUpperCase().replace("/", "");
+        return normalized.contains("TRY") && 
+              (normalized.contains("EUR") || normalized.contains("GBP"));
     }
 }

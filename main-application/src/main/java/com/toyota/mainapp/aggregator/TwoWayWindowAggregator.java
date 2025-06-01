@@ -25,16 +25,18 @@ import java.util.stream.Collectors;
 @Component
 @Slf4j
 public class TwoWayWindowAggregator {
-    // Use field injection to break circular dependency
-    @Autowired
-    private RateCalculatorService rateCalculatorService;
-
-    @Autowired
-    private RuleEngineService ruleEngineService;
+    
+    private final RateCalculatorService rateCalculatorService;
+    private final RuleEngineService ruleEngineService;
     private final TaskScheduler taskScheduler;
 
-    public TwoWayWindowAggregator(TaskScheduler taskScheduler) {
+    public TwoWayWindowAggregator(
+            TaskScheduler taskScheduler,
+            RateCalculatorService rateCalculatorService,
+            RuleEngineService ruleEngineService) {
         this.taskScheduler = taskScheduler;
+        this.rateCalculatorService = rateCalculatorService;
+        this.ruleEngineService = ruleEngineService;
         log.info("TwoWayWindowAggregator initialized");
     }
     
@@ -81,104 +83,75 @@ public class TwoWayWindowAggregator {
      * Accept a new rate and process it through the aggregator
      */
     public void accept(BaseRateDto baseRateDto) {
-        if (baseRateDto == null) {
-            log.warn("Toplayıcıya null BaseRateDto geldi, işlem yapılmıyor");
+        // Skip invalid or non-raw rates
+        if (baseRateDto == null || baseRateDto.getRateType() != RateType.RAW) {
+            log.debug("Skipping non-raw or null rate: {}", 
+                      baseRateDto != null ? baseRateDto.getRateType() : "null");
             return;
         }
         
-        // Check if this is a raw rate - we only process raw rates
-        if (baseRateDto.getRateType() != RateType.RAW) {
-            log.debug("RAW olmayan kur toplayıcıya geldi, işlenmiyor: {}", baseRateDto.getRateType());
-            return;
-        }
-        
-        // Extract the base symbol from provider-specific symbol
-        String providerSymbol = baseRateDto.getSymbol();
         String providerName = baseRateDto.getProviderName();
+        String baseSymbol = deriveBaseSymbol(baseRateDto.getSymbol());
         
-        // Derive base symbol (e.g., "PF1_USDTRY" -> "USDTRY")
-        String baseSymbol = deriveBaseSymbol(providerSymbol);
+        // Store rate in window and check for calculation readiness
+        Map<String, BaseRateDto> symbolBucket = window.computeIfAbsent(baseSymbol, k -> new ConcurrentHashMap<>());
+        symbolBucket.put(providerName, baseRateDto);
         
-        log.info("Toplayıcı kur aldı: sağlayıcı={}, orijinal sembol={}, temelSembol={}",
-                providerName, providerSymbol, baseSymbol);
-        
-        // Add debug info about expected providers
+        // Check if we have all expected providers
         List<String> expectedProviders = getExpectedProviders(baseSymbol);
-        log.debug("Beklenen sağlayıcılar {} için: {}", baseSymbol, expectedProviders);
+        int collectedCount = symbolBucket.size();
         
-        // Save to window structure
-        window.computeIfAbsent(baseSymbol, k -> new ConcurrentHashMap<>())
-              .put(providerName, baseRateDto);
+        log.info("Window update: {} [{}/{}] providers - need: {}", 
+                baseSymbol, collectedCount, expectedProviders.size(), 
+                missingProviders(symbolBucket.keySet(), expectedProviders));
         
-        // Debug log for current window state
-        Map<String, BaseRateDto> currentBucket = window.getOrDefault(baseSymbol, new ConcurrentHashMap<>());
-        int currentCount = currentBucket.size();
-        
-        log.info("Window state for {}: Collected {}/{} providers. Current providers: {}, Expected providers: {}", 
-                baseSymbol, currentCount, expectedProviders.size(),
-                String.join(", ", currentBucket.keySet()),
-                String.join(", ", expectedProviders));
-        
-        // Check if we can calculate with current window state
-        checkWindowAndCalculate(baseSymbol);
+        // Try to calculate if window looks complete
+        if (collectedCount >= expectedProviders.size() && 
+            symbolBucket.keySet().containsAll(expectedProviders)) {
+            checkTimeSkewAndCalculate(baseSymbol, symbolBucket, expectedProviders);
+        }
     }
-    
+
     /**
-     * Bir temel sembol için pencere, hesaplama kriterlerini karşılıyor mu kontrol eder
-     * ve karşılıyorsa hesaplamayı tetikler - basitleştirilmiş sürüm
+     * Returns a string of providers that are still missing
      */
-     private void checkWindowAndCalculate(String baseSymbol) {
-        Map<String, BaseRateDto> currentSymbolBucketByProviderName = window.get(baseSymbol); // This is Map<providerName, BaseRateDto>
-        if (currentSymbolBucketByProviderName == null || currentSymbolBucketByProviderName.isEmpty()) {
-            return;
+    private String missingProviders(Set<String> collected, List<String> expected) {
+        return expected.stream()
+            .filter(provider -> !collected.contains(provider))
+            .collect(Collectors.joining(", "));
+    }
+
+    /**
+     * Verify time skew constraints and trigger calculation if valid
+     */
+    private void checkTimeSkewAndCalculate(String baseSymbol, Map<String, BaseRateDto> symbolBucket, 
+                                          List<String> expectedProviders) {
+        // Extract only rates from expected providers
+        Map<String, BaseRateDto> relevantRates = new HashMap<>();
+        for (String provider : expectedProviders) {
+            BaseRateDto rate = symbolBucket.get(provider);
+            if (rate != null) {
+                relevantRates.put(provider, rate);
+            }
         }
         
-        List<String> expectedProviderBaseNames = getExpectedProviders(baseSymbol);
-        if (expectedProviderBaseNames.isEmpty()) {
-            log.warn("{} için beklenen sağlayıcı yapılandırması bulunamadı.", baseSymbol);
-            return;
-        }
-
-        // Ensure we only consider rates from the expected providers for this baseSymbol
-        Map<String, BaseRateDto> relevantRatesByProviderName = new HashMap<>();
-        boolean allExpectedProvidersPresent = true;
-        for (String providerName : expectedProviderBaseNames) {
-            if (currentSymbolBucketByProviderName.containsKey(providerName)) {
-                relevantRatesByProviderName.put(providerName, currentSymbolBucketByProviderName.get(providerName));
-            } else {
-                allExpectedProvidersPresent = false;
-                break;
-            }
-        }
-
-        if (allExpectedProvidersPresent && relevantRatesByProviderName.size() == expectedProviderBaseNames.size()) {
-            log.info("Tüm beklenen sağlayıcı grupları ({}) {} için veri gönderdi: {} - İşleme başlanabilir",
-                    String.join(", ",expectedProviderBaseNames), baseSymbol, String.join(", ", relevantRatesByProviderName.keySet()));
+        // Only calculate if all expected providers present and time skew is acceptable
+        if (relevantRates.size() == expectedProviders.size() && 
+            isTimeSkewAcceptable(relevantRates, expectedProviders)) {
             
-            // isTimeSkewAcceptable expects a map keyed by provider name
-            if (isTimeSkewAcceptable(relevantRatesByProviderName, expectedProviderBaseNames)) { 
-                // Construct the map for RateCalculatorService, keyed by providerSpecificSymbol
-                Map<String, BaseRateDto> ratesForCalculatorService = new HashMap<>();
-                for (BaseRateDto rate : relevantRatesByProviderName.values()) {
-                    // Clone the rate before adding to prevent window rates from being modified
-                    BaseRateDto clonedRate = cloneRateDto(rate);
-                    ratesForCalculatorService.put(rate.getSymbol(), clonedRate);
-                }
-
-                // Trigger calculation with a copy of the rates, preserving originals
-                triggerCalculation(ratesForCalculatorService);
-                
-                // Mark these rates as processed without removing them
-                // This allows them to be used for other calculations that might need the same rates
-                // We'll track the last calculation time to know when to clean them up
-                for (BaseRateDto rate : relevantRatesByProviderName.values()) {
-                    rate.setLastCalculationTimestamp(System.currentTimeMillis());
-                }
-                
-                log.info("Window için hesaplama tetiklendi, ancak kurlar korundu: {}", baseSymbol);
-            } else {
-                log.warn("Zaman kayması {} için çok yüksek, hesaplama atlandı.", baseSymbol);
-            }
+            // Prepare rates for calculation (clone to avoid mutations)
+            Map<String, BaseRateDto> ratesForCalculation = relevantRates.values().stream()
+                .collect(Collectors.toMap(BaseRateDto::getSymbol, this::cloneRateDto));
+            
+            // Trigger calculation and mark rates as processed
+            triggerCalculation(ratesForCalculation);
+            relevantRates.values().forEach(r -> r.setLastCalculationTimestamp(System.currentTimeMillis()));
+            
+            log.info("Calculation triggered for {} with {} rates", baseSymbol, relevantRates.size());
+        } else if (relevantRates.size() < expectedProviders.size()) {
+            log.debug("Missing expected providers for {}", baseSymbol);
+        } else {
+            log.warn("Time skew too high for {}, calculation skipped", baseSymbol);
         }
     }
     
@@ -285,49 +258,39 @@ public class TwoWayWindowAggregator {
      * Toplanan kurlar için hesaplamayı tetikle
      */
     // TwoWayWindowAggregator içinde eklenecek veya değiştirilecek bölüm
-private void triggerCalculation(Map<String, BaseRateDto> newlyCompletedRawRatesInWindow) {
+private void triggerCalculation(Map<String, BaseRateDto> rates) {
     try {
-        // 1. Log all available rates for diagnosis
-        log.info("CALCULATION-TRIGGER: {} adet ham kur hesaplamaya gönderiliyor: {}", 
-                newlyCompletedRawRatesInWindow.size(), 
-                String.join(", ", newlyCompletedRawRatesInWindow.keySet()));
-                
-        // 2. Extract base symbols from the provider-specific symbols
-        Set<String> baseSymbols = newlyCompletedRawRatesInWindow.values().stream()
+        // Extract base symbols for diagnostics
+        Set<String> baseSymbols = rates.values().stream()
                 .map(rate -> deriveBaseSymbol(rate.getSymbol()))
                 .collect(Collectors.toSet());
-                
-        log.info("CALCULATION-SYMBOLS: Hesaplama için temel semboller: {}", 
-                String.join(", ", baseSymbols));
-                
-        // 3. Check if we have any calculation rules for these base symbols
-        boolean hasRules = false;
-        for (String baseSymbol : baseSymbols) {
-            List<CalculationRuleDto> rules = ruleEngineService.getRulesByInputBaseSymbol(baseSymbol);
-            if (rules != null && !rules.isEmpty()) {
-                hasRules = true;
-                log.info("CALCULATION-RULES: {} temel sembolü için {} hesaplama kuralı bulundu", 
-                        baseSymbol, rules.size());
-                
-            } else {
-                log.warn("CALCULATION-NO-RULES: {} temel sembolü için hesaplama kuralı bulunamadı", baseSymbol);
-            }
+        
+        // Check for cross rate candidates
+        boolean hasCrossRatePotential = baseSymbols.stream()
+                .anyMatch(s -> s.contains("USD") || s.contains("EUR") || s.contains("GBP"));
+        
+        if (hasCrossRatePotential) {
+            log.info("Processing potential cross rate data for: {}", String.join(", ", baseSymbols));
         }
         
-        if (!hasRules) {
-            log.error("CALCULATION-FATAL: Hiçbir temel sembol ({}) için hesaplama kuralı bulunamadı!", 
-                    String.join(", ", baseSymbols));
-            // Burada manuel olarak varsayılan kural oluşturabilirsiniz
+        // Verify rule availability
+        int ruleCount = baseSymbols.stream()
+                .mapToInt(s -> {
+                    List<CalculationRuleDto> rules = ruleEngineService.getRulesByInputBaseSymbol(s);
+                    return rules != null ? rules.size() : 0;
+                })
+                .sum();
+                
+        if (ruleCount == 0) {
+            log.warn("No calculation rules found for symbols: {}", String.join(", ", baseSymbols));
             return;
         }
         
-        // 4. Now actually trigger the calculation with proper diagnostics
-        rateCalculatorService.processWindowCompletion(newlyCompletedRawRatesInWindow);
+        // Proceed with calculation
+        rateCalculatorService.processWindowCompletion(rates);
         
     } catch (Exception e) {
-        log.error("CALCULATION-ERROR: Hesaplama tetiklenirken hata: {}", e.getMessage(), e);
-        // Stack trace'i log'a ekleyin
-        log.error("Detaylı hata:", e);
+        log.error("Calculation error: {}", e.getMessage(), e);
     }
 }
     

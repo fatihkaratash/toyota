@@ -170,22 +170,29 @@ public class KafkaPublishingService {
     /**
      * Belirli bir hesaplanmış kurun basit metin formatında gönderilip gönderilmeyeceğini belirler
      */
-   private boolean shouldSendCalculatedRateToSimpleTopic(BaseRateDto calculatedRate) {
+    private boolean shouldSendCalculatedRateToSimpleTopic(BaseRateDto calculatedRate) {
         if (calculatedRate == null || calculatedRate.getSymbol() == null) {
             return false;
         }
         
         String symbol = calculatedRate.getSymbol();
+        log.debug("Checking if calculated rate should be sent to simple topic: {}", symbol);
         
-        // AVG içeren veya _AVG ile biten hesaplanmış kurları gönder
+        // Always send AVG rates
         if (symbol.contains("AVG") || symbol.endsWith("_AVG")) {
+            log.debug("AVG rate will be sent to simple topic: {}", symbol);
             return true;
         }
         
-        // Check for both slashed and non-slashed formats of cross rates using our utility
-        if (com.toyota.mainapp.util.SymbolUtils.symbolsEquivalent("EUR/TRY", symbol) ||
-            com.toyota.mainapp.util.SymbolUtils.symbolsEquivalent("GBP/TRY", symbol)) {
-            log.debug("Cross rate detected for simple topic: {}", symbol);
+        // Always send cross rates (EUR/TRY, GBP/TRY, etc.)
+        boolean isCrossRate = symbol.contains("/") || 
+                             com.toyota.mainapp.util.SymbolUtils.symbolsEquivalent("EUR/TRY", symbol) ||
+                             com.toyota.mainapp.util.SymbolUtils.symbolsEquivalent("GBP/TRY", symbol) ||
+                             // Add other cross rates as needed
+                             symbol.toUpperCase().contains("TRY");
+        
+        if (isCrossRate) {
+            log.debug("Cross rate will be sent to simple topic: {}", symbol);
             return true;
         }
         

@@ -4,6 +4,7 @@ import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.dto.model.RateType;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -56,4 +57,11 @@ public interface RateCacheService {
      * @return Ham kurlar listesi
      */
     List<BaseRateDto> getAllRawRatesForSymbol(String symbol);
+    
+    /**
+     * Tüm hesaplanmış kurları önbellekten alır
+     * @return Tüm hesaplanmış kurlar (sembol -> kur) şeklinde haritada
+     */
+    Map<String, BaseRateDto> getAllCalculatedRates();
+    BaseRateDto getCachedRate(String key);
 }

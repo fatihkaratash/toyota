@@ -1,0 +1,21 @@
+package com.toyota.mainapp.calculator.collector;
+
+import com.toyota.mainapp.dto.config.CalculationRuleDto;
+import java.util.Map;
+import com.toyota.mainapp.dto.model.BaseRateDto;
+
+/**
+ * Interface for callbacks to calculate cross rates
+ * This breaks the circular dependency between CrossRateCollector and RateCalculatorService
+ */
+public interface CrossRateCalculationCallback {
+    
+    /**
+     * Calculate rate from rule with provided input rates
+     * 
+     * @param rule Calculation rule to execute
+     * @param inputRates Map of input rates needed for calculation
+     * @return Whether calculation was successful
+     */
+    boolean calculateRateFromRule(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates);
+}

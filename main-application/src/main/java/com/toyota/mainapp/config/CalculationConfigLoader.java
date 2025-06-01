@@ -33,8 +33,8 @@ public class CalculationConfigLoader {
 
     private final ObjectMapper objectMapper;
     private final TwoWayWindowAggregator aggregator;
-    private final ResourceLoader resourceLoader; // Inject ResourceLoader
-    private final RuleEngineService ruleEngineService; // Inject RuleEngineService
+    private final ResourceLoader resourceLoader;
+    private final RuleEngineService ruleEngineService;
 
     @Value("classpath:calculation-config.json")
     private Resource calculationConfigResource;

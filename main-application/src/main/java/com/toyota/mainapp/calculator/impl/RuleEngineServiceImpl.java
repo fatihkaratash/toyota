@@ -177,5 +177,13 @@ public class RuleEngineServiceImpl implements RuleEngineService {
     public List<CalculationRuleDto> getCalculationRules() { 
         return Collections.unmodifiableList(this.activeRules); 
     }
+
+    @Override
+    public List<CalculationRuleDto> getRulesDependingOnCalculatedRate(String outputSymbol) {
+        // Returns rules that depend on the given outputSymbol as an input
+        return activeRules.stream()
+                .filter(rule -> rule.getDependsOnRaw() != null && rule.getDependsOnRaw().contains(outputSymbol))
+                .collect(Collectors.toList());
+    }
     
 }

@@ -49,4 +49,9 @@ public interface RuleEngineService {
      * Add a new rule
      */
     void addRule(CalculationRuleDto rule);
+    
+    /**
+     * Get rules that depend on a specific calculated rate
+     */
+    List<CalculationRuleDto> getRulesDependingOnCalculatedRate(String calculatedRateSymbol);
 }

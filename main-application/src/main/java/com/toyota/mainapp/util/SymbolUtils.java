@@ -3,6 +3,9 @@ package com.toyota.mainapp.util;
 import lombok.extern.slf4j.Slf4j;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Sembol formatlarını standartlaştırmak için yardımcı sınıf.
@@ -179,6 +182,76 @@ public class SymbolUtils {
      */
     public static String createCalculatedRateSymbol(String baseSymbol, String calculationType) {
         return baseSymbol + "_" + calculationType;
+    }
+    
+    /**
+     * Check if a symbol is a cross rate of specific currencies
+     * 
+     * @param symbol Symbol to check
+     * @param baseCurrency Base currency to check for
+     * @param quoteCurrency Quote currency to check for
+     * @return true if the symbol represents a cross rate of the specified currencies
+     */
+    public static boolean isCrossRateOf(String symbol, String baseCurrency, String quoteCurrency) {
+        if (symbol == null) return false;
+        
+        String normalized = symbol.toUpperCase().replace("/", "");
+        return normalized.contains(baseCurrency.toUpperCase()) && 
+               normalized.contains(quoteCurrency.toUpperCase());
+    }
+    
+    /**
+     * Generate all possible format variations of a symbol for lookups
+     * 
+     * @param symbol Original symbol
+     * @return List of possible format variations
+     */
+    public static List<String> generateSymbolVariants(String symbol) {
+        List<String> variants = new ArrayList<>();
+        
+        if (symbol == null || symbol.isEmpty()) {
+            return variants;
+        }
+        
+        // Add original
+        variants.add(symbol);
+        
+        // Handle calc_rate: prefix
+        if (symbol.startsWith("calc_rate:")) {
+            String unprefixed = symbol.substring("calc_rate:".length());
+            variants.add(unprefixed);
+            
+            // Add slashed/unslashed versions of unprefixed
+            if (!unprefixed.contains("/")) {
+                variants.add(formatWithSlash(unprefixed));
+            } else {
+                variants.add(removeSlash(unprefixed));
+            }
+        } else {
+            // Add prefixed version
+            variants.add("calc_rate:" + symbol);
+            
+            // Add slashed/unslashed versions
+            if (!symbol.contains("/")) {
+                String slashed = formatWithSlash(symbol);
+                variants.add(slashed);
+                variants.add("calc_rate:" + slashed);
+            } else {
+                String unslashed = removeSlash(symbol);
+                variants.add(unslashed);
+                variants.add("calc_rate:" + unslashed);
+            }
+        }
+        
+        // Handle _AVG suffix variants
+        if (symbol.endsWith("_AVG")) {
+            String baseSymbol = symbol.substring(0, symbol.length() - 4);
+            variants.addAll(generateSymbolVariants(baseSymbol).stream()
+                .map(s -> s + "_AVG")
+                .collect(Collectors.toList()));
+        }
+        
+        return variants;
     }
     
     /**

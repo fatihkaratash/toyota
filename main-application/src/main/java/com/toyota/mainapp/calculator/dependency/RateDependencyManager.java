@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
+import java.util.Arrays;
 
 @Component
 @Slf4j
@@ -105,22 +106,45 @@ public class RateDependencyManager {
      * @return A list of CalculationRuleDto to trigger, sorted by priority.
      */
     public List<CalculationRuleDto> getCalculationsToTrigger(String updatedSymbol, boolean isRawRateUpdate) {
-        List<CalculationRuleDto> triggeredRules;
-        if (isRawRateUpdate) {
-            triggeredRules = directRawDependencies.getOrDefault(updatedSymbol, Collections.emptyList());
-        } else {
-            triggeredRules = directCalculatedDependencies.getOrDefault(updatedSymbol, Collections.emptyList());
+        List<CalculationRuleDto> triggeredRules = new ArrayList<>();
+        String normalizedSymbol = updatedSymbol;
+        
+        // For better matching, try both with and without slashes, prefixes, etc.
+        String withoutPrefix = updatedSymbol.startsWith("calc_rate:") ? 
+            updatedSymbol.substring("calc_rate:".length()) : updatedSymbol;
+        
+        String withSlash = com.toyota.mainapp.util.SymbolUtils.formatWithSlash(withoutPrefix);
+        String withoutSlash = com.toyota.mainapp.util.SymbolUtils.removeSlash(withoutPrefix);
+        
+        Map<String, List<CalculationRuleDto>> dependencyMap = 
+            isRawRateUpdate ? directRawDependencies : directCalculatedDependencies;
+            
+        // Check all possible formats
+        for (String symbolVariant : Arrays.asList(updatedSymbol, withoutPrefix, withSlash, withoutSlash)) {
+            List<CalculationRuleDto> rules = dependencyMap.getOrDefault(symbolVariant, Collections.emptyList());
+            triggeredRules.addAll(rules);
         }
-
-        if (triggeredRules.isEmpty()) {
-            return Collections.emptyList();
+        
+        // Also check for _AVG variants
+        if (updatedSymbol.endsWith("_AVG")) {
+            String baseSymbol = updatedSymbol.substring(0, updatedSymbol.length() - 4);
+            List<CalculationRuleDto> rules = dependencyMap.getOrDefault(baseSymbol, Collections.emptyList());
+            triggeredRules.addAll(rules);
+        }
+        
+        // Log the rules found
+        if (!triggeredRules.isEmpty()) {
+            log.info("Found {} rules triggered by {}: {}", 
+                triggeredRules.size(), 
+                updatedSymbol,
+                triggeredRules.stream().map(CalculationRuleDto::getOutputSymbol).collect(Collectors.joining(", ")));
         }
 
         // The rules within the retrieved list are already part of the globally sorted list.
         // To ensure they are processed in their correct relative order if multiple are triggered,
         // we sort this sub-list by priority.
         return triggeredRules.stream()
-                .sorted(java.util.Comparator.comparingInt(CalculationRuleDto::getPriority))
+                .sorted(Comparator.comparingInt(CalculationRuleDto::getPriority))
                 .collect(Collectors.toList());
     }
 

@@ -235,6 +235,22 @@ public Optional<BaseRateDto> calculate(CalculationRuleDto rule, Map<String, Base
                 continue;
             }
             
+            // Handle calc_rate: prefix
+            if (originalKey.startsWith("calc_rate:")) {
+                String unprefixedKey = originalKey.substring("calc_rate:".length());
+                if (!adaptedRates.containsKey(unprefixedKey)) {
+                    adaptedRates.put(unprefixedKey, rate);
+                    log.debug("adaptInputRatesForScript: Öneksiz alternatif eklendi: {} -> {}", originalKey, unprefixedKey);
+                }
+            } else {
+                // Add prefixed version if it doesn't exist
+                String prefixedKey = "calc_rate:" + originalKey;
+                if (!adaptedRates.containsKey(prefixedKey)) {
+                    adaptedRates.put(prefixedKey, rate);
+                    log.debug("adaptInputRatesForScript: Önekli alternatif eklendi: {} -> {}", originalKey, prefixedKey);
+                }
+            }
+            
             // Add both slashed and unslashed versions for compatibility
             if (!originalKey.contains("/")) {
                 // Add version with slashes for scripts that expect it
@@ -243,12 +259,26 @@ public Optional<BaseRateDto> calculate(CalculationRuleDto rule, Map<String, Base
                     adaptedRates.put(slashedSymbol, rate);
                     log.debug("adaptInputRatesForScript: Alternatif eğik çizgili sembol eklendi: {} -> {}", originalKey, slashedSymbol);
                 }
+                
+                // Also add prefixed version with slashes
+                String prefixedSlashedSymbol = "calc_rate:" + slashedSymbol;
+                if (!adaptedRates.containsKey(prefixedSlashedSymbol)) {
+                    adaptedRates.put(prefixedSlashedSymbol, rate);
+                    log.debug("adaptInputRatesForScript: Önekli eğik çizgili alternatif eklendi: {} -> {}", originalKey, prefixedSlashedSymbol);
+                }
             } else {
                 // Add version without slashes for scripts that expect it
                 String unslashedSymbol = com.toyota.mainapp.util.SymbolUtils.removeSlash(originalKey);
                 if (!originalKey.equals(unslashedSymbol) && !adaptedRates.containsKey(unslashedSymbol)) {
                     adaptedRates.put(unslashedSymbol, rate);
                     log.debug("adaptInputRatesForScript: Alternatif eğik çizgisiz sembol eklendi: {} -> {}", originalKey, unslashedSymbol);
+                }
+                
+                // Also add prefixed version without slashes
+                String prefixedUnslashedSymbol = "calc_rate:" + unslashedSymbol;
+                if (!adaptedRates.containsKey(prefixedUnslashedSymbol)) {
+                    adaptedRates.put(prefixedUnslashedSymbol, rate);
+                    log.debug("adaptInputRatesForScript: Önekli eğik çizgisiz alternatif eklendi: {} -> {}", originalKey, prefixedUnslashedSymbol);
                 }
             }
             

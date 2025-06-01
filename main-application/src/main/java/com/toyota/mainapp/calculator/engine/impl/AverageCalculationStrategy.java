@@ -12,6 +12,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.*;
 
+import com.toyota.mainapp.util.RateCalculationUtils;
+
 /**
  * Calculation strategy that averages rates from multiple providers
  */
@@ -27,58 +29,26 @@ public class AverageCalculationStrategy implements CalculationStrategy {
         }
         
         try {
-            // Create calculated rate DTO
-            BaseRateDto calculatedRate = BaseRateDto.builder()
-                .rateType(RateType.CALCULATED)
-                .symbol(rule.getOutputSymbol())
-                .timestamp(System.currentTimeMillis())
-                .build();
-            
-            // Simple average calculation for bid and ask 
-            BigDecimal totalBid = BigDecimal.ZERO;
-            BigDecimal totalAsk = BigDecimal.ZERO;
-            List<InputRateInfo> inputs = new ArrayList<>();
-            
-            // Process each input rate
-            for (Map.Entry<String, BaseRateDto> entry : inputRates.entrySet()) {
-                BaseRateDto rate = entry.getValue();
-                
-                // Validate rates before using in calculation
-                if (rate.getBid() != null && rate.getAsk() != null) {
-                    totalBid = totalBid.add(rate.getBid());
-                    totalAsk = totalAsk.add(rate.getAsk());
+            // Use the utility for average calculation
+            Optional<RateCalculationUtils.AverageResult> avgResult = 
+                    RateCalculationUtils.calculateAverage(inputRates);
                     
-                    // Track input sources
-                    inputs.add(new InputRateInfo(
-                        rate.getSymbol(),
-                        rate.getRateType() != null ? rate.getRateType().name() : "RAW",
-                        rate.getProviderName(),
-                        rate.getBid(),
-                        rate.getAsk(),
-                        rate.getTimestamp()
-                    ));
-                } else {
-                    log.warn("Skipping rate with null bid/ask in calculation. Provider: {}, Symbol: {}",
-                            rate.getProviderName(), rate.getSymbol());
-                }
-            }
-            
-            // Calculate average if we have data
-            int validRateCount = inputs.size();
-            if (validRateCount > 0) {
-                calculatedRate.setBid(totalBid.divide(BigDecimal.valueOf(validRateCount), 6, RoundingMode.HALF_UP));
-                calculatedRate.setAsk(totalAsk.divide(BigDecimal.valueOf(validRateCount), 6, RoundingMode.HALF_UP));
-                calculatedRate.setCalculationInputs(inputs);
-                calculatedRate.setCalculatedByStrategy("AVERAGE");
-                
-                log.info("Successfully calculated average rate for {}: bid={}, ask={}, using {} inputs", 
-                        calculatedRate.getSymbol(), calculatedRate.getBid(), calculatedRate.getAsk(), validRateCount);
-                        
-                return Optional.of(calculatedRate);
-            } else {
+            if (avgResult.isEmpty()) {
                 log.warn("Could not calculate average for {}: No valid inputs available", rule.getOutputSymbol());
                 return Optional.empty();
             }
+            
+            // Create the rate DTO from the result
+            BaseRateDto calculatedRate = RateCalculationUtils.createAverageRate(
+                    rule.getOutputSymbol(), 
+                    avgResult.get(), 
+                    "AVERAGE");
+                    
+            log.info("Successfully calculated average rate for {}: bid={}, ask={}, using {} inputs", 
+                    calculatedRate.getSymbol(), calculatedRate.getBid(), calculatedRate.getAsk(), 
+                    avgResult.get().validRateCount());
+                    
+            return Optional.of(calculatedRate);
         } catch (Exception e) {
             log.error("Error calculating average for {}: {}", rule.getOutputSymbol(), e.getMessage(), e);
             return Optional.empty();

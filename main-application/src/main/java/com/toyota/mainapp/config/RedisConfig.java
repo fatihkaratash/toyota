@@ -1,6 +1,8 @@
 package com.toyota.mainapp.config;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
 import com.toyota.mainapp.dto.model.BaseRateDto;
@@ -14,6 +16,7 @@ import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 /**
@@ -67,6 +70,29 @@ public class RedisConfig {
         return mapper;
     }
     
+   @Bean
+    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
+    RedisTemplate<String, Object> template = new RedisTemplate<>();
+    template.setConnectionFactory(connectionFactory);
+    
+    // Use Jackson2JsonRedisSerializer for values
+    Jackson2JsonRedisSerializer<Object> jackson2JsonRedisSerializer = new Jackson2JsonRedisSerializer<>(Object.class);
+    ObjectMapper objectMapper = new ObjectMapper();
+    objectMapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
+    objectMapper.activateDefaultTyping(
+        LaissezFaireSubTypeValidator.instance,
+        ObjectMapper.DefaultTyping.NON_FINAL,
+        JsonTypeInfo.As.PROPERTY
+    );
+    jackson2JsonRedisSerializer.setObjectMapper(objectMapper);
+    
+    // String serializer for keys
+    template.setKeySerializer(new StringRedisSerializer());
+    template.setValueSerializer(jackson2JsonRedisSerializer);
+    
+    template.afterPropertiesSet();
+    return template;
+}
     @Bean
     public RedisTemplate<String, BaseRateDto> rateRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper redisObjectMapper) {
         RedisTemplate<String, BaseRateDto> template = new RedisTemplate<>();
