@@ -7,13 +7,10 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * Repository for managing rate entities in the database.
- */
 @Repository
 public interface RateRepository extends JpaRepository<RateEntity, Long> {
-    // Basic CRUD operations are automatically provided by JpaRepository
-
+    
   List<RateEntity> findByRateUpdatetimeAfter(LocalDateTime dateTime);
     List<RateEntity> findByRateName(String rateName); 
+    boolean existsByRateNameAndRateUpdatetime(String rateName, LocalDateTime rateUpdatetime);
 }

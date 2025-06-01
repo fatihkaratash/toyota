@@ -22,6 +22,7 @@ target/
 # Logs
 *.log
 logs/
+docs
 
 # Build directories
 **/target/

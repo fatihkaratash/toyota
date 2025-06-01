@@ -109,37 +109,52 @@ services:
       - opensearch
     networks:
       - toyota-network
-
   # --- Uygulama Servisleri ---
   rest-rate-provider:
     build:
-      context: ./data-providers/rest-rate-provider
-      dockerfile: Dockerfile
+      context: ./data-providers
+      dockerfile: rest-rate-provider/Dockerfile
     container_name: rest-rate-provider
-    hostname: rest-rate-provider # EKLENDİ
+    hostname: rest-rate-provider
     ports:
       - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SERVER_PORT: 8080
+      # Market Trend Configuration
+      MARKET_TREND_INITIAL_MODE: ${MARKET_TREND_INITIAL_MODE:-NEUTRAL}
+      MARKET_TREND_INITIAL_STRENGTH: ${MARKET_TREND_INITIAL_STRENGTH:-0.5}
+      TREND_REDIS_POLL_INTERVAL_SECONDS: ${TREND_REDIS_POLL_INTERVAL_SECONDS:-10}
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
     volumes:
       - ./logs/rest-provider:/app/logs
+    depends_on:
+      - redis
     networks: # EKLENDİ (Eskisinde yoksa)
       - toyota-network
 
   tcp-rate-provider:
     build:
-      context: ./data-providers/tcp-rate-provider
-      dockerfile: Dockerfile
+      context: ./data-providers
+      dockerfile: tcp-rate-provider/Dockerfile
     container_name: tcp-rate-provider
-    hostname: tcp-rate-provider # EKLENDİ
+    hostname: tcp-rate-provider
     restart: unless-stopped
     ports:
       - "8081:8081"
     environment:
       SERVER_PORT: 8081
+      # Market Trend Configuration
+      MARKET_TREND_INITIAL_MODE: ${MARKET_TREND_INITIAL_MODE:-NEUTRAL}
+      MARKET_TREND_INITIAL_STRENGTH: ${MARKET_TREND_INITIAL_STRENGTH:-0.5}
+      TREND_REDIS_POLL_INTERVAL_SECONDS: ${TREND_REDIS_POLL_INTERVAL_SECONDS:-10}
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
     volumes:
       - ./logs/tcp-provider:/app/logs
+    depends_on:
+      - redis
     networks: # EKLENDİ (Eskisinde yoksa)
       - toyota-network
 
@@ -169,7 +184,7 @@ services:
       PROVIDER_TCP_PORT: 8081
     volumes:
       - ./logs/main-application:/app/logs
-    networks: # EKLENDİ (Eskisinde yoksa)
+    networks:
       - toyota-network
 
   kafka-consumer: # YENİ EKLENDİ
@@ -182,7 +197,6 @@ services:
     depends_on: # Bu servislerin başlamasını bekler (tam hazır olmasını garanti etmez)
       - kafka
       - postgres
-      - opensearch # Eğer OpenSearch'e yazacaksa
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SERVER_PORT: 8084 # Eğer bir API sunuyorsa (genellikle sunmaz)
@@ -190,10 +204,6 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/toyota_rates
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: pgadmin
-      SPRING_ELASTICSEARCH_URIS: http://opensearch:9200 # Veya spring.opensearch.uris
-      OPENSEARCH_USERNAME: ${OPENSEARCH_USERNAME:-}
-      OPENSEARCH_PASSWORD: ${OPENSEARCH_PASSWORD:-}
-      DISABLE_OPENSEARCH_SECURITY: ${DISABLE_OPENSEARCH_SECURITY:-true}
       # Kafka Consumer için topic ve group id
       APP_KAFKA_TOPIC_SIMPLE_RATES: ${APP_KAFKA_TOPIC_SIMPLE_RATES:-financial-simple-rates}
       SPRING_KAFKA_CONSUMER_GROUP_ID: ${SPRING_KAFKA_CONSUMER_GROUP_ID:-simple-rate-persister-group}
@@ -201,7 +211,7 @@ services:
       - ./logs/kafka-consumer:/app/logs
     networks:
       - toyota-network
-
+    
 # Ortak Network (Eğer eskiden yoksa bu gerekli)
 networks:
   toyota-network:

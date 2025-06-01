@@ -1,4 +1,4 @@
-package com.toyota.consumer.config;
+package main.java.com.toyota.config;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -24,7 +24,9 @@ public class KafkaConsumerConfig {
     @Value("${app.kafka.consumer.group-id}")
     private String groupId;
 
-    @Value("${spring.kafka.consumer.max-poll-records:500}") // Default to 500 
+    // You might have other properties like auto-offset-reset, security, etc.
+    // For batch, MAX_POLL_RECORDS_CONFIG is important.
+    @Value("${spring.kafka.consumer.max-poll-records:500}") // Default to 500 if not set
     private String maxPollRecords;
 
 
@@ -49,8 +51,8 @@ public class KafkaConsumerConfig {
         ConcurrentKafkaListenerContainerFactory<String, String> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory);
-        factory.setBatchListener(true); 
-        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE); 
+        factory.setBatchListener(true); // Enable batch listening
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE); // For manual ack
         return factory;
     }
 }

@@ -9,17 +9,10 @@ spring:
     consumer:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      auto-offset-reset: earliest
+      auto-offset-reset: latest #değiştirdim earlieastti
       enable-auto-commit: false
+      max-poll-records: 50 # Standard Spring Kafka property for max poll records
 
-  # OpenSearch Configuration
-  elasticsearch:
-    uris: ${OPENSEARCH_URIS:http://localhost:9200}
-    username: ${OPENSEARCH_USERNAME:}
-    password: ${OPENSEARCH_PASSWORD:}
-    connection-timeout: 5s
-    socket-timeout: 5s
-#
   datasource:
     url: jdbc:postgresql://postgres:5432/toyota_rates
     username: postgres
@@ -27,12 +20,20 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: create
+      ddl-auto: validate # Changed from create to validate
     show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+        jdbc:
+          'batch_size': 50 
+        order_inserts: true 
+        order_updates: true 
+  flyway:
+    enabled: true # Default is true if on classpath, but explicit is good
+    baseline-on-migrate: true
+    locations: classpath:db/migration # Default location
 
 # Server Configuration
 server:
@@ -43,7 +44,6 @@ logging:
   level:
     root: INFO
     com.toyota: DEBUG
-    org.springframework.data.elasticsearch: INFO
     org.springframework.kafka: INFO
 
 # Application specific Kafka configuration
@@ -51,13 +51,27 @@ app:
   kafka:
       consumer:
        group-id: toyota-consumer-group
-       group-id-usdtry: toyota-consumer-usdtry
-       group-id-eurtry: toyota-consumer-eurtry
-       group-id-gbptry: toyota-consumer-gbptry
       topic:
         simple-rates: financial-simple-rates
-        json-rates: financial-rates-json
+        
   
-  # OpenSearch index adı
-  opensearch:
-    index-name: financial_rates_logs
+# Management and Metrics Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,env,loggers,kafkaconsumer # Expose relevant endpoints
+  endpoint:
+    health:
+      show-details: always # Show full health details
+      probes:
+        enabled: true # Enable k8s style health probes
+  metrics:
+    tags: # Add common tags to all metrics
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true # Enable histograms for http request timings
+        spring.kafka.listener: true # Enable histograms for Kafka listener processing times
+      sla:
+        http.server.requests: 100ms, 500ms # Define SLAs for http requests
