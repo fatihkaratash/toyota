@@ -38,12 +38,11 @@ public class RateSimulationService {
         while(!validPrice && retries < maxRetries) {
             double change = (random.nextDouble() - 0.5) * 2 * midPrice * volatility; // Simetrik degisim
             newBid = originalBid + change;
-            newBid = Math.max(0.000001, newBid); // Pozitif bid garantile
+            newBid = Math.max(0.000001, newBid); // Pozitif bid 
 
-            // Minimum spread ile yeni ask hesapla
-            double spreadFactor = minSpread + (random.nextDouble() * volatility); // Spreadde de rastgelelik olsun
+            double spreadFactor = minSpread + (random.nextDouble() * volatility); 
             newAsk = newBid * (1 + spreadFactor);
-            newAsk = Math.max(newAsk, newBid + minSpread); // Minimum mutlak spread degerini garantile
+            newAsk = Math.max(newAsk, newBid + minSpread); 
 
             if (newBid > 0 && newAsk > newBid) {
                 validPrice = true;
@@ -59,10 +58,8 @@ public class RateSimulationService {
             fluctuatedRate.setBid(newBid);
             fluctuatedRate.setAsk(newAsk);
         } else {
-            // Yeniden denemeler sonrasi hala gecersizse, log at ve orjinal degerleri kullan
             log.warn(LoggingHelper.OPERATION_SIMULATE_RATE, LoggingHelper.PLATFORM_REST, fluctuatedRate.getPairName(), null,
                     maxRetries + " deneme sonrasinda gecerli dalgalanmis fiyat olusturulamadi. Orijinal bid/ask kullaniliyor.");
-            // Kopyadan gelen orjinal bid/ask degerlerini koru
         }
 
         fluctuatedRate.setCurrentTimestamp();

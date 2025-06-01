@@ -1,6 +1,10 @@
-package com.toyota.tcpserver;
+package com.toyota.tcpserver.service;
 
+import com.toyota.tcpserver.config.ConfigurationReader;
+import com.toyota.tcpserver.model.Rate;
+import com.toyota.tcpserver.event.RateUpdateListener;
 import com.toyota.tcpserver.logging.LoggingHelper;
+import com.toyota.tcpserver.network.ClientHandler;
 
 import java.util.List;
 import java.util.Map;
@@ -10,14 +14,11 @@ import java.util.concurrent.*;
 public class RatePublisher {
     private static final LoggingHelper log = new LoggingHelper(RatePublisher.class);
 
-    private final Map<String, Rate> currentRates; // Parite adı -> Kur haritalama
+    private final Map<String, Rate> currentRates;
     private final RateFluctuationSimulator simulator;
     private final ConfigurationReader configurationReader;
     private final ScheduledExecutorService scheduler;
-    
-    // Listenerları saklamak için ConcurrentHashMap kullan
     private final Set<RateUpdateListener> listeners = ConcurrentHashMap.newKeySet();
-    
     private volatile boolean running = false;
 
 
@@ -25,7 +26,7 @@ public class RatePublisher {
         this.configurationReader = configurationReader;
         this.simulator = new RateFluctuationSimulator(configurationReader);
         
-        // configurationReader'dan derin kopyalarla currentRates'i başlat
+        // configurationReader currentrates
         this.currentRates = new ConcurrentHashMap<>();
         List<Rate> initialRates = configurationReader.getInitialRates();
         if (initialRates == null || initialRates.isEmpty()) {
@@ -42,11 +43,7 @@ public class RatePublisher {
             return t;
         });
     }
-    
-    /**
-     * Bir dinleyiciyi rate güncellemeleri için kaydeder
-     * @param listener Kayıt edilecek dinleyici
-     */
+
     public void addListener(RateUpdateListener listener) {
         if (listener != null) {
             boolean added = listeners.add(listener);
@@ -54,11 +51,7 @@ public class RatePublisher {
                     "RateUpdateListener eklendi: " + listener.toString() + " (Eklendi mi: " + added + "). Toplam dinleyici sayısı: " + listeners.size());
         }
     }
-    
-    /**
-     * Bir dinleyicinin kaydını kaldırır
-     * @param listener Kaydı kaldırılacak dinleyici
-     */
+
     public void removeListener(RateUpdateListener listener) {
         if (listener != null) {
             boolean removed = listeners.remove(listener);
@@ -98,11 +91,9 @@ public class RatePublisher {
                     continue;
                 }
                 Rate fluctuatedRate = simulator.fluctuateRate(originalRate);
-                currentRates.put(pairName, fluctuatedRate); // Dalgalanmış yeni kur ile güncelle
+                currentRates.put(pairName, fluctuatedRate); // yeni kur ile güncelle
 
-                // Kur bilgisini log için hazırla
-                String rateInfo = String.format("BID:%.5f ASK:%.5f", fluctuatedRate.getBid(), fluctuatedRate.getAsk());
-                
+                String rateInfo = String.format("BID:%.5f ASK:%.5f", fluctuatedRate.getBid(), fluctuatedRate.getAsk());       
                 // İlgili dinleyicilere yayın yap
                 notifyListeners(fluctuatedRate);
                 
@@ -116,11 +107,7 @@ public class RatePublisher {
                     "Kur yayınlama döngüsü sırasında hata", e);
         }
     }
-    
-    /**
-     * Güncellenmiş kur hakkında uygun dinleyicilere bildirim yapar
-     * @param rate Güncellenen kur
-     */
+
     private void notifyListeners(Rate rate) {
         String pairName = rate.getPairName();
         int notifiedCount = 0;

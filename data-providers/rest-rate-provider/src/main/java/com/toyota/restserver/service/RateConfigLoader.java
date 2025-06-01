@@ -48,9 +48,6 @@ public class RateConfigLoader {
     }
 
     public Map<String, Rate> getInitialRates() {
-        // Return a copy to prevent external modification of the loaded rates if needed,
-        // but for read-only access, direct reference is fine.
-        // For safety, let's return a new map of copies.
         return initialRates.entrySet().stream()
                 .collect(Collectors.toConcurrentMap(Map.Entry::getKey, e -> e.getValue().copy()));
     }

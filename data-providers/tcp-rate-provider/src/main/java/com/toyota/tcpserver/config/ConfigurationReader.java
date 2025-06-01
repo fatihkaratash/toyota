@@ -1,8 +1,9 @@
-package com.toyota.tcpserver;
+package com.toyota.tcpserver.config;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toyota.tcpserver.logging.LoggingHelper;
+import com.toyota.tcpserver.model.Rate; // Add this import
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -50,13 +51,11 @@ public class ConfigurationReader {
         ObjectMapper mapper = new ObjectMapper();
         InputStream jsonInput = null;
         try {
-            // Önce dosya sisteminden yüklemeyi dene (örn. IDE'den veya paketlenmemiş JAR'dan çalıştırırken)
             if (Files.exists(Paths.get(INITIAL_RATES_JSON_FILESYSTEM))) {
                 jsonInput = Files.newInputStream(Paths.get(INITIAL_RATES_JSON_FILESYSTEM));
                 log.info(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_PF1, null, 
                         "Başlangıç kurları dosya sisteminden yükleniyor: " + INITIAL_RATES_JSON_FILESYSTEM);
             }
-            // Sınıf yoluna geri dön (örn. uber JAR'dan çalıştırılırken)
             else {
                  jsonInput = getClass().getClassLoader().getResourceAsStream(INITIAL_RATES_JSON_CLASSPATH);
                  if (jsonInput == null) { // sınıf yolu için "config/" önekiyle dene

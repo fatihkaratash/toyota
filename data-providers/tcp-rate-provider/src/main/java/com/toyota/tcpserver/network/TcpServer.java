@@ -1,6 +1,8 @@
-package com.toyota.tcpserver;
+package com.toyota.tcpserver.network;
 
+import com.toyota.tcpserver.config.ConfigurationReader;
 import com.toyota.tcpserver.logging.LoggingHelper;
+import com.toyota.tcpserver.service.RatePublisher;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -18,7 +20,7 @@ public class TcpServer {
     private final RatePublisher ratePublisher;
     private ServerSocket serverSocket;
     private final ExecutorService clientExecutorService;
-    // Thread-safe istemci işleyicileri listesi kullan (sadece yönetim için)
+    // Thread-safe istemci
     private final List<ClientHandler> clientHandlers = new CopyOnWriteArrayList<>();
     private volatile boolean running = false;
     private Thread serverThread;
@@ -29,10 +31,10 @@ public class TcpServer {
         this.port = configurationReader.getServerPort();
         this.clientExecutorService = Executors.newCachedThreadPool(r -> {
             Thread t = new Thread(r, "ClientHandlerThread-" + System.currentTimeMillis());
-            t.setDaemon(true); // Sadece daemon thread'ler çalışıyorsa JVM'in çıkmasına izin ver
+            t.setDaemon(true); // Sadece daemon thread
             return t;
         });
-        // RatePublisher'ı oluştur (artık listenerleri kendisi yönetecek)
+        // RatePublisher
         this.ratePublisher = new RatePublisher(configurationReader, null);
     }
 
@@ -46,7 +48,7 @@ public class TcpServer {
         serverThread = new Thread(this::runServerLoop, "TcpServerThread");
         serverThread.setDaemon(false); // Ana sunucu thread'i daemon olmamalı
         serverThread.start();
-        ratePublisher.start(); // Kur yayıncısını başlat
+        ratePublisher.start(); 
     }
 
     private void runServerLoop() {
@@ -57,20 +59,17 @@ public class TcpServer {
 
             while (running) {
                 try {
-                    Socket clientSocket = serverSocket.accept(); // Bir bağlantı yapılana kadar bloklar
+                    Socket clientSocket = serverSocket.accept();
                     log.info(LoggingHelper.OPERATION_CONNECT, LoggingHelper.PLATFORM_TCP, null, 
                             "Yeni istemci bağlantısı kabul edildi: " + clientSocket.getRemoteSocketAddress());
-                    
-                    // ClientHandler nesnesi, constructor'ında RatePublisher'a dinleyici olarak kendini kaydedecek
+
                     ClientHandler clientHandler = new ClientHandler(clientSocket, ratePublisher);
                     clientHandlers.add(clientHandler);
                     clientExecutorService.submit(clientHandler);
-                    
-                    // Periyodik olarak kullanılmayan istemci işleyicilerini temizle
                     cleanupClientHandlers();
 
                 } catch (IOException e) {
-                    if (running) { // Sadece sunucunun çalışması gerekiyorsa logla
+                    if (running) { 
                         log.error(LoggingHelper.PLATFORM_TCP, null, 
                                 "İstemci bağlantısı kabul edilirken hata: " + e.getMessage(), e);
                     } else {
@@ -87,7 +86,7 @@ public class TcpServer {
         } finally {
             log.info(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, null, 
                     "TCP Sunucu çalışma döngüsü sona erdi.");
-            // Döngü beklenmedik bir şekilde çıkarsa ve çalışma devam ediyorsa kaynakların temizlenmesini sağla
+            // except
             if (running) {
                 stopServerInternally();
             }
@@ -128,21 +127,18 @@ public class TcpServer {
     }
 
     private void stopServerInternally() {
-        running = false; // Tüm döngülere durma sinyali gönder
+        running = false; 
 
         if (ratePublisher != null) {
             ratePublisher.stop();
         }
-
-        // Tüm istemci işleyicilerini durdur
         log.info(LoggingHelper.OPERATION_STOP, LoggingHelper.PLATFORM_TCP, null, 
                 "Tüm istemci işleyicileri durduruluyor...");
         for (ClientHandler handler : clientHandlers) {
             handler.stopHandler();
         }
-        clientHandlers.clear(); // Durdurduktan sonra listeyi temizle
+        clientHandlers.clear(); // temizler
 
-        // İstemci yürütücü servisini kapat
         clientExecutorService.shutdown();
         try {
             if (!clientExecutorService.awaitTermination(5, TimeUnit.SECONDS)) {
@@ -155,7 +151,6 @@ public class TcpServer {
             Thread.currentThread().interrupt();
         }
 
-        // Sunucu soketini kapat
         if (serverSocket != null && !serverSocket.isClosed()) {
             try {
                 serverSocket.close();

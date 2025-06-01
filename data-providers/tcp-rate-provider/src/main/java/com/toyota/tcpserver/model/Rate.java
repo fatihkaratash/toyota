@@ -1,4 +1,4 @@
-package com.toyota.tcpserver;
+package com.toyota.tcpserver.model;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;

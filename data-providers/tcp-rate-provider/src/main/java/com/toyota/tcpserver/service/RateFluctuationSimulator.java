@@ -1,5 +1,7 @@
-package com.toyota.tcpserver;
+package com.toyota.tcpserver.service;
 
+import com.toyota.tcpserver.config.ConfigurationReader;
+import com.toyota.tcpserver.model.Rate;
 import com.toyota.tcpserver.logging.LoggingHelper;
 import java.util.Random;
 
@@ -18,10 +20,10 @@ public class RateFluctuationSimulator {
     }
 
     public Rate fluctuateRate(Rate originalRate) {
-        Rate newRate = originalRate.copy(); // Bir kopya üzerinde çalış
+        Rate newRate = originalRate.copy(); 
         double basePrice = (newRate.getBid() + newRate.getAsk()) / 2.0;
-        if (basePrice <= 0) basePrice = Math.abs(newRate.getBid()); // Sıfır veya negatif taban durumunu ele al
-        if (basePrice <= 0) basePrice = 0.0001; // Mutlak yedek değer
+        if (basePrice <= 0) basePrice = Math.abs(newRate.getBid()); // Sıfır veya negatif 
+        if (basePrice <= 0) basePrice = 0.0001; 
 
         double newBid = 0, newAsk = 0;
         boolean validPrice = false;
@@ -46,7 +48,6 @@ public class RateFluctuationSimulator {
                 String rateInfo = String.format("BID:%.5f ASK:%.5f", newBid, newAsk);
                 log.trace(LoggingHelper.OPERATION_ALERT, LoggingHelper.PLATFORM_PF1, newRate.getPairName(), rateInfo,
                         "Geçersiz fiyat oluşturuldu. Yeniden deneniyor... (" + retries + "/" + maxRetries + ")");
-                // Yeniden denemeler oluyorsa, kötü değerlerden kaynaklanan sapmayı önlemek için orjinale sıfırla
                 newBid = originalRate.getBid();
                 newAsk = originalRate.getAsk();
             }
@@ -55,7 +56,7 @@ public class RateFluctuationSimulator {
         if (!validPrice) {
             log.warn(LoggingHelper.OPERATION_ALERT, LoggingHelper.PLATFORM_PF1, newRate.getPairName(), 
                     maxRetries + " deneme sonrasında geçerli bir dalgalanmış fiyat oluşturulamadı. Orijinal fiyatlar kullanılıyor.");
-            newRate.setBid(originalRate.getBid()); // Hala geçersizse orijinale geri dön
+            newRate.setBid(originalRate.getBid()); 
             newRate.setAsk(originalRate.getAsk());
         } else {
             newRate.setBid(newBid);

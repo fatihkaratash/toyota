@@ -1,5 +1,8 @@
-package com.toyota.tcpserver;
+package com.toyota.tcpserver.network;
 
+import com.toyota.tcpserver.model.Rate;
+import com.toyota.tcpserver.event.RateUpdateListener;
+import com.toyota.tcpserver.service.RatePublisher;
 import com.toyota.tcpserver.logging.LoggingHelper;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -28,13 +31,12 @@ public class ClientHandler implements Runnable, RateUpdateListener {
         } catch (IOException e) {
             log.error(LoggingHelper.PLATFORM_TCP, null, 
                    "ClientHandler: " + clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode() + " istemcisi için akışlar ayarlanırken hata: " + e.getMessage(), e);
-            running = false; // Kurulum başarısız olursa run() metodunun ilerlemesini engelle
-            // closeConnection(); // Constructor'da closeConnection çağrısı riskli olabilir, zaten running false olacak.
+            running = false;
         }
         
-        // Başlangıçta kendini RatePublisher'a dinleyici olarak kaydet
+        // Başlangıç
         if (ratePublisher != null && running) {
-            ratePublisher.addListener(this); // RatePublisher'a dinleyici olarak ekleniyor
+            ratePublisher.addListener(this); // RatePublisher dinleyici 
             log.debug(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, null,
                     clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode() + " dinleyici olarak RatePublisher'a eklendi.");
         }
@@ -54,7 +56,7 @@ public class ClientHandler implements Runnable, RateUpdateListener {
                 processCommand(inputLine);
             }
         } catch (SocketException e) {
-            if (running) { // Sadece kasıtlı kapatılmadıysa logla
+            if (running) { 
                  log.warn(LoggingHelper.OPERATION_DISCONNECT, LoggingHelper.PLATFORM_TCP, null, 
                          clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode() + " istemcisi için SocketException: " + e.getMessage() + " (İstemci muhtemelen bağlantıyı kesti)");
             }
@@ -68,7 +70,7 @@ public class ClientHandler implements Runnable, RateUpdateListener {
                     clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode() + " istemcisi bağlantısı kesildi veya işleyici durduruluyor.");
             // RatePublisher'dan dinleyici kaydını kaldır
             if (ratePublisher != null) {
-                ratePublisher.removeListener(this); // RatePublisher'dan dinleyici olarak kaldırılıyor
+                ratePublisher.removeListener(this);
             }
             closeConnection();
         }
@@ -82,9 +84,7 @@ public class ClientHandler implements Runnable, RateUpdateListener {
         }
 
         String action = parts[0].trim().toLowerCase();
-        String rateNameInput = (parts.length > 1) ? parts[1].trim() : null; // Keep original case for logging if needed, but use uppercase for logic
-        
-        // Use uppercase for all internal operations and comparisons
+        String rateNameInput = (parts.length > 1) ? parts[1].trim() : null; 
         String rateName = (rateNameInput != null) ? rateNameInput.toUpperCase() : null;
 
         log.debug(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, rateName,
@@ -93,14 +93,14 @@ public class ClientHandler implements Runnable, RateUpdateListener {
         switch (action) {
             case "subscribe":
                 if (rateName != null && !rateName.isEmpty()) {
-                    if (ratePublisher.isValidRatePair(rateName)) { // isValidRatePair should also handle case consistently if needed, or expect uppercase
+                    if (ratePublisher.isValidRatePair(rateName)) {
                         boolean added = subscriptions.add(rateName);
                         log.info(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, rateName,
                                 clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode() + " 'subscribe' için '" + rateName + "' eklendi mi: " + added + ". Güncel abonelikler: " + subscriptions);
                         out.println("Şuna abone olundu: " + rateName);
                         
                         // Abonelik üzerine mevcut kuru hemen gönder
-                        Rate currentRate = ratePublisher.getCurrentRate(rateName); // getCurrentRate should expect uppercase or handle case
+                        Rate currentRate = ratePublisher.getCurrentRate(rateName); 
                         if (currentRate != null) {
                             log.debug(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, rateName,
                                     clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode() + " abonelik üzerine anlık kur gönderiliyor: " + rateName);
@@ -149,9 +149,7 @@ public class ClientHandler implements Runnable, RateUpdateListener {
             return;
         }
 
-        // Ensure pairName from rate is also checked consistently (e.g. uppercase)
-        // Assuming rate.getPairName() returns it in the canonical (uppercase) format.
-        // If not, it should be: String pairNameForCheck = rate.getPairName().toUpperCase();
+        //rate is also checked consistently (uppercase)
         boolean isSubscribed = subscriptions.contains(rate.getPairName()); 
         log.debug(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, rate.getPairName(),
                 clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode() + " sendRateUpdate: '" + rate.getPairName() + "' için abone mi: " + isSubscribed + ". Abonelikler: " + subscriptions);
@@ -163,13 +161,12 @@ public class ClientHandler implements Runnable, RateUpdateListener {
             log.debug(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, rate.getPairName(),
                     clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode() + " gönderilecek mesaj: " + message);
             out.println(message);
-            
-            // Kur bilgisini log için hazırla
+
             String rateInfo = String.format("BID:%.5f ASK:%.5f", rate.getBid(), rate.getAsk());
             log.trace(LoggingHelper.OPERATION_UPDATE, LoggingHelper.PLATFORM_PF1, rate.getPairName(), rateInfo, // PF1 platformu logu, TCP üzerinden gönderim için
                     clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode() + " adresine gönderildi");
             
-            if (out.checkError()) { // PrintWriter'ın hata ile karşılaşıp karşılaşmadığını kontrol et
+            if (out.checkError()) { 
                 log.error(LoggingHelper.PLATFORM_TCP, rate.getPairName(), 
                         clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode() + " istemcisine mesaj gönderilirken hata. Bağlantı kapatılıyor.");
                 stopHandler(); // Gönderme başarısız olursa durdur ve kapat
@@ -179,7 +176,7 @@ public class ClientHandler implements Runnable, RateUpdateListener {
     
     @Override
     public boolean isSubscribedTo(String pairName) {
-        // Ensure consistent casing for checking subscriptions.
+
         String pairNameToCheck = (pairName != null) ? pairName.toUpperCase() : null;
         boolean subscribed = subscriptions.contains(pairNameToCheck);
         log.trace(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, pairNameToCheck,

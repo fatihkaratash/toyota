@@ -39,7 +39,7 @@
       "dependsOnCalculated": []
     },
     {
-      "outputSymbol": "EUR/TRY",
+      "outputSymbol": "EUR/TRY_AVG",
       "priority": 20,
       "strategyType": "groovyScriptCalculationStrategy",
       "implementation": "scripts/eur_try_calculator.groovy",
@@ -52,7 +52,7 @@
       }
     },
     {
-      "outputSymbol": "GBP/TRY",
+      "outputSymbol": "GBP/TRY_AVG",
       "priority": 20,
       "strategyType": "groovyScriptCalculationStrategy",
       "implementation": "scripts/gbp_try_calculator.groovy",

@@ -65,7 +65,7 @@ services:
       POSTGRES_PASSWORD: pgadmin
       POSTGRES_DB: toyota_rates
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - ./postgres-init-scripts:/docker-entrypoint-initdb.d # Tablo oluşturma scriptleri için
       - postgres-data:/var/lib/postgresql/data
@@ -112,8 +112,8 @@ services:
   # --- Uygulama Servisleri ---
   rest-rate-provider:
     build:
-      context: ./data-providers
-      dockerfile: rest-rate-provider/Dockerfile
+      context: ./data-providers/rest-rate-provider
+      dockerfile: Dockerfile
     container_name: rest-rate-provider
     hostname: rest-rate-provider
     ports:
@@ -136,8 +136,8 @@ services:
 
   tcp-rate-provider:
     build:
-      context: ./data-providers
-      dockerfile: tcp-rate-provider/Dockerfile
+      context: ./data-providers/tcp-rate-provider
+      dockerfile: Dockerfile
     container_name: tcp-rate-provider
     hostname: tcp-rate-provider
     restart: unless-stopped
