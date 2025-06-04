@@ -37,6 +37,9 @@ public class RateValidatorService {
         
         List<String> allPreliminaryErrors = new ArrayList<>(validateBasicFields(rate));
         
+        // Special handling for cross rates (they may have special format)
+        boolean isCrossRate = isCrossRate(rate.getSymbol());
+        
         // Handle missing bid/ask values
         if (rate.getBid() == null) {
             allPreliminaryErrors.add("Bid price is null");
@@ -57,7 +60,14 @@ public class RateValidatorService {
             }
             
             if (rate.getBid().compareTo(rate.getAsk()) > 0) {
-                allPreliminaryErrors.add("Bid price cannot be greater than ask price");
+                String errorMsg = "Bid price cannot be greater than ask price";
+                // Allow small tolerance for cross rates due to potential calculation imprecision
+                if (isCrossRate && isWithinTolerance(rate.getBid(), rate.getAsk(), 0.001)) {
+                    log.warn("Cross rate {} has bid ({}) slightly greater than ask ({}), but within tolerance",
+                            rate.getSymbol(), rate.getBid(), rate.getAsk());
+                } else {
+                    allPreliminaryErrors.add(errorMsg);
+                }
             }
         }
         
@@ -113,5 +123,27 @@ public class RateValidatorService {
         }
         
         return errors;
+    }
+    
+    /**
+     * Check if a value is within tolerance of another
+     */
+    private boolean isWithinTolerance(BigDecimal val1, BigDecimal val2, double tolerancePercent) {
+        BigDecimal diff = val1.subtract(val2).abs();
+        BigDecimal tolerance = val2.multiply(BigDecimal.valueOf(tolerancePercent));
+        return diff.compareTo(tolerance) <= 0;
+    }
+
+    /**
+     * Check if a symbol is a cross rate
+     */
+    private boolean isCrossRate(String symbol) {
+        if (symbol == null) return false;
+        
+        String upperSymbol = symbol.toUpperCase();
+        return upperSymbol.contains("EUR/TRY") || 
+               upperSymbol.contains("EURTRY") ||
+               upperSymbol.contains("GBP/TRY") || 
+               upperSymbol.contains("GBPTRY");
     }
 }

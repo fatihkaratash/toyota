@@ -20,7 +20,8 @@ import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 /**
- * Redis connection configuration
+ * 
+ * onnection configuration
  */
 @Configuration
 @Slf4j

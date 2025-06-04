@@ -1,6 +1,6 @@
 package com.toyota.mainapp.calculator.dependency;
 
-import com.toyota.mainapp.dto.config.CalculationRuleDto; // ADDED new import
+import com.toyota.mainapp.dto.config.CalculationRuleDto; 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -9,6 +9,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
@@ -55,12 +57,20 @@ public class RateDependencyManager {
         for (CalculationRuleDto rule : sortedRules) {
             if (rule.getDependsOnRaw() != null) {
                 for (String rawSymbolKey : rule.getDependsOnRaw()) {
-                    directRawDependencies.computeIfAbsent(rawSymbolKey, k -> new ArrayList<>()).add(rule);
+                    // Add rule to directRawDependencies only if it's not already there (based on output symbol)
+                    List<CalculationRuleDto> existingRules = directRawDependencies.computeIfAbsent(rawSymbolKey, k -> new ArrayList<>());
+                    if (!containsRuleWithSameOutputSymbol(existingRules, rule)) {
+                        existingRules.add(rule);
+                    }
                 }
             }
             if (rule.getDependsOnCalculated() != null) {
                 for (String calculatedSymbolKey : rule.getDependsOnCalculated()) {
-                    directCalculatedDependencies.computeIfAbsent(calculatedSymbolKey, k -> new ArrayList<>()).add(rule);
+                    // Add rule to directCalculatedDependencies only if it's not already there (based on output symbol)
+                    List<CalculationRuleDto> existingRules = directCalculatedDependencies.computeIfAbsent(calculatedSymbolKey, k -> new ArrayList<>());
+                    if (!containsRuleWithSameOutputSymbol(existingRules, rule)) {
+                        existingRules.add(rule);
+                    }
                 }
             }
         }
@@ -69,6 +79,16 @@ public class RateDependencyManager {
         
         // Add detailed logging of the dependency graph
         logDependencyGraph();
+    }
+    
+    /**
+     * Checks if a list of rules already contains a rule with the same output symbol
+     */
+    private boolean containsRuleWithSameOutputSymbol(List<CalculationRuleDto> rules, CalculationRuleDto newRule) {
+        return rules.stream().anyMatch(r -> 
+            r.getOutputSymbol().equals(newRule.getOutputSymbol()) || 
+            com.toyota.mainapp.util.SymbolUtils.symbolsEquivalent(r.getOutputSymbol(), newRule.getOutputSymbol())
+        );
     }
     
     /**
@@ -106,7 +126,7 @@ public class RateDependencyManager {
      * @return A list of CalculationRuleDto to trigger, sorted by priority.
      */
     public List<CalculationRuleDto> getCalculationsToTrigger(String updatedSymbol, boolean isRawRateUpdate) {
-        List<CalculationRuleDto> triggeredRules = new ArrayList<>();
+        Set<CalculationRuleDto> triggeredRules = new HashSet<>();
         String normalizedSymbol = updatedSymbol;
         
         // For better matching, try both with and without slashes, prefixes, etc.
@@ -134,7 +154,7 @@ public class RateDependencyManager {
         
         // Log the rules found
         if (!triggeredRules.isEmpty()) {
-            log.info("Found {} rules triggered by {}: {}", 
+            log.info("Found {} unique rules triggered by {}: {}", 
                 triggeredRules.size(), 
                 updatedSymbol,
                 triggeredRules.stream().map(CalculationRuleDto::getOutputSymbol).collect(Collectors.joining(", ")));

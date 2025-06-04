@@ -146,61 +146,6 @@ public class SymbolUtils {
     }
     
     /**
-     * Alternative symbol check - checks if two symbols represent the same currency pair
-     * regardless of format (e.g., "EURTRY" and "EUR/TRY")
-     * @param symbol1 First symbol
-     * @param symbol2 Second symbol 
-     * @return true if symbols represent the same currency pair
-     */
-    public static boolean symbolsEquivalent(String symbol1, String symbol2) {
-        if (symbol1 == null || symbol2 == null) {
-            return false;
-        }
-        
-        // First try direct comparison
-        if (symbol1.equals(symbol2)) {
-            return true;
-        }
-        
-        // Try with/without slash comparison
-        String symbol1Base = removeSlash(symbol1);
-        String symbol2Base = removeSlash(symbol2);
-        return symbol1Base.equals(symbol2Base);
-    }
-    
-    /**
-     * Ham kur formatı oluşturur
-     * Örn: "PF1", "USDTRY" -> "PF1_USDTRY"
-     */
-    public static String createRawRateSymbol(String providerName, String baseSymbol) {
-        return providerName + "_" + baseSymbol;
-    }
-    
-    /**
-     * Hesaplanmış kur formatı oluşturur
-     * Örn: "USDTRY", "AVG" -> "USDTRY_AVG"
-     */
-    public static String createCalculatedRateSymbol(String baseSymbol, String calculationType) {
-        return baseSymbol + "_" + calculationType;
-    }
-    
-    /**
-     * Check if a symbol is a cross rate of specific currencies
-     * 
-     * @param symbol Symbol to check
-     * @param baseCurrency Base currency to check for
-     * @param quoteCurrency Quote currency to check for
-     * @return true if the symbol represents a cross rate of the specified currencies
-     */
-    public static boolean isCrossRateOf(String symbol, String baseCurrency, String quoteCurrency) {
-        if (symbol == null) return false;
-        
-        String normalized = symbol.toUpperCase().replace("/", "");
-        return normalized.contains(baseCurrency.toUpperCase()) && 
-               normalized.contains(quoteCurrency.toUpperCase());
-    }
-    
-    /**
      * Generate all possible format variations of a symbol for lookups
      * 
      * @param symbol Original symbol
@@ -252,6 +197,40 @@ public class SymbolUtils {
         }
         
         return variants;
+    }
+    
+    /**
+     * Check if two symbols refer to the same currency pair, regardless of format
+     */
+    public static boolean symbolsEquivalent(String symbol1, String symbol2) {
+        if (symbol1 == null || symbol2 == null) {
+            return false;
+        }
+        
+        // Normalize both symbols for comparison
+        String normalized1 = normalizeSymbol(symbol1);
+        String normalized2 = normalizeSymbol(symbol2);
+        
+        return normalized1.equals(normalized2);
+    }
+    
+    /**
+     * Normalize a symbol by removing prefixes, slashes, and standardizing to uppercase
+     */
+    private static String normalizeSymbol(String symbol) {
+        // Remove prefixes
+        String normalized = symbol;
+        if (normalized.startsWith("calc_rate:")) {
+            normalized = normalized.substring("calc_rate:".length());
+        }
+        
+        // Remove suffixes like _AVG
+        if (normalized.endsWith("_AVG")) {
+            normalized = normalized.substring(0, normalized.length() - 4);
+        }
+        
+        // Remove slashes and convert to uppercase
+        return removeSlash(normalized).toUpperCase();
     }
     
     /**

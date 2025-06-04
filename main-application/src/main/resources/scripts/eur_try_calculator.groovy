@@ -22,7 +22,7 @@ def scale = defaultScale.toInteger()
 def roundingMode = RoundingMode.HALF_UP
 def calculationInputs = []
 
-// 1. Get USD/TRY average rate from inputRates map
+// Get USD/TRY average rate from inputRates map
 def usdTryAvgRate = inputRates.get(usdTryAvgSourceKey)
 log.debug("İlk bakışta USD/TRY kuru için {} anahtarı ile sonuç: {}", 
     usdTryAvgSourceKey, usdTryAvgRate != null ? "BULUNDU" : "BULUNAMADI")
@@ -66,7 +66,7 @@ calculationInputs.add(
         .build()
 )
 
-// 2. Get EUR/USD average rate from inputRates map
+// Get EUR/USD average rate from inputRates map
 def eurUsdAvgRate = inputRates.get(eurUsdAvgKey)
 log.debug("İlk bakışta EUR/USD kuru için {} anahtarı ile sonuç: {}", 
     eurUsdAvgKey, eurUsdAvgRate != null ? "BULUNDU" : "BULUNAMADI")
@@ -110,9 +110,32 @@ calculationInputs.add(
         .build()
 )
 
-// 3. Calculate EUR/TRY cross rate: (EUR/USD_AVG) * (USD/TRY_AVG)
-def calculatedBid = (eurUsdAvgRate.bid * usdTryAvgRate.bid).setScale(scale, roundingMode)
-def calculatedAsk = (eurUsdAvgRate.ask * usdTryAvgRate.ask).setScale(scale, roundingMode)
+// Calculate EUR/TRY cross rate: (EUR/USD_AVG) * (USD/TRY_AVG)
+// Convert to BigDecimal if needed - ensure proper numeric calculation
+def calculateBid = null
+def calculateAsk = null
+
+// Ensure we're working with BigDecimal for all calculations
+if (eurUsdAvgRate.bid instanceof BigDecimal && usdTryAvgRate.bid instanceof BigDecimal) {
+    // Direct calculation with BigDecimal
+    calculatedBid = eurUsdAvgRate.bid.multiply(usdTryAvgRate.bid).setScale(scale, roundingMode)
+    calculatedAsk = eurUsdAvgRate.ask.multiply(usdTryAvgRate.ask).setScale(scale, roundingMode)
+} else {
+    // Convert to BigDecimal if needed (defensive)
+    BigDecimal eurUsdBid = new BigDecimal(eurUsdAvgRate.bid.toString())
+    BigDecimal eurUsdAsk = new BigDecimal(eurUsdAvgRate.ask.toString())
+    BigDecimal usdTryBid = new BigDecimal(usdTryAvgRate.bid.toString())
+    BigDecimal usdTryAsk = new BigDecimal(usdTryAvgRate.ask.toString())
+    
+    calculatedBid = eurUsdBid.multiply(usdTryBid).setScale(scale, roundingMode)
+    calculatedAsk = eurUsdAsk.multiply(usdTryAsk).setScale(scale, roundingMode)
+}
+
+// Verify calculation with log message
+log.info("EUR/TRY Calculation: {}*{}={} and {}*{}={}", 
+    eurUsdAvgRate.bid, usdTryAvgRate.bid, calculatedBid,
+    eurUsdAvgRate.ask, usdTryAvgRate.ask, calculatedAsk)
+    
 def currentTimestamp = System.currentTimeMillis()
 
 log.info("Hesaplanan EUR/TRY ({}): Bid={}, Ask={}", outputSymbol, calculatedBid, calculatedAsk)

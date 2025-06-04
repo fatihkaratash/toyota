@@ -75,7 +75,7 @@ if (!gbpUsdAvgRate) {
     // Try both with and without slash format
     def altGbpUsdKey = gbpUsdAvgKey.contains("/") ? 
         gbpUsdAvgKey.replace("/", "") : 
-        gbpUsdAvgKey.substring(0, 3) + "/" + gbpUsdAvgKey.substring(3)
+        gbpUsdAvgKey.substring(0, 3) + "/" + gbpUsdAvgRate.substring(3)
     
     log.info("GBP/USD kuru '{}' anahtarıyla bulunamadı, alternatif anahtar deneniyor: {}", 
         gbpUsdAvgKey, altGbpUsdKey)
@@ -111,8 +111,31 @@ calculationInputs.add(
 )
 
 // Calculate GBP/TRY cross rate: (GBP/USD_AVG) * (USD/TRY_AVG)
-def calculatedBid = (gbpUsdAvgRate.bid * usdTryAvgRate.bid).setScale(scale, roundingMode)
-def calculatedAsk = (gbpUsdAvgRate.ask * usdTryAvgRate.ask).setScale(scale, roundingMode)
+// Convert to BigDecimal if needed - ensure proper numeric calculation
+def calculateBid = null
+def calculateAsk = null
+
+// Ensure we're working with BigDecimal for all calculations
+if (gbpUsdAvgRate.bid instanceof BigDecimal && usdTryAvgRate.bid instanceof BigDecimal) {
+    // Direct calculation with BigDecimal
+    calculatedBid = gbpUsdAvgRate.bid.multiply(usdTryAvgRate.bid).setScale(scale, roundingMode)
+    calculatedAsk = gbpUsdAvgRate.ask.multiply(usdTryAvgRate.ask).setScale(scale, roundingMode)
+} else {
+    // Convert to BigDecimal if needed (defensive)
+    BigDecimal gbpUsdBid = new BigDecimal(gbpUsdAvgRate.bid.toString())
+    BigDecimal gbpUsdAsk = new BigDecimal(gbpUsdAvgRate.ask.toString())
+    BigDecimal usdTryBid = new BigDecimal(usdTryAvgRate.bid.toString())
+    BigDecimal usdTryAsk = new BigDecimal(usdTryAvgRate.ask.toString())
+    
+    calculatedBid = gbpUsdBid.multiply(usdTryBid).setScale(scale, roundingMode)
+    calculatedAsk = gbpUsdAsk.multiply(usdTryAsk).setScale(scale, roundingMode)
+}
+
+// Verify calculation with log message
+log.info("GBP/TRY Calculation: {}*{}={} and {}*{}={}", 
+    gbpUsdAvgRate.bid, usdTryAvgRate.bid, calculatedBid,
+    gbpUsdAvgRate.ask, usdTryAvgRate.ask, calculatedAsk)
+    
 def currentTimestamp = System.currentTimeMillis()
 
 log.info("Hesaplanan GBP/TRY ({}): Bid={}, Ask={}", outputSymbol, calculatedBid, calculatedAsk)

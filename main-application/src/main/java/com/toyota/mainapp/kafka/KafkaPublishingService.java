@@ -63,6 +63,20 @@ public class KafkaPublishingService {
         }
 
         try {
+            // Add deduplication check - use a combination of symbol+timestamp as deduplication key
+            String deduplicationKey = rate.getSymbol() + "_" + rate.getTimestamp();
+            Long lastSent = lastSentTimestamps.get(deduplicationKey);
+            long currentTime = System.currentTimeMillis();
+            
+            // If we've sent this exact rate recently, skip it
+            if (lastSent != null && (currentTime - lastSent) < MIN_SEND_INTERVAL_MS) {
+                log.debug("Duplicate rate detected, skipping: {} at {}", rate.getSymbol(), rate.getTimestamp());
+                return;
+            }
+            
+            // Mark this rate as sent
+            lastSentTimestamps.put(deduplicationKey, currentTime);
+
             RateType rateType = rate.getRateType();
             if (rateType == null) {
                 log.warn("Kur tipi belirtilmemiş, Kafka'ya yayınlanamıyor: {}", rate.getSymbol());
@@ -184,15 +198,9 @@ public class KafkaPublishingService {
             return true;
         }
         
-        // Always send cross rates (EUR/TRY, GBP/TRY, etc.)
-        boolean isCrossRate = symbol.contains("/") || 
-                             com.toyota.mainapp.util.SymbolUtils.symbolsEquivalent("EUR/TRY", symbol) ||
-                             com.toyota.mainapp.util.SymbolUtils.symbolsEquivalent("GBP/TRY", symbol) ||
-                             // Add other cross rates as needed
-                             symbol.toUpperCase().contains("TRY");
-        
-        if (isCrossRate) {
-            log.debug("Cross rate will be sent to simple topic: {}", symbol);
+        // Use common utility for cross rate detection
+        if (com.toyota.mainapp.util.RateCalculationUtils.isCrossRate(symbol)) {
+            log.info("Cross rate will be sent to simple topic: {}", symbol);
             return true;
         }
         

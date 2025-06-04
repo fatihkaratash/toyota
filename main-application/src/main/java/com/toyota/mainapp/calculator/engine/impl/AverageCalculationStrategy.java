@@ -8,11 +8,11 @@ import com.toyota.mainapp.dto.model.InputRateInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import com.toyota.mainapp.util.RateCalculationUtils;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.*;
 
-import com.toyota.mainapp.util.RateCalculationUtils;
 
 /**
  * Calculation strategy that averages rates from multiple providers

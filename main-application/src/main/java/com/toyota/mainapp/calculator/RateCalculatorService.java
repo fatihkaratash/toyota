@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import jakarta.annotation.PostConstruct; // Changed from javax to jakarta
 
@@ -43,6 +44,10 @@ public class RateCalculatorService implements CrossRateCalculationCallback {
     // Use @Lazy to break circular dependency
     private final CrossRateCollector crossRateCollector;
     
+    // Add a cache for calculation inputs to prevent redundant calculations
+    private final Map<String, CalculationCache> calculationInputCache = new ConcurrentHashMap<>();
+    private static final long CACHE_VALIDITY_MS = 5000; // 5 seconds
+    
     public RateCalculatorService(
             RateCacheService rateCacheService,
             RuleEngineService ruleEngineService,
@@ -55,6 +60,76 @@ public class RateCalculatorService implements CrossRateCalculationCallback {
         this.rateDependencyManager = rateDependencyManager;
         this.crossRateCollector = crossRateCollector;
         log.info("RateCalculatorService initialized");
+    }
+    
+    // Helper class to store calculation input data for cache comparison
+    private static class CalculationCache {
+        private final Map<String, RateSnapshot> inputSnapshots;
+        private final BaseRateDto result;
+        private final long calculationTime;
+        
+        public CalculationCache(Map<String, BaseRateDto> inputs, BaseRateDto result) {
+            this.inputSnapshots = new HashMap<>();
+            for (Map.Entry<String, BaseRateDto> entry : inputs.entrySet()) {
+                BaseRateDto rate = entry.getValue();
+                if (rate != null && rate.getBid() != null && rate.getAsk() != null) {
+                    inputSnapshots.put(entry.getKey(), new RateSnapshot(rate));
+                }
+            }
+            this.result = result;
+            this.calculationTime = System.currentTimeMillis();
+        }
+        
+        public boolean isStillValid(Map<String, BaseRateDto> currentInputs, long currentTime) {
+            // Check if cache is too old
+            if (currentTime - calculationTime > CACHE_VALIDITY_MS) {
+                return false;
+            }
+            
+            // Check if all required inputs are present and match
+            for (Map.Entry<String, RateSnapshot> entry : inputSnapshots.entrySet()) {
+                String key = entry.getKey();
+                RateSnapshot snapshot = entry.getValue();
+                BaseRateDto currentRate = currentInputs.get(key);
+                
+                // If any input is missing or different, cache is invalid
+                if (currentRate == null || !snapshot.matches(currentRate)) {
+                    return false;
+                }
+            }
+            
+            // All inputs match, cache is valid
+            return true;
+        }
+        
+        public BaseRateDto getResult() {
+            return result;
+        }
+    }
+    
+    // Helper class to store bid/ask/timestamp snapshots for comparison
+    private static class RateSnapshot {
+        private final BigDecimal bid;
+        private final BigDecimal ask;
+        private final Long timestamp;
+        
+        public RateSnapshot(BaseRateDto rate) {
+            this.bid = rate.getBid();
+            this.ask = rate.getAsk();
+            this.timestamp = rate.getTimestamp();
+        }
+        
+        public boolean matches(BaseRateDto rate) {
+            if (rate == null || rate.getBid() == null || rate.getAsk() == null) {
+                return false;
+            }
+            
+            // Compare bid/ask values
+            return bid.compareTo(rate.getBid()) == 0 && 
+                   ask.compareTo(rate.getAsk()) == 0;
+            // Note: we intentionally don't compare timestamps as they might be updated 
+            // even when the actual values haven't changed
+        }
     }
     
     @PostConstruct
@@ -107,8 +182,14 @@ public class RateCalculatorService implements CrossRateCalculationCallback {
             return;
         }
         
-        // Calculate each triggered rule
+        // Calculate each triggered rule - use a Set to ensure uniqueness by output symbol
+        Set<String> processedOutputSymbols = new HashSet<>();
         for (CalculationRuleDto rule : triggeredRules) {
+            // Skip duplicate rules for the same output symbol
+            if (!processedOutputSymbols.add(rule.getOutputSymbol())) {
+                log.debug("Skipping duplicate rule for output symbol: {}", rule.getOutputSymbol());
+                continue;
+            }
             calculateRateFromRule(rule, newlyCompletedRawRatesInWindow);
         }
 
@@ -162,11 +243,35 @@ public class RateCalculatorService implements CrossRateCalculationCallback {
     @Override
     public boolean calculateRateFromRule(CalculationRuleDto rule, Map<String, BaseRateDto> aggregatedRates) {
         try {
-            log.debug("Executing calculation rule: {}", rule.getOutputSymbol());
+            String outputSymbol = rule.getOutputSymbol();
+            log.debug("Executing calculation rule: {}", outputSymbol);
             
             if (aggregatedRates == null || aggregatedRates.isEmpty()) {
-                log.warn("No aggregated rates available for calculation: {}", rule.getOutputSymbol());
+                log.warn("No aggregated rates available for calculation: {}", outputSymbol);
                 return false;
+            }
+            
+            // Check if we recently calculated this rate with the same input values
+            String cacheKey = generateCacheKey(outputSymbol, aggregatedRates);
+            CalculationCache cachedCalc = calculationInputCache.get(cacheKey);
+            long currentTime = System.currentTimeMillis();
+            
+            if (cachedCalc != null && cachedCalc.isStillValid(aggregatedRates, currentTime)) {
+                BaseRateDto cachedResult = cachedCalc.getResult();
+                log.info("Using cached calculation for {}: bid={}, ask={}, from {} ms ago", 
+                        outputSymbol, cachedResult.getBid(), cachedResult.getAsk(),
+                        currentTime - cachedCalc.calculationTime);
+                
+                // Update timestamp on the cached result
+                cachedResult.setTimestamp(currentTime);
+                
+                // Still cache and publish the cached result to ensure consistent behavior
+                rateCacheService.cacheCalculatedRate(cachedResult);
+                if (sequentialPublisher != null) {
+                    sequentialPublisher.publishRate(cachedResult);
+                }
+                
+                return true;
             }
             
             // Use the utility for average calculation
@@ -174,24 +279,27 @@ public class RateCalculatorService implements CrossRateCalculationCallback {
                     RateCalculationUtils.calculateAverage(aggregatedRates);
                     
             if (avgResult.isEmpty()) {
-                log.warn("Could not calculate rate: {}. No valid inputs available.", rule.getOutputSymbol());
+                log.warn("Could not calculate rate: {}. No valid inputs available.", outputSymbol);
                 return false;
             }
             
             // Create the rate DTO from the result
             BaseRateDto calculatedRate = RateCalculationUtils.createAverageRate(
-                    rule.getOutputSymbol(), 
+                    outputSymbol, 
                     avgResult.get(), 
                     "AVERAGE");
             
             // Cache the calculated rate
             rateCacheService.cacheCalculatedRate(calculatedRate);
             
+            // Store in our calculation cache for future reference
+            calculationInputCache.put(cacheKey, new CalculationCache(aggregatedRates, calculatedRate));
+            
             // Publish to Kafka
             if (sequentialPublisher != null) {
                 sequentialPublisher.publishRate(calculatedRate);
             } else {
-                log.warn("Publisher not available, rate not published: {}", rule.getOutputSymbol());
+                log.warn("Publisher not available, rate not published: {}", outputSymbol);
             }
             
             log.info("Successfully calculated rate: {} using {} inputs", 
@@ -207,6 +315,31 @@ public class RateCalculatorService implements CrossRateCalculationCallback {
             log.error("Error calculating rate for rule {}: {}", rule.getOutputSymbol(), e.getMessage(), e);
             return false;
         }
+    }
+    
+    /**
+     * Generate a cache key based on output symbol and input rates
+     */
+    private String generateCacheKey(String outputSymbol, Map<String, BaseRateDto> inputs) {
+        StringBuilder keyBuilder = new StringBuilder(outputSymbol);
+        
+        // Add inputs to the key in a consistent order
+        List<String> sortedKeys = new ArrayList<>(inputs.keySet());
+        Collections.sort(sortedKeys);
+        
+        for (String key : sortedKeys) {
+            BaseRateDto rate = inputs.get(key);
+            if (rate != null && rate.getBid() != null && rate.getAsk() != null) {
+                keyBuilder.append("_")
+                         .append(key)
+                         .append(":")
+                         .append(rate.getBid())
+                         .append(":")
+                         .append(rate.getAsk());
+            }
+        }
+        
+        return keyBuilder.toString();
     }
     
     /**

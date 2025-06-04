@@ -46,8 +46,8 @@
       "dependsOnRaw": [],
       "dependsOnCalculated": ["EURUSD_AVG", "USDTRY_AVG"],
       "inputParameters": {
-        "eurUsdAvgKey": "calc_rate:EURUSD_AVG",
-        "usdTryAvgSourceKey": "calc_rate:USDTRY_AVG",
+        "eurUsdAvgKey": "EURUSD_AVG",
+        "usdTryAvgSourceKey": "USDTRY_AVG",
         "defaultScale": "6"
       }
     },
@@ -59,8 +59,8 @@
       "dependsOnRaw": [],
       "dependsOnCalculated": ["GBPUSD_AVG", "USDTRY_AVG"],
       "inputParameters": {
-        "gbpUsdAvgKey": "calc_rate:GBPUSD_AVG",
-        "usdTryAvgSourceKey": "calc_rate:USDTRY_AVG",
+        "gbpUsdAvgKey": "GBPUSD_AVG",
+        "usdTryAvgSourceKey": "USDTRY_AVG",
         "defaultScale": "6"
       }
     }
