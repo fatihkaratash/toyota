@@ -1,6 +1,5 @@
 package com.toyota.mainapp.config;
 
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -34,11 +33,6 @@ public class AppConfig {
     public ObjectMapper objectMapper() {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
-        // Enable default typing to preserve type information
-      //  mapper.activateDefaultTyping(
-        //    mapper.getPolymorphicTypeValidator(), 
-          //  ObjectMapper.DefaultTyping.NON_FINAL, 
-            //JsonTypeInfo.As.PROPERTY);
         return mapper;
     }
 

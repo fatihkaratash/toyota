@@ -11,9 +11,6 @@ import org.springframework.stereotype.Component;
 import java.util.Map;
 import java.util.Optional;
 
-/**
- * Specialized strategy for calculating average USD/TRY rate
- */
 @Component("averageUsdTryStrategy")
 @Slf4j
 public class AverageUsdTryStrategy implements CalculationStrategy {

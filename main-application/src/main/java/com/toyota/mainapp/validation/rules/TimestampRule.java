@@ -15,14 +15,8 @@ import java.util.List;
 @Component
 public class TimestampRule implements ValidationRule {
 
-    /**
-     * Maximum allowed age of rate data (milliseconds)
-     */
     private final long maxAgeMs;
-    
-    /**
-     * Constructor with configuration from application.properties
-     */
+
     public TimestampRule(@Value("${validation.timestamp.max-age-seconds:300}") long maxAgeSeconds) {
         this.maxAgeMs = maxAgeSeconds * 1000;
     }

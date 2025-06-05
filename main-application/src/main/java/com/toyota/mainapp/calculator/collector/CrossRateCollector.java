@@ -22,14 +22,9 @@ public class CrossRateCollector {
     
     // Callback for calculation - will be set later by RateCalculatorService
     private CrossRateCalculationCallback calculationCallback;
-    
-    // Track which cross rates need recalculation
+
     private final Set<String> pendingCrossRates = ConcurrentHashMap.newKeySet();
-    
-    // Map to track dependencies and their actual values
     private final Map<String, Set<String>> missingDependencies = new ConcurrentHashMap<>();
-    
-    // Add timestamp tracking for calculations to prevent redundant calculations
     private final Map<String, Long> lastCalculationTimes = new ConcurrentHashMap<>();
     private static final long RECALCULATION_THRESHOLD_MS = 1000; // 1 second threshold
     
@@ -48,10 +43,7 @@ public class CrossRateCollector {
         this.calculationCallback = callback;
         log.info("CrossRateCollector: Calculation callback set");
     }
-    
-    /**
-     * Process chain calculations based on a newly calculated rate.
-     */
+
     public void processChainCalculationsForRate(BaseRateDto calculatedRate) {
         if (calculatedRate == null || calculatedRate.getSymbol() == null) {
             log.debug("Null or invalid calculated rate provided for chain processing");
@@ -72,11 +64,9 @@ public class CrossRateCollector {
             log.warn("Cannot use rate {} for chain calculation: missing bid/ask values", rateSymbol);
             return;
         }
-        
-        // Try lookup with various symbol formats
+ 
         List<String> symbolVariants = SymbolUtils.generateSymbolVariants(rateSymbol);
-        
-        // Find rules that depend on this calculated rate (try all variants)
+ 
         List<CalculationRuleDto> dependentRules = new ArrayList<>();
         for (String variant : symbolVariants) {
             List<CalculationRuleDto> rules = rateDependencyManager.getCalculationsToTrigger(variant, false);
@@ -96,31 +86,24 @@ public class CrossRateCollector {
             processRuleIfDependenciesSatisfied(rule);
         }
     }
-    
-    /**
-     * Check if all dependencies for a rule are satisfied and process it if they are
-     */
+
     private void processRuleIfDependenciesSatisfied(CalculationRuleDto rule) {
         if (calculationCallback == null) {
             log.warn("Cannot process rule {} - calculation callback not set", rule.getOutputSymbol());
             pendingCrossRates.add(rule.getOutputSymbol());
             return;
         }
-
-        // Track missing dependencies for better diagnostics
         Set<String> missing = new HashSet<>();
-        
-        // Check if all calculated dependencies are available
+
         boolean canCalculate = true;
         Map<String, BaseRateDto> inputRates = new HashMap<>();
         
         if (rule.getDependsOnCalculated() != null) {
             for (String dependency : rule.getDependsOnCalculated()) {
-                // Try to find the dependency with or without prefix
+
                 String lookupKey = dependency;
                 Optional<BaseRateDto> dependencyRate = rateCacheService.getCalculatedRate(lookupKey);
-                
-                // Try various symbol formats if the direct lookup fails
+
                 if (dependencyRate.isEmpty()) {
                     for (String variant : SymbolUtils.generateSymbolVariants(dependency)) {
                         dependencyRate = rateCacheService.getCalculatedRate(variant);
@@ -133,7 +116,7 @@ public class CrossRateCollector {
                 }
                 
                 if (dependencyRate.isPresent()) {
-                    // Get the rate and validate it has proper values
+
                     BaseRateDto rate = dependencyRate.get();
                     if (rate.getBid() == null || rate.getAsk() == null) {
                         log.warn("Found dependency {} but it has null bid/ask values", dependency);
@@ -141,12 +124,10 @@ public class CrossRateCollector {
                         missing.add(dependency + " (has null values)");
                         continue;
                     }
-                    
-                    // Log the rate details for debugging
+
                     log.debug("Found dependency {} for rule {}: rate={} bid={}, ask={}", 
                         dependency, rule.getOutputSymbol(), rate.getSymbol(), rate.getBid(), rate.getAsk());
-                    
-                    // Use original dependency name as key for proper script integration  
+
                     inputRates.put(dependency, rate);
                 } else {
                     canCalculate = false;
@@ -160,8 +141,7 @@ public class CrossRateCollector {
         if (canCalculate) {
             String outputSymbol = rule.getOutputSymbol();
             long now = System.currentTimeMillis();
-            
-            // Check if we recently calculated this symbol to avoid redundant calculations
+
             Long lastCalc = lastCalculationTimes.get(outputSymbol);
             if (lastCalc != null && (now - lastCalc) < RECALCULATION_THRESHOLD_MS) {
                 log.debug("Skipping recent calculation for {}, last calculated {}ms ago",
@@ -187,10 +167,7 @@ public class CrossRateCollector {
                     rule.getOutputSymbol(), String.join(", ", missing));
         }
     }
-    
-    /**
-     * Process all possible chain calculations
-     */
+
     public void processAllPendingChainCalculations() {
         if (pendingCrossRates.isEmpty() || calculationCallback == null) {
             return;
@@ -200,17 +177,14 @@ public class CrossRateCollector {
         
         // Find all unique rules that should be processed
         List<CalculationRuleDto> rulesToProcess = new ArrayList<>();
-        
-        // First collect rules for pending cross rates
+
         for (String pendingCrossRate : new HashSet<>(pendingCrossRates)) {
-            // Find the rule that produces this cross rate
             List<CalculationRuleDto> rules = rateDependencyManager.getAllRulesSortedByPriority().stream()
                 .filter(r -> r.getOutputSymbol().equals(pendingCrossRate) || 
                          SymbolUtils.symbolsEquivalent(r.getOutputSymbol(), pendingCrossRate))
                 .toList();
                 
             if (!rules.isEmpty()) {
-                // Add deduplication logic to prevent adding multiple rules for the same output symbol
                 for (CalculationRuleDto rule : rules) {
                     if (rulesToProcess.stream().noneMatch(r -> r.getOutputSymbol().equals(rule.getOutputSymbol()))) {
                         rulesToProcess.add(rule);
@@ -230,8 +204,7 @@ public class CrossRateCollector {
         for (CalculationRuleDto rule : rulesToProcess) {
             processRuleIfDependenciesSatisfied(rule);
         }
-        
-        // Log any remaining pending rates with their missing dependencies
+
         if (!pendingCrossRates.isEmpty()) {
             log.info("{} cross rates still pending after processing", pendingCrossRates.size());
             for (String pendingRate : pendingCrossRates) {
@@ -240,10 +213,7 @@ public class CrossRateCollector {
             }
         }
     }
-    
-    /**
-     * Mark a cross rate as successfully calculated and remove from pending
-     */
+
     public void markCrossRateCalculated(String symbol) {
         if (pendingCrossRates.remove(symbol)) {
             missingDependencies.remove(symbol);

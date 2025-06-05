@@ -1,4 +1,3 @@
-// com.toyota.mainapp.config.KafkaConfig.java
 package com.toyota.mainapp.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,7 +32,7 @@ public class KafkaConfig {
     @Value("${app.kafka.topic.calculated-rates:financial-calculated-rates}")
     private String calculatedRatesTopicName;
 
-    @Value("${app.kafka.topic.simple-rates:financial-simple-rates}") // Renamed for clarity, was financial-status-rates
+    @Value("${app.kafka.topic.simple-rates:financial-simple-rates}") 
     private String simpleRatesTopicName;
 
 
@@ -70,7 +69,6 @@ public class KafkaConfig {
     }
 
     //reefactor sonrası eksik beanler
-     // Add these beans for KafkaTemplate<String, String>
     @Bean
     public ProducerFactory<String, String> stringProducerFactory() {
         Map<String, Object> configProps = new HashMap<>(baseProducerConfigs());

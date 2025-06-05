@@ -15,14 +15,8 @@ import java.util.List;
 @Component
 public class SpreadRule implements ValidationRule {
 
-    /**
-     * Maximum allowed spread percentage
-     */
+
     private final BigDecimal maxSpreadPercentage;
-    
-    /**
-     * Constructor with configuration from application.properties
-     */
     public SpreadRule(@Value("${validation.spread.max-percentage:5.0}") BigDecimal maxSpreadPercentage) {
         this.maxSpreadPercentage = maxSpreadPercentage;
     }
@@ -42,7 +36,7 @@ public class SpreadRule implements ValidationRule {
             
             // Use bid price as the base for percentage calculation
             BigDecimal spreadPercentage = spread.multiply(BigDecimal.valueOf(100))
-                    .divide(rate.getBid(), 4, BigDecimal.ROUND_HALF_UP);
+                    .divide(rate.getBid(), 4, java.math.RoundingMode.HALF_UP);
             
             // Check if spread exceeds limit
             if (spreadPercentage.compareTo(maxSpreadPercentage) > 0) {

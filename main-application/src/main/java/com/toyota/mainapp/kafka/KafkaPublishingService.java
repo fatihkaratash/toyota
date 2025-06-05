@@ -41,7 +41,7 @@ public class KafkaPublishingService {
     @Value("${app.kafka.topic.calculated-rates:financial-calculated-rates}")
     private String calculatedRatesTopic;
     
-    // Metin formatı için konu adı (bu, simple text rate'ler için kullanılır)
+    // Metin formatı 
     @Value("${app.kafka.topic.simple-rates:financial-simple-rates}")
     private String simpleRatesTopic;
 
@@ -63,18 +63,15 @@ public class KafkaPublishingService {
         }
 
         try {
-            // Add deduplication check - use a combination of symbol+timestamp as deduplication key
             String deduplicationKey = rate.getSymbol() + "_" + rate.getTimestamp();
             Long lastSent = lastSentTimestamps.get(deduplicationKey);
             long currentTime = System.currentTimeMillis();
             
-            // If we've sent this exact rate recently, skip it
             if (lastSent != null && (currentTime - lastSent) < MIN_SEND_INTERVAL_MS) {
                 log.debug("Duplicate rate detected, skipping: {} at {}", rate.getSymbol(), rate.getTimestamp());
                 return;
             }
             
-            // Mark this rate as sent
             lastSentTimestamps.put(deduplicationKey, currentTime);
 
             RateType rateType = rate.getRateType();
@@ -92,7 +89,6 @@ public class KafkaPublishingService {
                 case CALCULATED:
                     publishCalculatedRate(rate);
                     break;
-                // STATUS case removed
                 default:
                     log.warn("Desteklenmeyen kur tipi: {}, yayınlanamıyor. Sadece RAW ve CALCULATED desteklenir.", rateType);
             }
@@ -170,8 +166,6 @@ public class KafkaPublishingService {
         log.debug("Hesaplanmış kur başarıyla yayınlandı: {}", symbol);
     }
 
-    // publishStatusRate method removed
-    
     /**
      * Belirli bir ham kurun basit metin formatında gönderilip gönderilmeyeceğini belirler
      */
@@ -219,9 +213,6 @@ public class KafkaPublishingService {
                 .build();
     }
     
-    /**
-     * Basit metin formatında mesaj oluştur
-     */
     private String formatRate(String symbol, BigDecimal bid, BigDecimal ask, Long timestamp) {
         String isoTimestamp = timestamp == null 
                 ? ISO_FORMATTER.format(Instant.now())
@@ -233,10 +224,7 @@ public class KafkaPublishingService {
                 formatDecimal(ask), 
                 isoTimestamp);
     }
-    
-    /**
-     * BigDecimal değerini metin formatına dönüştür
-     */
+
     private String formatDecimal(BigDecimal value) {
         return value == null ? "" : value.stripTrailingZeros().toPlainString();
     }

@@ -16,19 +16,12 @@ import java.util.stream.Collectors;
 @Slf4j
 public class SymbolUtils {
 
-    // USDTRY veya USD/TRY formatındaki semboller için regex
     private static final Pattern CURRENCY_PAIR_PATTERN = Pattern.compile("([A-Z]{3})/?([A-Z]{3})");
-    
     // PROVIDERADI_BAZDOVIZKARŞITDOVIZ formatındaki semboller için regex (örn: PF1_USDTRY)
     private static final Pattern RAW_RATE_PATTERN = Pattern.compile("([A-Za-z0-9]+)_([A-Z]{3})/?([A-Z]{3})");
-    
     // BAZDOVIZKARŞITDOVIZ_HESAPLAMATİPİ formatındaki semboller için regex (örn: USDTRY_AVG)
     private static final Pattern CALCULATED_RATE_PATTERN = Pattern.compile("([A-Z]{3})/?([A-Z]{3})_([A-Z]+)");
     
-    /**
-     * Sembolden temel sembolü türetir (sağlayıcıyı ve hesaplama tipi soneklerini kaldırır)
-     * Örn: "PF1_USDTRY" -> "USDTRY" veya "USDTRY_AVG" -> "USDTRY" veya "USD/TRY" -> "USDTRY"
-     */
     public static String deriveBaseSymbol(String symbol) {
         if (symbol == null || symbol.isEmpty()) {
             return "";

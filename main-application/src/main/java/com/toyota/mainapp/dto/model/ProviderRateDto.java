@@ -14,29 +14,11 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ProviderRateDto {
     
-    /**
-     * Kur sembol adı 
-     */
+
     private String symbol;
-    
-    /**
-     * Alış fiyatı (metin olarak)
-     */
     private String bid;
-    
-    /**
-     * Satış fiyatı (metin olarak)
-     */
     private String ask;
-    
-    /**
-     * Veri sağlayıcı adı
-     */
     private String providerName;
-    
-    /**
-     * Zaman damgası (metin olarak)
-     */
     private String timestamp;
     
     /**

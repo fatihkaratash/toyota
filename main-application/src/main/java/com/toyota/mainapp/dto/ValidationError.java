@@ -12,18 +12,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ValidationError {
     
-    /**
-     * Field name with the validation error
-     */
     private String field;
-    
-    /**
-     * Invalid value
-     */
     private Object value;
-    
-    /**
-     * Error message
-     */
     private String message;
 }

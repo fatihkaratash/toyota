@@ -103,20 +103,12 @@ public class DynamicSubscriberLoader {
         try (InputStream inputStream = resource.getInputStream()) {
             // Create a copy of ObjectMapper with default typing disabled
             ObjectMapper localMapper = objectMapper.copy();
-            // This is the key step - disable type info which causes JSON parsing problems
             localMapper.deactivateDefaultTyping();
             
-            // Daha ayrıntılı hata ayıklama için
-            log.debug("Yapılandırma dosyasının içeriğini okuma: {}", configPath);
             String jsonContent = new String(inputStream.readAllBytes());
-            log.debug("Okunan JSON içeriği: {}", jsonContent);
-            
-            // Parsed configuration to return
-            List<SubscriberConfigDto> configs;
             
             try {
-                // Parse the config
-                configs = localMapper.readValue(jsonContent, 
+                List<SubscriberConfigDto> configs = localMapper.readValue(jsonContent, 
                     new TypeReference<List<SubscriberConfigDto>>() {});
                     
                 log.debug("Yapılandırma başarıyla okundu, {} abone yapılandırması bulundu", configs.size());
@@ -144,8 +136,7 @@ public class DynamicSubscriberLoader {
         // RestRateSubscriber için özel işlem
         if (config.getImplementationClass().contains("RestRateSubscriber")) {
             log.debug("RestRateSubscriber için WebClient.Builder, ObjectMapper, TaskExecutor ile özel oluşturma: {}", config.getName());
-            
-            // Ensure critical dependencies for RestRateSubscriber are present
+
             if (this.objectMapper == null) {
                 log.error("ObjectMapper is null in DynamicSubscriberLoader. Cannot create RestRateSubscriber: {}", config.getName());
                 throw new SubscriberInitializationException("ObjectMapper is null, cannot create " + config.getName());

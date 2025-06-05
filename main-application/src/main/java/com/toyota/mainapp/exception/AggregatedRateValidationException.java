@@ -21,10 +21,6 @@ public class AggregatedRateValidationException extends RuntimeException {
         this.errors = errors;
     }
 
-    /**
-     * Get all validation errors
-     * @return Unmodifiable list of validation errors
-     */
     public List<String> getErrors() {
         return Collections.unmodifiableList(errors);
     }

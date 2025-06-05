@@ -16,8 +16,6 @@ import org.codehaus.groovy.control.CompilerConfiguration;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
-
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -25,7 +23,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 @Component("groovyScriptCalculationStrategy")
 @Slf4j
@@ -45,65 +42,49 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
 
   @Override
 public Optional<BaseRateDto> calculate(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates) {
-    String scriptPath = rule.getImplementation(); // e.g., "scripts/eur_try_calculator.groovy"
+    String scriptPath = rule.getImplementation();
     log.info("GROOVY-CALC-START: Kural [{}] için '{}' betiği çalıştırılıyor", 
         rule.getOutputSymbol(), scriptPath);
 
     try {
-        // 1. Script kaynağını kontrol et
+        // Script kaynağını kontrol et
         Resource scriptResource = resourceLoader.getResource("classpath:" + scriptPath);
         if (!scriptResource.exists()) {
             log.error("GROOVY-MISSING: '{}' betiği bulunamadı!", scriptPath);
             return Optional.empty();
         }
 
-        // 2. Script içeriğini oku
+        // Script içeriğini oku
         String scriptContent = new String(scriptResource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        log.debug("GROOVY-LOADED: '{}' betiği yüklendi ({} bytes)", 
-            scriptPath, scriptContent.length());
-
-        // 3. Script bağlamını hazırla ve değişkenleri logla
+        
+        // Script bağlamını hazırla
         CompilerConfiguration compilerConfig = new CompilerConfiguration();
         Binding binding = new Binding();
         binding.setVariable("cache", this.rateCacheService);
         binding.setVariable("log", log);
         binding.setVariable("outputSymbol", rule.getOutputSymbol());
         
-        // 4. Input parameters'ı logla
+        // Input parameters
         if (rule.getInputParameters() != null && !rule.getInputParameters().isEmpty()) {
-            log.info("GROOVY-PARAMS: {} input parametresi scripte geçiliyor", 
-                rule.getInputParameters().size());
             for (Map.Entry<String, String> param : rule.getInputParameters().entrySet()) {
                 binding.setVariable(param.getKey(), param.getValue());
-                log.debug("GROOVY-PARAM: {} = {}", param.getKey(), param.getValue());
             }
-        } else {
-            log.warn("GROOVY-NO-PARAMS: Script için input parametresi yok!");
         }
         
-        // 5. Mevcut kurları logla
+        // Mevcut kurları adapte et
         Map<String, BaseRateDto> adaptedInputRates = adaptInputRatesForScript(inputRates);
         binding.setVariable("inputRates", adaptedInputRates);
         
-        if (adaptedInputRates == null || adaptedInputRates.isEmpty()) {
+        if (adaptedInputRates.isEmpty()) {
             log.error("GROOVY-NO-INPUTS: Script için input kurlar yok!");
             return Optional.empty();
         }
         
-        log.info("GROOVY-RATES: {} adet giriş kuru scripte geçiliyor: {}", 
-            adaptedInputRates.size(),
-            adaptedInputRates.keySet().stream()
-                .map(k -> k + "(bid=" + adaptedInputRates.get(k).getBid() + 
-                     ",ask=" + adaptedInputRates.get(k).getAsk() + ")")
-                .collect(Collectors.joining(", ")));
-        
-        // 6. Script'i çalıştır
+        // Script'i çalıştır
         GroovyShell shell = new GroovyShell(getClass().getClassLoader(), binding, compilerConfig);
-        log.debug("GROOVY-EXECUTING: Script çalıştırılıyor...");
         Object result = shell.evaluate(scriptContent);
-        log.debug("GROOVY-EXECUTED: Script çalıştırıldı, sonuç: {}", result);
         
-        // 7. Sonucu işle
+        // Sonucu işle
         if (result instanceof Map) {
             @SuppressWarnings("unchecked")
             Map<String, Object> resultMap = (Map<String, Object>) result;
@@ -137,8 +118,7 @@ public Optional<BaseRateDto> calculate(CalculationRuleDto rule, Map<String, Base
             .rateType(RateType.CALCULATED)
             .symbol(rule.getOutputSymbol())
             .build();
-        
-        // Allow script to override symbol if provided
+
         if (resultMap.containsKey("symbol") && resultMap.get("symbol") instanceof String) {
             dto.setSymbol((String) resultMap.get("symbol"));
         }
@@ -150,7 +130,6 @@ public Optional<BaseRateDto> calculate(CalculationRuleDto rule, Map<String, Base
         Object inputsObj = resultMap.get("calculationInputs");
         if (inputsObj != null) {
             try {
-                // Use ObjectMapper for robust conversion of List<InputRateInfo>
                 List<InputRateInfo> calculationInputs = objectMapper.convertValue(inputsObj, 
                     new TypeReference<List<InputRateInfo>>() {});
                 dto.setCalculationInputs(calculationInputs);
@@ -210,10 +189,6 @@ public Optional<BaseRateDto> calculate(CalculationRuleDto rule, Map<String, Base
         }
     }
 
-    /**
-     * Adapts input rates map to ensure symbol format consistency for scripts
-     * Using SymbolUtils to convert between formats
-     */
     private Map<String, BaseRateDto> adaptInputRatesForScript(Map<String, BaseRateDto> originalInputRates) {
         Map<String, BaseRateDto> adaptedRates = new HashMap<>();
         
@@ -221,11 +196,9 @@ public Optional<BaseRateDto> calculate(CalculationRuleDto rule, Map<String, Base
             log.warn("adaptInputRatesForScript: Orijinal inputRates boş veya null");
             return adaptedRates;
         }
-        
-        // First pass: add all original entries
+
         adaptedRates.putAll(originalInputRates);
-        
-        // Second pass: add entries with alternative symbols (add but don't replace)
+
         for (Map.Entry<String, BaseRateDto> entry : originalInputRates.entrySet()) {
             String originalKey = entry.getKey();
             BaseRateDto rate = entry.getValue();
@@ -253,7 +226,6 @@ public Optional<BaseRateDto> calculate(CalculationRuleDto rule, Map<String, Base
             
             // Add both slashed and unslashed versions for compatibility
             if (!originalKey.contains("/")) {
-                // Add version with slashes for scripts that expect it
                 String slashedSymbol = com.toyota.mainapp.util.SymbolUtils.formatWithSlash(originalKey);
                 if (!originalKey.equals(slashedSymbol) && !adaptedRates.containsKey(slashedSymbol)) {
                     adaptedRates.put(slashedSymbol, rate);

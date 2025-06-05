@@ -3,20 +3,12 @@ package com.toyota.mainapp.calculator.engine.impl;
 import com.toyota.mainapp.calculator.engine.CalculationStrategy;
 import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.dto.config.CalculationRuleDto;
-import com.toyota.mainapp.dto.model.RateType;
-import com.toyota.mainapp.dto.model.InputRateInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import com.toyota.mainapp.util.RateCalculationUtils;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.*;
 
-
-/**
- * Calculation strategy that averages rates from multiple providers
- */
 @Component("averageCalculationStrategy")
 @Slf4j
 public class AverageCalculationStrategy implements CalculationStrategy {
@@ -29,7 +21,6 @@ public class AverageCalculationStrategy implements CalculationStrategy {
         }
         
         try {
-            // Use the utility for average calculation
             Optional<RateCalculationUtils.AverageResult> avgResult = 
                     RateCalculationUtils.calculateAverage(inputRates);
                     

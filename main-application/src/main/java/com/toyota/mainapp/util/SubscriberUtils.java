@@ -78,20 +78,8 @@ public class SubscriberUtils {
             return defaultValue;
         }
         Object value = config.get(key);
-        if (defaultValue == null) { // Cannot check class if defaultValue is null
-             if (value.getClass().isInstance(defaultValue)) { // This check is problematic if defaultValue is null
-                return (T) value;
-             } else { // Attempt conversion for common types if defaultValue is null, or handle as error
-                 // This part needs careful consideration based on expected types if defaultValue can be null
-                 // For now, assuming defaultValue helps determine the type.
-                 // If T is String and value is Number, convert Number to String.
-                 if (value instanceof Number && defaultValue == null) { // Example: if T could be String
-                     // This is a placeholder, proper handling depends on T
-                     // return (T) String.valueOf(value);
-                 }
-                 // Fallback or throw error if type is incompatible and defaultValue is null
-                 return (T) value; // May cause ClassCastException if types mismatch and defaultValue is null
-             }
+        if (defaultValue == null) {
+            return (T) value;
         }
 
         if (value.getClass().isAssignableFrom(defaultValue.getClass())) {

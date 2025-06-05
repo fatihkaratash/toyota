@@ -1,19 +1,14 @@
 package com.toyota.mainapp.subscriber.impl;
 
 import com.toyota.mainapp.coordinator.callback.PlatformCallback;
-import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.dto.model.ProviderRateDto;
 import com.toyota.mainapp.subscriber.api.PlatformSubscriber;
 import com.toyota.mainapp.util.SubscriberUtils;
 import com.toyota.mainapp.dto.config.SubscriberConfigDto;
-
 import lombok.extern.slf4j.Slf4j;
-
 import java.io.*;
 import java.net.Socket;
-// import java.time.Instant; // No longer directly used here
 import java.util.Arrays;
-// import java.util.List; // No longer directly used here
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -31,7 +26,7 @@ public class TcpRateSubscriber implements PlatformSubscriber {
     private String host = "tcp-rate-provider"; 
     private int port = 8081; 
     private int timeout = 30000;
-    private int retries = 10; // Default retries was 10, config default was 3. Let's keep 10 as class default.
+    private int retries = 10; // Default retries was 10, config default was 3.
     private String[] symbols = new String[0];
 
     @Override
@@ -119,70 +114,63 @@ public class TcpRateSubscriber implements PlatformSubscriber {
         // Subscribe using proper format
         for (String symbol : symbols) {
             String uppercaseSymbol = symbol.toUpperCase();
-            log.debug("[{}] Sending SUBSCRIBE command for symbol: {}", providerName, uppercaseSymbol);
             writer.println("subscribe|" + uppercaseSymbol); 
-            writer.flush(); // Ensure data is sent immediately
+            writer.flush();
             log.info("[{}] Sent SUBSCRIBE command for symbol: {}", providerName, uppercaseSymbol);
         }
         
-        // Ana döngü
-    Thread thread = new Thread(() -> {
-        log.info("[{}] TCP ana dinleme thread'i başlatıldı.", providerName);
-        while (running.get()) {
-            try {
-                if (!connected.get()) {
-                    log.warn("[{}] TCP bağlantısı yok, yeniden bağlanmaya çalışılıyor...", providerName);
-                    reconnect(); 
-                    continue;
-                }
-                
-                log.debug("[{}] Veri okunuyor...", providerName);
-                String line = reader.readLine();
-                log.trace("[{}] Raw line received: {}", providerName, line);
+        Thread thread = new Thread(() -> {
+            log.info("[{}] TCP ana dinleme thread'i başlatıldı.", providerName);
+            while (running.get()) {
+                try {
+                    if (!connected.get()) {
+                        log.warn("[{}] TCP bağlantısı yok, yeniden bağlanmaya çalışılıyor...", providerName);
+                        reconnect(); 
+                        continue;
+                    }
+                    
+                    String line = reader.readLine();
 
-                if (line == null) {
-                    handleConnectionLost("Bağlantı kapatıldı (sunucu null gönderdi)");
-                    continue;
+                    if (line == null) {
+                        handleConnectionLost("Bağlantı kapatıldı (sunucu null gönderdi)");
+                        continue;
+                    }
+                    
+                    processLine(line);
+                } catch (IOException e) {
+                    if (running.get()) {
+                        log.error("[{}] TCP okuma hatası: {}", providerName, e.getMessage(), e);
+                        handleConnectionLost("Okuma hatası: " + e.getMessage());
+                    }
+                } catch (Exception e) {
+                    if (running.get()) {
+                        log.error("[{}] TCP işleme sırasında beklenmedik hata: {}", providerName, e.getMessage(), e);
+                        callback.onProviderError(providerName, "TCP veri işleme hatası", e);
+                    }
                 }
                 
-                processLine(line);
-            } catch (IOException e) {
-                if (running.get()) { // Log error only if still supposed to be running
-                    log.error("[{}] TCP okuma hatası: {}", providerName, e.getMessage(), e);
-                    handleConnectionLost("Okuma hatası: " + e.getMessage());
-                }
-            } catch (Exception e) {
-                if (running.get()) {
-                    log.error("[{}] TCP işleme sırasında beklenmedik hata: {}", providerName, e.getMessage(), e);
-                    callback.onProviderError(providerName, "TCP veri işleme hatası", e);
+                if (!connected.get() && running.get()) {
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException ie) {
+                        log.warn("[{}] Yeniden bağlanma beklemesi kesintiye uğradı", providerName, ie);
+                        Thread.currentThread().interrupt();
+                    }
                 }
             }
             
-            // Bağlantı koptu ise kısa bir bekleme yap
-            if (!connected.get() && running.get()) {
-                try {
-                    log.debug("[{}] Bağlantı koptu, 1 saniye bekleniyor...", providerName);
-                    Thread.sleep(1000); // Aşırı CPU kullanımını önle
-                } catch (InterruptedException ie) {
-                    log.warn("[{}] Yeniden bağlanma beklemesi kesintiye uğradı", providerName, ie);
-                    Thread.currentThread().interrupt();
-                }
+            log.info("[{}] TCP ana dinleme thread'i sonlandırılıyor.", providerName);
+            closeResources();
+            connected.set(false);
+            if (callback != null) {
+                callback.onProviderConnectionStatus(providerName, false, "TCP bağlantısı kapatıldı (döngü sonu)");
             }
-        }
+        });
         
-        // Ana döngü sonlandı, kaynakları temizle
-        log.info("[{}] TCP ana dinleme thread'i sonlandırılıyor.", providerName);
-        closeResources();
-        connected.set(false);
-        if (callback != null) { // callback null olabilir eğer init düzgün tamamlanmadıysa
-            callback.onProviderConnectionStatus(providerName, false, "TCP bağlantısı kapatıldı (döngü sonu)");
-        }
-    });
-    
-    thread.setName("TCP-" + providerName);
-    thread.setDaemon(true); // Arka plan thread'i olarak ayarla
-    thread.start();
-}
+        thread.setName("TCP-" + providerName);
+        thread.setDaemon(true);
+        thread.start();
+    }
 
 // Yeniden bağlanma metodunu ekle -- Reconnec hatasını çözmeye calıstım
 private void reconnect() {

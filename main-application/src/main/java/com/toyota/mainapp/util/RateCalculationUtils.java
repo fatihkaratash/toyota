@@ -23,17 +23,9 @@ public final class RateCalculationUtils {
     private static final RoundingMode DEFAULT_ROUNDING = RoundingMode.HALF_UP;
 
     private RateCalculationUtils() {
-        // Prevent instantiation
+
     }
-    
-    /**
-     * Calculate average bid/ask values from a collection of rates
-     * 
-     * @param rates Collection of rates to average
-     * @param scale Decimal scale for the result
-     * @param rounding Rounding mode for calculations
-     * @return Optional containing the average bid and ask, or empty if no valid rates
-     */
+
     public static Optional<AverageResult> calculateAverage(
             Map<String, BaseRateDto> rates,
             int scale,
@@ -74,8 +66,7 @@ public final class RateCalculationUtils {
         // Calculate averages
         BigDecimal avgBid = totalBid.divide(BigDecimal.valueOf(validRateCount), scale, rounding);
         BigDecimal avgAsk = totalAsk.divide(BigDecimal.valueOf(validRateCount), scale, rounding);
-        
-        // Use latest timestamp or current time if none available
+
         long resultTimestamp = latestTimestamp > 0 ? latestTimestamp : System.currentTimeMillis();
         
         return Optional.of(new AverageResult(avgBid, avgAsk, inputs, resultTimestamp, validRateCount));

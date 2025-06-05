@@ -10,11 +10,5 @@ import java.util.List;
  */
 public interface ValidationRule {
     
-    /**
-     * Validates a rate DTO and returns any validation errors
-     * 
-     * @param rate The rate to validate
-     * @return List of validation errors (empty if validation passes)
-     */
     List<ValidationError> validate(BaseRateDto rate);
 }

@@ -3,8 +3,6 @@ package com.toyota.mainapp.validation.rules;
 import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.dto.ValidationError;
 import org.springframework.stereotype.Component;
-
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 

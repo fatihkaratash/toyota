@@ -23,14 +23,8 @@ public class RateValidatorService {
 
     private final List<ValidationRule> validationRules;
     
-    /**
-     * Validate a rate using all registered validation rules
-     *
-     * @param rate The rate to validate
-     * @throws AggregatedRateValidationException if validation fails
-     */
     public void validate(BaseRateDto rate) throws AggregatedRateValidationException {
-        // Basic null check
+
         if (rate == null) {
             throw new AggregatedRateValidationException(List.of("Rate object is null"));
         }
@@ -47,8 +41,7 @@ public class RateValidatorService {
         if (rate.getAsk() == null) {
             allPreliminaryErrors.add("Ask price is null");
         }
-        
-        // Only perform further price checks if both bid and ask are non-null
+
         if (rate.getBid() != null && rate.getAsk() != null) {
             // Check simple price validation
             if (rate.getBid().compareTo(BigDecimal.ZERO) <= 0) {
@@ -107,9 +100,6 @@ public class RateValidatorService {
         }
     }
     
-    /**
-     * Validate basic fields of a rate
-     */
     private List<String> validateBasicFields(BaseRateDto rate) {
         List<String> errors = new ArrayList<>();
         
@@ -125,18 +115,12 @@ public class RateValidatorService {
         return errors;
     }
     
-    /**
-     * Check if a value is within tolerance of another
-     */
     private boolean isWithinTolerance(BigDecimal val1, BigDecimal val2, double tolerancePercent) {
         BigDecimal diff = val1.subtract(val2).abs();
         BigDecimal tolerance = val2.multiply(BigDecimal.valueOf(tolerancePercent));
         return diff.compareTo(tolerance) <= 0;
     }
 
-    /**
-     * Check if a symbol is a cross rate
-     */
     private boolean isCrossRate(String symbol) {
         if (symbol == null) return false;
         

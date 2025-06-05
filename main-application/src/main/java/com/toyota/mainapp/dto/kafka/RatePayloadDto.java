@@ -17,28 +17,9 @@ import lombok.experimental.SuperBuilder;
 @EqualsAndHashCode(callSuper = true)
 public class RatePayloadDto extends BaseRateDto {
     
-    /**
-     * Event type for Kafka
-     */
     private String eventType;
-    
-    /**
-     * Time the event was sent to Kafka
-     */
     private Long eventTime;
-    
-    /**
-     * For RAW rates: system time when the rate was received
-     */
     private Long sourceReceivedAt;
-    
-    /**
-     * For RAW rates: system time when the rate was validated
-     */
     private Long sourceValidatedAt;
-    
-    /**
-     * For CALCULATED rates: timestamp of the rate calculation
-     */
     private Long rateTimestamp;
 }

@@ -5,7 +5,6 @@ import com.toyota.mainapp.cache.RateCacheService;
 import com.toyota.mainapp.coordinator.callback.PlatformCallback;
 import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.dto.model.ProviderRateDto;
-import com.toyota.mainapp.dto.model.RateType;
 import com.toyota.mainapp.exception.AggregatedRateValidationException;
 import com.toyota.mainapp.kafka.KafkaPublishingService;
 import com.toyota.mainapp.mapper.RateMapper;
@@ -54,10 +53,9 @@ public class MainCoordinatorService implements PlatformCallback {
     public void initializeAndStartSubscribers() {
         log.info("MainCoordinatorService initializing...");
         try {
-            // TEMPORARY: Add a delay to allow Kafka to fully start before KafkaAdmin client tries to connect.
-            // Remove or replace with a proper health check or retry mechanism for production.
-            log.info("Waiting for 15 seconds to allow Kafka to initialize...");
-            Thread.sleep(15000); // 15 seconds delay
+            // TEMPORARY: Delay mekanizması
+            log.info("Waiting for 10 seconds to allow Kafka to initialize...");
+            Thread.sleep(10000); // 10 seconds delay
             log.info("Proceeding with subscriber initialization.");
         } catch (InterruptedException e) {
             log.warn("Kafka startup delay interrupted.", e);
@@ -162,7 +160,6 @@ public class MainCoordinatorService implements PlatformCallback {
      */
     @Override
     public void onRateUpdate(String providerName, ProviderRateDto rateUpdate) {
-        // Güncellemeleri yeni veri gibi işle
         onRateAvailable(providerName, rateUpdate);
     }
 
@@ -185,7 +182,6 @@ public class MainCoordinatorService implements PlatformCallback {
     public void onRateStatus(String providerName, BaseRateDto statusRate) {
         log.info("Kur durumu güncellendi, sağlayıcı: {}, durum: {}", providerName, statusRate.getStatus());
         
-        // Directly publish to Kafka since we already have a BaseRateDto
         sequentialPublisher.publishRate(statusRate);
         
         if (statusRate.getStatus() == BaseRateDto.RateStatusEnum.ERROR) {
@@ -229,8 +225,6 @@ public class MainCoordinatorService implements PlatformCallback {
     @PreDestroy
     public void shutdownCoordinator() {
         log.info("Koordinatör ve tüm aboneler kapatılıyor");
-        
-        // Tüm aboneleri güvenli bir şekilde durdur
         activeSubscribers.keySet()
             .forEach(this::stopSubscriber);
             

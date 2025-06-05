@@ -15,14 +15,8 @@ import java.util.List;
 @Component
 public class PriceRule implements ValidationRule {
 
-    /**
-     * Minimum allowed price value
-     */
+
     private final BigDecimal minValue;
-    
-    /**
-     * Constructor with configuration from application.properties
-     */
     public PriceRule(@Value("${validation.price.min-value:0.000001}") BigDecimal minValue) {
         this.minValue = minValue;
     }

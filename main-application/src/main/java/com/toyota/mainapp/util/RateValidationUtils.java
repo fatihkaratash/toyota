@@ -1,8 +1,6 @@
 package com.toyota.mainapp.util;
 
 import com.toyota.mainapp.dto.model.BaseRateDto;
-import com.toyota.mainapp.dto.ValidationError;
-
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -18,20 +16,13 @@ public final class RateValidationUtils {
         // Prevent instantiation
     }
     
-    /**
-     * Validate a rate's basic fields
-     * 
-     * @param rate Rate to validate
-     * @return List of validation errors, empty if valid
-     */
     public static List<String> validateBasicFields(BaseRateDto rate) {
         if (rate == null) {
             return Collections.singletonList("Rate object is null");
         }
         
         List<String> errors = new ArrayList<>();
-        
-        // Check required fields
+
         if (rate.getSymbol() == null || rate.getSymbol().trim().isEmpty()) {
             errors.add("Symbol is required");
         }
@@ -42,13 +33,7 @@ public final class RateValidationUtils {
         
         return errors;
     }
-    
-    /**
-     * Validate bid/ask values
-     * 
-     * @param rate Rate to validate
-     * @return List of validation errors, empty if valid
-     */
+
     public static List<String> validatePrices(BaseRateDto rate) {
         if (rate == null) {
             return Collections.singletonList("Rate object is null");
@@ -59,12 +44,12 @@ public final class RateValidationUtils {
         // Check for null values
         if (rate.getBid() == null) {
             errors.add("Bid price is null");
-            return errors; // Return early, can't do further price validations
+            return errors; 
         }
         
         if (rate.getAsk() == null) {
             errors.add("Ask price is null");
-            return errors; // Return early, can't do further price validations
+            return errors; 
         }
         
         // Check for positive values
@@ -83,14 +68,7 @@ public final class RateValidationUtils {
         
         return errors;
     }
-    
-    /**
-     * Check if all required rates are present for a calculation
-     * 
-     * @param rates Map of available rates
-     * @param requiredSymbols List of required symbols
-     * @return true if all required rates are present with valid bid/ask values
-     */
+
     public static boolean hasAllRequiredRates(Map<String, BaseRateDto> rates, List<String> requiredSymbols) {
         if (rates == null || requiredSymbols == null) {
             return false;

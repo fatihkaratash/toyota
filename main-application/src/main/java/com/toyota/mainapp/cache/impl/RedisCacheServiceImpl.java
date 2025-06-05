@@ -3,16 +3,13 @@ package com.toyota.mainapp.cache.impl;
 import com.toyota.mainapp.cache.RateCacheService;
 import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.dto.model.RateType;
-import com.toyota.mainapp.util.SymbolUtils;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
-
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
+
 
 @Service
 @Slf4j
@@ -23,7 +20,7 @@ public class RedisCacheServiceImpl implements RateCacheService {
     
     private static final String RAW_RATE_PREFIX = "raw_rate:";
     private static final String CALC_RATE_PREFIX = "calc_rate:";
-    private static final long DEFAULT_TTL_SECONDS = 86400; // 24 hours
+    private static final long DEFAULT_TTL_SECONDS = 86400; // 24 hours- değişecek
 
     public RedisCacheServiceImpl(RedisTemplate<String, Object> redisTemplate, ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
@@ -167,4 +164,11 @@ public class RedisCacheServiceImpl implements RateCacheService {
         return null;
     }
 }
+    @Override
+    public void cacheRawRate(String key, BaseRateDto rawRate) {
+        if (rawRate != null) {
+            rawRate.setRateType(RateType.RAW);
+            cacheRate(key, rawRate);
+        }
+    }
 }

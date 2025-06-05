@@ -2,7 +2,6 @@ package com.toyota.mainapp.subscriber.impl;
 
 import com.toyota.mainapp.coordinator.callback.PlatformCallback;
 import com.toyota.mainapp.dto.model.ProviderRateDto;
-import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.subscriber.api.PlatformSubscriber;
 import com.toyota.mainapp.util.SubscriberUtils;
 import com.toyota.mainapp.dto.config.SubscriberConfigDto;
@@ -47,9 +46,9 @@ public class RestRateSubscriber implements PlatformSubscriber {
     // Default constructor
     public RestRateSubscriber() {
         log.warn("RestRateSubscriber created with default constructor. Dependencies (WebClient.Builder, ObjectMapper, TaskExecutor) must be set via setters or this instance may not function correctly.");
-        this.webClientBuilder = null; // Must be set
-        this.objectMapper = new ObjectMapper(); // Fallback, not ideal. Prefer injected.
-        this.subscriberTaskExecutor = null; // Must be set
+        this.webClientBuilder = null;
+        this.objectMapper = new ObjectMapper(); // Fallback
+        this.subscriberTaskExecutor = null; 
     }
     
     // Constructor with WebClient.Builder, ObjectMapper, and TaskExecutor
@@ -126,9 +125,7 @@ public class RestRateSubscriber implements PlatformSubscriber {
 
     @Override
     public void connect() {
-        // For REST, "connect" might mean the initial setup is done and CB is closed.
-        // Actual "connection" happens per request.
-        // If CircuitBreaker is used, its initial state (CLOSED) implies connectivity.
+  
         if (this.circuitBreaker != null) {
             connected.set(this.circuitBreaker.getState() == CircuitBreaker.State.CLOSED);
         } else {
@@ -167,19 +164,17 @@ public class RestRateSubscriber implements PlatformSubscriber {
         if (running.compareAndSet(false, true)) {
             log.info("[{}] REST ana döngüsü başlatılıyor. Poll interval: {}ms", providerName, pollIntervalMs);
             
-            subscriberTaskExecutor.execute(() -> { // Use TaskExecutor
+            subscriberTaskExecutor.execute(() -> {
                 log.info("[{}] REST poll task started.", providerName);
                 while (running.get()) {
                     try {
-                        log.debug("[{}] REST poll döngüsü başladı.", providerName); // Changed to debug
                         if (connected.get() && symbols.length > 0) {
-                            log.debug("[{}] Toplam {} sembol için REST sorgusu yapılacak", providerName, symbols.length); // Changed to debug
+                            log.debug("[{}] Toplam {} sembol için REST sorgusu yapılacak", providerName, symbols.length);
                             for (String symbol : symbols) {
                                 if (!running.get()) break; 
-                                log.debug("[{}] Fetching rate for symbol: {}", providerName, symbol); // Changed to debug
                                 fetchRate(symbol);
                             }
-                            log.debug("[{}] Tüm semboller sorgulandı, sonraki poll çevrimine kadar {}ms bekleniyor", // Changed to debug
+                            log.debug("[{}] Tüm semboller sorgulandı, sonraki poll çevrimine kadar {}ms bekleniyor",
                                     providerName, pollIntervalMs);
                         } else {
                             if (!connected.get()) {
@@ -193,12 +188,11 @@ public class RestRateSubscriber implements PlatformSubscriber {
                         Thread.sleep(pollIntervalMs);
                     } catch (InterruptedException e) {
                         log.warn("[{}] REST poll task kesintiye uğradı.", providerName, e);
-                        Thread.currentThread().interrupt(); // Preserve interrupt status
-                        running.set(false); // Ensure loop terminates
+                        Thread.currentThread().interrupt();
+                        running.set(false);
                         break;
                     } catch (Exception e) {
                         log.error("[{}] REST sorgu döngüsünde beklenmedik hata: {}", providerName, e.getMessage(), e);
-                        // Consider a small delay here to prevent rapid-fire errors in a tight loop
                         try { Thread.sleep(1000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
                     }
                 }
@@ -213,8 +207,6 @@ public class RestRateSubscriber implements PlatformSubscriber {
     public void stopMainLoop() {
         log.info("[{}] REST ana döngüsü durduruluyor...", providerName);
         running.set(false); // Signal the polling loop to stop
-        // No direct thread interruption needed as TaskExecutor manages the thread.
-        // The running flag will cause the loop to exit.
         log.info("[{}] REST ana döngüsü durduruldu.", providerName);
     }
 

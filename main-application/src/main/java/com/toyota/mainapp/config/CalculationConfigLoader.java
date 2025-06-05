@@ -8,7 +8,7 @@ import com.toyota.mainapp.dto.config.CalculationRuleDto; // ADDED new import
 import com.toyota.mainapp.calculator.RuleEngineService; // Import RuleEngineService
 import lombok.Getter; 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j; // This annotation provides the 'log' variable
+import lombok.extern.slf4j.Slf4j; 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
@@ -52,18 +52,15 @@ public class CalculationConfigLoader {
             
             try (InputStream inputStream = calculationConfigResource.getInputStream()) {
                 JsonNode rootNode = objectMapper.readTree(inputStream);
-                
-                // Sembol yapılandırmalarını yükle ve toplayıcıya ayarla
+
                 loadSymbolConfigs(rootNode);
-                
-                // Hesaplama kurallarını yükle
                 loadCalculationRules(rootNode);
             }
             
             log.info("Hesaplama yapılandırması başarıyla yüklendi. {} kural yüklendi.", loadedCalculationRules.size());
         } catch (IOException e) {
             log.error("Hesaplama yapılandırması yüklenirken hata: {}", e.getMessage(), e);
-            // Hata durumunda boş bir liste ile devam et veya uygulamayı durdur
+
             loadedCalculationRules = Collections.emptyList();
         }
     }
@@ -95,22 +92,19 @@ public class CalculationConfigLoader {
         log.info("Toplayıcı {} sembol yapılandırması ile başlatıldı.", symbolProvidersConfig.size());
     }
 
-    /**
-     * Hesaplama kurallarını JSON'dan yükle
-     */
+
   // CalculationConfigLoader içinde loadCalculationRules metodunu geliştirme
 private void loadCalculationRules(JsonNode rootNode) {
     JsonNode rulesNode = rootNode.path("calculationRules");
     if (rulesNode.isArray() && !rulesNode.isEmpty()) {
         try {
-            // Log öncesi başlangıç
             log.info("RULES-LOADING: {} adet hesaplama kuralı yükleniyor...", rulesNode.size());
             
-            // ObjectMapper'ı kullanarak doğrudan List<CalculationRuleDto>'ya dönüştür
             loadedCalculationRules = objectMapper.convertValue(
                 rulesNode, 
                 new TypeReference<List<CalculationRuleDto>>() {}
             );
+            
             // Her kural için kısa log ve Groovy script kontrolü
             for (CalculationRuleDto rule : loadedCalculationRules) {
                 log.info("RULE-LOADED: Çıktı={}, Strateji={}, Uygulama={}",
@@ -119,19 +113,14 @@ private void loadCalculationRules(JsonNode rootNode) {
                     rule.getImplementation());
 
                 if ("groovyScriptCalculationStrategy".equals(rule.getStrategyType())) {
-                    try {
-                        Resource scriptResource = resourceLoader.getResource("classpath:" + rule.getImplementation());
-                        if (!scriptResource.exists()) {
-                            log.error("SCRIPT-MISSING: '{}' betiği bulunamadı!", rule.getImplementation());
-                        }
-                    } catch (Exception e) {
-                        log.error("SCRIPT-ERROR: '{}' kontrol edilirken hata: {}", 
-                            rule.getImplementation(), e.getMessage());
+                    Resource scriptResource = resourceLoader.getResource("classpath:" + rule.getImplementation());
+                    if (!scriptResource.exists()) {
+                        log.error("SCRIPT-MISSING: '{}' betiği bulunamadı!", rule.getImplementation());
                     }
                 }
             }
             
-            // RuleEngineService'e kuralları set et
+            // RuleEngineService'e kuralları set
             if (ruleEngineService != null) {
                 ruleEngineService.setCalculationRules(loadedCalculationRules);
                 log.info("RULES-SET: {} adet hesaplama kuralı RuleEngineService'e başarıyla set edildi.", 
@@ -141,7 +130,6 @@ private void loadCalculationRules(JsonNode rootNode) {
             }
         } catch (Exception e) {
             log.error("RULES-PARSE-ERROR: Hesaplama kurallarını yüklerken hata: {}", e.getMessage(), e);
-            log.error("Detaylı hata:", e);
             loadedCalculationRules = Collections.emptyList();
         }
     } else {

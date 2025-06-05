@@ -2,7 +2,6 @@ package com.toyota.mainapp.dto.kafka;
 
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.toyota.mainapp.dto.kafka.RatePayloadDto;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -17,7 +16,7 @@ import java.util.Map;
 public class RateMessageDto {
     private String messageId;
     private long messageTimestamp;
-    private String rateType; // Maps to RateType.eventType
+    private String rateType; 
 
     // Updated to use unified RatePayloadDto instead of type-specific DTOs
     @JsonTypeInfo(

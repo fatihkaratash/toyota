@@ -4,11 +4,8 @@ import com.toyota.mainapp.calculator.RateCalculatorService;
 import com.toyota.mainapp.dto.config.CalculationRuleDto;
 import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.dto.model.RateType;
-import com.toyota.mainapp.util.SymbolUtils;
-
 import com.toyota.mainapp.calculator.RuleEngineService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Component;
@@ -19,9 +16,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-/**
- * İki yönlü pencere bazlı kur verisi toplayıcı.
- */
+
 @Component
 @Slf4j
 public class TwoWayWindowAggregator {
@@ -39,26 +34,19 @@ public class TwoWayWindowAggregator {
         this.ruleEngineService = ruleEngineService;
         log.info("TwoWayWindowAggregator initialized");
     }
-    
-    // Konfigürasyondan beklenen sağlayıcılar bilgisi alınır
+
     private final Map<String, List<String>> expectedProvidersConfig = new ConcurrentHashMap<>();
-    
-    // Zaman penceresi konfigürasyonu (milisaniye cinsinden)
+
     @Value("${app.aggregator.max-time-skew-ms:3000}")
     private long maxTimeSkewMs;
-    
-    // İç pencere yapısı: baseSymbol -> (providerName -> BaseRateDto)
+
     private final Map<String, Map<String, BaseRateDto>> window = new ConcurrentHashMap<>();
     
     @Value("${app.aggregator.window-cleanup-interval-ms:60000}")
     private long windowCleanupIntervalMs;
-    
-    /**
-     * Initialize with default provider configuration and start scheduled tasks
-     */
+
     @PostConstruct
     public void initializeDefaultConfig() {
-        // Initialize with provider names that match what you're actually using
         List<String> usdTryProviders = List.of("RESTProvider1", "TCPProvider2");
         expectedProvidersConfig.put("USDTRY", usdTryProviders);
         
@@ -70,8 +58,7 @@ public class TwoWayWindowAggregator {
         
         log.info("TwoWayWindowAggregator initialized with default configuration for currencies with providers: {}", 
                 String.join(", ", usdTryProviders));
-        
-        // Schedule periodic cleanup using Spring's TaskScheduler
+
         taskScheduler.scheduleAtFixedRate(
             this::cleanupStaleWindows,
             Duration.ofMillis(windowCleanupIntervalMs)
@@ -79,9 +66,6 @@ public class TwoWayWindowAggregator {
         log.info("Window cleanup scheduled every {} ms", windowCleanupIntervalMs);
     }
 
-    /**
-     * Accept a new rate and process it through the aggregator
-     */
     public void accept(BaseRateDto baseRateDto) {
         // Skip invalid or non-raw rates
         if (baseRateDto == null || baseRateDto.getRateType() != RateType.RAW) {
@@ -93,37 +77,28 @@ public class TwoWayWindowAggregator {
         String providerName = baseRateDto.getProviderName();
         String baseSymbol = deriveBaseSymbol(baseRateDto.getSymbol());
         
-        // Store rate in window and check for calculation readiness
         Map<String, BaseRateDto> symbolBucket = window.computeIfAbsent(baseSymbol, k -> new ConcurrentHashMap<>());
         symbolBucket.put(providerName, baseRateDto);
         
-        // Check if we have all expected providers
         List<String> expectedProviders = getExpectedProviders(baseSymbol);
         int collectedCount = symbolBucket.size();
         
         log.info("Window update: {} [{}/{}] providers - need: {}", 
                 baseSymbol, collectedCount, expectedProviders.size(), 
                 missingProviders(symbolBucket.keySet(), expectedProviders));
-        
-        // Try to calculate if window looks complete
+
         if (collectedCount >= expectedProviders.size() && 
             symbolBucket.keySet().containsAll(expectedProviders)) {
             checkTimeSkewAndCalculate(baseSymbol, symbolBucket, expectedProviders);
         }
     }
 
-    /**
-     * Returns a string of providers that are still missing
-     */
     private String missingProviders(Set<String> collected, List<String> expected) {
         return expected.stream()
             .filter(provider -> !collected.contains(provider))
             .collect(Collectors.joining(", "));
     }
 
-    /**
-     * Verify time skew constraints and trigger calculation if valid
-     */
     private void checkTimeSkewAndCalculate(String baseSymbol, Map<String, BaseRateDto> symbolBucket, 
                                           List<String> expectedProviders) {
         // Extract only rates from expected providers
@@ -134,16 +109,13 @@ public class TwoWayWindowAggregator {
                 relevantRates.put(provider, rate);
             }
         }
-        
-        // Only calculate if all expected providers present and time skew is acceptable
+
         if (relevantRates.size() == expectedProviders.size() && 
             isTimeSkewAcceptable(relevantRates, expectedProviders)) {
-            
-            // Prepare rates for calculation (clone to avoid mutations)
+
             Map<String, BaseRateDto> ratesForCalculation = relevantRates.values().stream()
                 .collect(Collectors.toMap(BaseRateDto::getSymbol, this::cloneRateDto));
-            
-            // Trigger calculation and mark rates as processed
+
             triggerCalculation(ratesForCalculation);
             relevantRates.values().forEach(r -> r.setLastCalculationTimestamp(System.currentTimeMillis()));
             
@@ -154,12 +126,8 @@ public class TwoWayWindowAggregator {
             log.warn("Time skew too high for {}, calculation skipped", baseSymbol);
         }
     }
-    
-    /**
-     * Create a clone of a BaseRateDto to avoid mutating window data
-     */
+
     private BaseRateDto cloneRateDto(BaseRateDto original) {
-        // Create a basic clone with essential fields
         BaseRateDto cloned = BaseRateDto.builder()
             .symbol(original.getSymbol())
             .bid(original.getBid())
@@ -168,23 +136,19 @@ public class TwoWayWindowAggregator {
             .providerName(original.getProviderName())
             .rateType(original.getRateType())
             .build();
-            
-        // Copy other important fields if present
+
         if (original.getCalculationInputs() != null) {
             cloned.setCalculationInputs(new ArrayList<>(original.getCalculationInputs()));
         }
         
         return cloned;
     }
-    
-    /**
-     * Eski pencere verilerini temizle - zamanla oluşabilecek hafıza sızıntılarını önler
-     */
+
     private void cleanupStaleWindows() {
         try {
             log.debug("Eski pencere verileri temizleniyor...");
             long currentTime = System.currentTimeMillis();
-            long staleCutoffTime = currentTime - (maxTimeSkewMs * 10); // 10 kat daha uzun bir pencere kullanımı
+            long staleCutoffTime = currentTime - (maxTimeSkewMs * 10);
             
             int cleanedSymbols = 0;
             int cleanedRates = 0;
@@ -197,13 +161,11 @@ public class TwoWayWindowAggregator {
                 for (Iterator<Map.Entry<String, BaseRateDto>> it = providers.entrySet().iterator(); it.hasNext();) {
                     Map.Entry<String, BaseRateDto> providerEntry = it.next();
                     BaseRateDto rate = providerEntry.getValue();
-                    
-                    // Check both original timestamp and last calculation timestamp (if it exists)
+
                     Long lastCalcTime = rate.getLastCalculationTimestamp();
                     boolean isStaleByTimestamp = rate.getTimestamp() == null || rate.getTimestamp() < staleCutoffTime;
                     boolean isStaleByCalcTime = lastCalcTime != null && lastCalcTime < staleCutoffTime;
                     
-                    // Zaman damgası null veya çok eski olan kurları ve ayrıca son hesaplama zamanı çok eski olanları temizle
                     if (isStaleByTimestamp || isStaleByCalcTime) {
                         it.remove();
                         cleanedRates++;
@@ -211,8 +173,7 @@ public class TwoWayWindowAggregator {
                                  symbol, providerEntry.getKey());
                     }
                 }
-                
-                // Boş kalan sembol sepetiyle istemiyoruz, temizle
+
                 if (providers.isEmpty()) {
                     window.remove(symbol);
                     cleanedSymbols++;
@@ -228,10 +189,7 @@ public class TwoWayWindowAggregator {
             log.error("Pencere temizleme sırasında hata oluştu", e);
         }
     }
-    
-    /**
-     * Kurlar arasındaki zaman kaymasının kabul edilebilir sınırlar içinde olup olmadığını kontrol eder
-     */
+
     private boolean isTimeSkewAcceptable(Map<String, BaseRateDto> symbolBucket, List<String> providers) {
         long minTimestamp = Long.MAX_VALUE;
         long maxTimestamp = Long.MIN_VALUE;
@@ -246,7 +204,6 @@ public class TwoWayWindowAggregator {
             }
         }
         
-        // Zaman kaymasını hesapla ve kabul edilebilir mi kontrol et
         long timeSkew = maxTimestamp - minTimestamp;
         boolean acceptable = timeSkew <= maxTimeSkewMs;
         
@@ -254,18 +211,13 @@ public class TwoWayWindowAggregator {
         return acceptable;
     }
     
-    /**
-     * Toplanan kurlar için hesaplamayı tetikle
-     */
-    // TwoWayWindowAggregator içinde eklenecek veya değiştirilecek bölüm
-private void triggerCalculation(Map<String, BaseRateDto> rates) {
-    try {
-        // Extract base symbols for diagnostics
-        Set<String> baseSymbols = rates.values().stream()
+    // değiştirebilirim 2 yerde var
+    private void triggerCalculation(Map<String, BaseRateDto> rates) {
+         try {
+             Set<String> baseSymbols = rates.values().stream()
                 .map(rate -> deriveBaseSymbol(rate.getSymbol()))
                 .collect(Collectors.toSet());
         
-        // Check for cross rate candidates
         boolean hasCrossRatePotential = baseSymbols.stream()
                 .anyMatch(s -> s.contains("USD") || s.contains("EUR") || s.contains("GBP"));
         
@@ -273,7 +225,6 @@ private void triggerCalculation(Map<String, BaseRateDto> rates) {
             log.info("Processing potential cross rate data for: {}", String.join(", ", baseSymbols));
         }
         
-        // Verify rule availability
         int ruleCount = baseSymbols.stream()
                 .mapToInt(s -> {
                     List<CalculationRuleDto> rules = ruleEngineService.getRulesByInputBaseSymbol(s);
@@ -285,31 +236,22 @@ private void triggerCalculation(Map<String, BaseRateDto> rates) {
             log.warn("No calculation rules found for symbols: {}", String.join(", ", baseSymbols));
             return;
         }
-        
-        // Proceed with calculation
+
         rateCalculatorService.processWindowCompletion(rates);
         
     } catch (Exception e) {
         log.error("Calculation error: {}", e.getMessage(), e);
     }
 }
-    
-    /**
-     * Sağlayıcıya özgü sembolden temel sembolü türet
-     */
+
     private String deriveBaseSymbol(String providerSymbol) {
         return com.toyota.mainapp.util.SymbolUtils.deriveBaseSymbol(providerSymbol);
     }
-    /**
-     * Bir temel sembol için beklenen sağlayıcıların listesini al
-     */
+
     private List<String> getExpectedProviders(String baseSymbol) {
         return expectedProvidersConfig.getOrDefault(baseSymbol, Collections.emptyList());
     }
-    
-    /**
-     * Yapılandırma ile başlatma
-     */
+
     public void initialize(Map<String, List<String>> symbolProvidersConfig) {
         if (symbolProvidersConfig != null) {
             this.expectedProvidersConfig.putAll(symbolProvidersConfig);

@@ -8,29 +8,20 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 import com.toyota.mainapp.util.SymbolUtils;
-
-
-// Add import for RateDependencyManager
 import com.toyota.mainapp.calculator.dependency.RateDependencyManager;
-
 import jakarta.annotation.PostConstruct;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
-/**
- * Implementation of the rule engine service
- */
 @Service
 @Slf4j
 public class RuleEngineServiceImpl implements RuleEngineService {
 
     private final ApplicationContext context;
     private final Map<String, CalculationStrategy> strategies = new ConcurrentHashMap<>();
-    // Add this field
     private final RateDependencyManager rateDependencyManager;
-    // Consolidated list for active rules, ensuring thread safety for modifications and reads.
     private List<CalculationRuleDto> activeRules = new CopyOnWriteArrayList<>();
     
     public RuleEngineServiceImpl(ApplicationContext context, RateDependencyManager rateDependencyManager) {
@@ -41,9 +32,6 @@ public class RuleEngineServiceImpl implements RuleEngineService {
     @PostConstruct
     public void init() {
         loadStrategies();
-        // loadRules() is now emptied as rules are set externally.
-        // If there's any other initialization logic for rules, it can go here,
-        // but primary loading is via setCalculationRules.
         log.info("RuleEngineServiceImpl initialized. Strategies loaded. Rules will be set by CalculationConfigLoader.");
     }
     
@@ -62,11 +50,7 @@ public class RuleEngineServiceImpl implements RuleEngineService {
 
     @Override
     public void loadRules() {
-        // This method is now largely a placeholder as rules are injected via setCalculationRules.
-        // Original sample rule loading is removed.
         log.info("loadRules() called. Rules are expected to be set externally via setCalculationRules().");
-        // If there's a need to load default or fallback rules programmatically (not from config),
-        // that logic could go here, but it should be coordinated with external configuration.
     }
 
     @Override
@@ -105,11 +89,8 @@ public class RuleEngineServiceImpl implements RuleEngineService {
         String strategyLookupKey;
 
         if ("GROOVY_SCRIPT".equalsIgnoreCase(rule.getStrategyType())) {
-            // For Groovy scripts, the strategy is always the GroovyScriptCalculationStrategy bean.
-            // The rule.getImplementation() is the script path, used by the strategy itself.
             strategyLookupKey = "groovyScriptCalculationStrategy"; // Bean name of GroovyScriptCalculationStrategy
         } else if ("JAVA_CLASS".equalsIgnoreCase(rule.getStrategyType())) {
-            // For Java classes, the rule.getImplementation() is the bean name of the specific strategy.
             strategyLookupKey = rule.getImplementation();
         } else {
             log.error("Unsupported strategy type '{}' for rule: {}", rule.getStrategyType(), rule.getOutputSymbol());
@@ -156,7 +137,6 @@ public class RuleEngineServiceImpl implements RuleEngineService {
     public void setCalculationRules(List<CalculationRuleDto> rules) {
         this.activeRules.clear();
         if (rules != null) {
-            // Sort rules by priority (lower value = higher priority) before adding to activeRules
             List<CalculationRuleDto> sortedRules = new ArrayList<>(rules);
             sortedRules.sort(Comparator.comparing(CalculationRuleDto::getPriority));
             this.activeRules.addAll(sortedRules);
@@ -180,7 +160,6 @@ public class RuleEngineServiceImpl implements RuleEngineService {
 
     @Override
     public List<CalculationRuleDto> getRulesDependingOnCalculatedRate(String outputSymbol) {
-        // Returns rules that depend on the given outputSymbol as an input
         return activeRules.stream()
                 .filter(rule -> rule.getDependsOnRaw() != null && rule.getDependsOnRaw().contains(outputSymbol))
                 .collect(Collectors.toList());

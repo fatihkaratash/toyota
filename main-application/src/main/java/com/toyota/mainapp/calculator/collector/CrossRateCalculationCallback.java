@@ -10,12 +10,5 @@ import com.toyota.mainapp.dto.model.BaseRateDto;
  */
 public interface CrossRateCalculationCallback {
     
-    /**
-     * Calculate rate from rule with provided input rates
-     * 
-     * @param rule Calculation rule to execute
-     * @param inputRates Map of input rates needed for calculation
-     * @return Whether calculation was successful
-     */
     boolean calculateRateFromRule(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates);
 }
