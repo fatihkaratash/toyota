@@ -52,10 +52,13 @@ public class MainCoordinatorService implements PlatformCallback {
     @PostConstruct
     public void initializeAndStartSubscribers() {
         log.info("MainCoordinatorService initializing...");
+        
+        // Check environment for startup delay
+        int startupDelaySeconds = getEnvInt("STARTUP_DELAY_SECONDS", 10);
+        
         try {
-            // TEMPORARY: Delay mekanizması
-            log.info("Waiting for 10 seconds to allow Kafka to initialize...");
-            Thread.sleep(10000); // 10 seconds delay
+            log.info("Waiting for {} seconds to allow Kafka to initialize...", startupDelaySeconds);
+            Thread.sleep(startupDelaySeconds * 1000L);
             log.info("Proceeding with subscriber initialization.");
         } catch (InterruptedException e) {
             log.warn("Kafka startup delay interrupted.", e);
@@ -229,5 +232,17 @@ public class MainCoordinatorService implements PlatformCallback {
             .forEach(this::stopSubscriber);
             
         log.info("Koordinatör kapatma işlemi tamamlandı");
+    }
+
+    private int getEnvInt(String envName, int defaultValue) {
+        String envValue = System.getenv(envName);
+        if (envValue != null && !envValue.trim().isEmpty()) {
+            try {
+                return Integer.parseInt(envValue.trim());
+            } catch (NumberFormatException e) {
+                log.warn("Invalid integer value for {}: {}, using default: {}", envName, envValue, defaultValue);
+            }
+        }
+        return defaultValue;
     }
 }

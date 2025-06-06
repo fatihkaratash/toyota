@@ -72,10 +72,29 @@ public class RatePublisher {
             return;
         }
         running = true;
-        long publishIntervalMs = configurationReader.getPublishIntervalMs();
+        
+        // Check environment for interval override
+        long publishIntervalMs = getEnvironmentInterval();
+        
         scheduler.scheduleAtFixedRate(this::publishRates, 0, publishIntervalMs, TimeUnit.MILLISECONDS);
         log.info(LoggingHelper.OPERATION_START, LoggingHelper.PLATFORM_PF1, null, 
                 "RatePublisher başlatıldı. Her " + publishIntervalMs + " ms'de bir kurlar yayınlanacak.");
+    }
+
+    private long getEnvironmentInterval() {
+        String envInterval = System.getenv("TCP_PROVIDER_INTERVAL_MS");
+        if (envInterval != null && !envInterval.trim().isEmpty()) {
+            try {
+                long interval = Long.parseLong(envInterval.trim());
+                log.info(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_PF1, null,
+                        "TCP Provider interval environment'tan alındı: " + interval + " ms");
+                return interval;
+            } catch (NumberFormatException e) {
+                log.warn(LoggingHelper.OPERATION_ALERT, LoggingHelper.PLATFORM_PF1, null,
+                        "Geçersiz TCP_PROVIDER_INTERVAL_MS değeri: " + envInterval + ", varsayılan kullanılıyor");
+            }
+        }
+        return configurationReader.getPublishIntervalMs();
     }
 
     private void publishRates() {

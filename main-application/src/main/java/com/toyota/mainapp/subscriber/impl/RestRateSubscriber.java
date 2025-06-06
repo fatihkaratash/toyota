@@ -47,9 +47,11 @@ public class RestRateSubscriber implements PlatformSubscriber {
     private long pollIntervalMs = 1000;
     private String[] symbols = new String[0];
 
-    // Authentication credentials - will be loaded from environment/config
+    // Authentication credentials and timeout configuration
     private String username;
     private String password;
+    private int readTimeoutSeconds;
+    private int maxRetryAttempts;
 
     // Default constructor
     public RestRateSubscriber() {
@@ -74,10 +76,15 @@ public class RestRateSubscriber implements PlatformSubscriber {
         this.providerName = config.getName();
         this.callback = callback;
 
+        // Load configurations from environment
+        this.readTimeoutSeconds = getEnvInt("READ_TIMEOUT_SECONDS", 8);
+        this.maxRetryAttempts = getEnvInt("MAX_RETRY_ATTEMPTS", 3);
+        long restIntervalFromEnv = getEnvLong("REST_PROVIDER_INTERVAL_MS", 1500L);
+
         if (config.getConnectionConfig() != null) {
             Map<String, Object> connConfig = config.getConnectionConfig();
             this.baseUrl = SubscriberUtils.getConfigValue(connConfig, "baseUrl", "http://localhost:8080/api");
-            this.pollIntervalMs = SubscriberUtils.getConfigValue(connConfig, "pollIntervalMs", 1000L);
+            this.pollIntervalMs = SubscriberUtils.getConfigValue(connConfig, "pollIntervalMs", restIntervalFromEnv);
             this.symbols = SubscriberUtils.getSymbols(connConfig, this.providerName);
 
             // Get authentication credentials from config first, then environment variables
@@ -121,8 +128,8 @@ public class RestRateSubscriber implements PlatformSubscriber {
         log.info("[{}] Loaded symbols count: {}, symbols: {}",
                 providerName, symbols.length, Arrays.toString(symbols));
 
-        log.debug("[{}] REST Subscriber initialized with config: baseUrl={}, pollIntervalMs={}, symbols={}",
-                providerName, baseUrl, pollIntervalMs, Arrays.toString(symbols));
+        log.debug("[{}] REST Subscriber initialized with config: baseUrl={}, pollIntervalMs={}, readTimeout={}s, maxRetries={}, symbols={}",
+                providerName, baseUrl, pollIntervalMs, readTimeoutSeconds, maxRetryAttempts, Arrays.toString(symbols));
         log.info("REST abone başlatıldı: {}", providerName);
     }
 
@@ -396,5 +403,29 @@ public class RestRateSubscriber implements PlatformSubscriber {
                     providerName, e.getMessage(), symbol, e);
             callback.onProviderError(providerName, "REST request hatası: " + symbol, e);
         }
+    }
+
+    private long getEnvLong(String envName, long defaultValue) {
+        String envValue = System.getenv(envName);
+        if (envValue != null && !envValue.trim().isEmpty()) {
+            try {
+                return Long.parseLong(envValue.trim());
+            } catch (NumberFormatException e) {
+                log.warn("Invalid long value for {}: {}, using default: {}", envName, envValue, defaultValue);
+            }
+        }
+        return defaultValue;
+    }
+
+    private int getEnvInt(String envName, int defaultValue) {
+        String envValue = System.getenv(envName);
+        if (envValue != null && !envValue.trim().isEmpty()) {
+            try {
+                return Integer.parseInt(envValue.trim());
+            } catch (NumberFormatException e) {
+                log.warn("Invalid integer value for {}: {}, using default: {}", envName, envValue, defaultValue);
+            }
+        }
+        return defaultValue;
     }
 }

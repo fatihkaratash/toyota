@@ -50,10 +50,20 @@ public class KafkaConfig {
 
     @Bean
     public Map<String, Object> baseProducerConfigs() {
+        // Check environment variable first
+        String envKafkaHost = System.getenv("KAFKA_HOST");
+        String envKafkaPort = System.getenv("KAFKA_PORT");
+        
+        String finalBootstrapServers = bootstrapServers;
+        if (envKafkaHost != null && !envKafkaHost.trim().isEmpty()) {
+            String port = (envKafkaPort != null && !envKafkaPort.trim().isEmpty()) ? envKafkaPort : "9092";
+            finalBootstrapServers = envKafkaHost + ":" + port;
+        }
+        
         Map<String, Object> props = new HashMap<>();
-        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, finalBootstrapServers);
         props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        log.info("Base Kafka producer properties configured for bootstrap servers: {}", bootstrapServers);
+        log.info("Base Kafka producer properties configured for bootstrap servers: {}", finalBootstrapServers);
         return props;
     }
 

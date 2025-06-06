@@ -182,14 +182,35 @@ services:
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      # Aşağıdakileri main-app'in subscribers.json'ında ${...} ile kullanmak için:
-      PROVIDER_REST_BASE_URL: http://rest-rate-provider:8080/api # Önceki gibi /v1/rates eklenebilir
+      
+      # Provider Connection Configuration
+      PROVIDER_REST_BASE_URL: http://rest-rate-provider:8080/api
       PROVIDER_TCP_HOST: tcp-rate-provider
       PROVIDER_TCP_PORT: 8081
-      CLIENT_REST_USERNAME: ${MAINAPP_CLIENT_REST_USER}
-      CLIENT_REST_PASSWORD: ${MAINAPP_CLIENT_REST_PASSWORD}
-      CLIENT_TCP_USERNAME: ${MAINAPP_CLIENT_TCP_USER}
-      CLIENT_TCP_PASSWORD: ${MAINAPP_CLIENT_TCP_PASSWORD}
+      
+      # Client Authentication
+      CLIENT_REST_USERNAME: ${REST_PROVIDER_USER}
+      CLIENT_REST_PASSWORD: ${REST_PROVIDER_PASSWORD}
+      CLIENT_TCP_USERNAME: ${TCP_PROVIDER_USER}
+      CLIENT_TCP_PASSWORD: ${TCP_PROVIDER_PASSWORD}
+      
+      # Timing Configuration
+      TCP_PROVIDER_INTERVAL_MS: ${TCP_PROVIDER_INTERVAL_MS}
+      REST_PROVIDER_INTERVAL_MS: ${REST_PROVIDER_INTERVAL_MS}
+      AGGREGATOR_POLL_INTERVAL_MS: ${AGGREGATOR_POLL_INTERVAL_MS}
+      AGGREGATOR_WINDOW_TIMEOUT_MS: ${AGGREGATOR_WINDOW_TIMEOUT_MS}
+      AGGREGATOR_MAX_TIME_SKEW_MS: ${AGGREGATOR_MAX_TIME_SKEW_MS}
+      
+      # Authentication & Timeout Configuration
+      AUTH_TIMEOUT_SECONDS: ${AUTH_TIMEOUT_SECONDS}
+      CONNECTION_TIMEOUT_SECONDS: ${CONNECTION_TIMEOUT_SECONDS}
+      READ_TIMEOUT_SECONDS: ${READ_TIMEOUT_SECONDS}
+      
+      # Retry Configuration
+      MAX_RETRY_ATTEMPTS: ${MAX_RETRY_ATTEMPTS}
+      INITIAL_RETRY_DELAY_MS: ${INITIAL_RETRY_DELAY_MS}
+      RETRY_BACKOFF_MULTIPLIER: ${RETRY_BACKOFF_MULTIPLIER}
+      
     volumes:
       - ./logs/main-application:/app/logs
     networks:

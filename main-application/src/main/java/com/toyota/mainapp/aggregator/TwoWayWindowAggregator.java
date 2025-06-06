@@ -37,16 +37,24 @@ public class TwoWayWindowAggregator {
 
     private final Map<String, List<String>> expectedProvidersConfig = new ConcurrentHashMap<>();
 
-    @Value("${app.aggregator.max-time-skew-ms:3000}")
+    @Value("${app.aggregator.max-time-skew-ms:${AGGREGATOR_MAX_TIME_SKEW_MS:3000}}")
     private long maxTimeSkewMs;
 
     private final Map<String, Map<String, BaseRateDto>> window = new ConcurrentHashMap<>();
     
-    @Value("${app.aggregator.window-cleanup-interval-ms:60000}")
+    @Value("${app.aggregator.window-cleanup-interval-ms:${AGGREGATOR_POLL_INTERVAL_MS:60000}}")
     private long windowCleanupIntervalMs;
+
+    @Value("${app.aggregator.window-timeout-ms:${AGGREGATOR_WINDOW_TIMEOUT_MS:800}}")
+    private long windowTimeoutMs;
 
     @PostConstruct
     public void initializeDefaultConfig() {
+        // Load environment values
+        maxTimeSkewMs = getEnvLong("AGGREGATOR_MAX_TIME_SKEW_MS", maxTimeSkewMs);
+        windowCleanupIntervalMs = getEnvLong("AGGREGATOR_POLL_INTERVAL_MS", windowCleanupIntervalMs);
+        windowTimeoutMs = getEnvLong("AGGREGATOR_WINDOW_TIMEOUT_MS", 800L);
+
         List<String> usdTryProviders = List.of("RESTProvider1", "TCPProvider2");
         expectedProvidersConfig.put("USDTRY", usdTryProviders);
         
@@ -56,8 +64,8 @@ public class TwoWayWindowAggregator {
         List<String> gbpUsdProviders = List.of("RESTProvider1", "TCPProvider2"); 
         expectedProvidersConfig.put("GBPUSD", gbpUsdProviders);
         
-        log.info("TwoWayWindowAggregator initialized with default configuration for currencies with providers: {}", 
-                String.join(", ", usdTryProviders));
+        log.info("TwoWayWindowAggregator configured - maxTimeSkew: {}ms, cleanupInterval: {}ms, windowTimeout: {}ms", 
+                maxTimeSkewMs, windowCleanupIntervalMs, windowTimeoutMs);
 
         taskScheduler.scheduleAtFixedRate(
             this::cleanupStaleWindows,
@@ -257,5 +265,17 @@ public class TwoWayWindowAggregator {
             this.expectedProvidersConfig.putAll(symbolProvidersConfig);
             log.info("Toplayıcı {} sembol yapılandırması ile başlatıldı", symbolProvidersConfig.size());
         }
+    }
+
+    private long getEnvLong(String envName, long defaultValue) {
+        String envValue = System.getenv(envName);
+        if (envValue != null && !envValue.trim().isEmpty()) {
+            try {
+                return Long.parseLong(envValue.trim());
+            } catch (NumberFormatException e) {
+                log.warn("Invalid long value for {}: {}, using default: {}", envName, envValue, defaultValue);
+            }
+        }
+        return defaultValue;
     }
 }

@@ -123,7 +123,11 @@ public class ConfigurationReader {
 
     // Security Configuration Methods
     public String getSecurityUsername() {
-        String username = System.getenv("APP_SECURITY_USERNAME");
+        // Priority: TCP_PROVIDER_USER -> APP_SECURITY_USERNAME -> properties -> default
+        String username = System.getenv("TCP_PROVIDER_USER");
+        if (username == null || username.trim().isEmpty()) {
+            username = System.getenv("APP_SECURITY_USERNAME");
+        }
         if (username == null || username.trim().isEmpty()) {
             username = properties.getProperty("app.security.username", "defaultuser");
         }
@@ -131,7 +135,11 @@ public class ConfigurationReader {
     }
 
     public String getSecurityPassword() {
-        String password = System.getenv("APP_SECURITY_PASSWORD");
+        // Priority: TCP_PROVIDER_PASSWORD -> APP_SECURITY_PASSWORD -> properties -> default  
+        String password = System.getenv("TCP_PROVIDER_PASSWORD");
+        if (password == null || password.trim().isEmpty()) {
+            password = System.getenv("APP_SECURITY_PASSWORD");
+        }
         if (password == null || password.trim().isEmpty()) {
             password = properties.getProperty("app.security.password", "defaultpass");
         }

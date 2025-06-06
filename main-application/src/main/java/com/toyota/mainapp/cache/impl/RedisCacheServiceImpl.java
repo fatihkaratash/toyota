@@ -20,11 +20,25 @@ public class RedisCacheServiceImpl implements RateCacheService {
     
     private static final String RAW_RATE_PREFIX = "raw_rate:";
     private static final String CALC_RATE_PREFIX = "calc_rate:";
-    private static final long DEFAULT_TTL_SECONDS = 86400; // 24 hours- değişecek
+    private long defaultTtlSeconds;
 
     public RedisCacheServiceImpl(RedisTemplate<String, Object> redisTemplate, ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        
+        // Load TTL from environment
+        String envTtl = System.getenv("CACHE_TTL_SECONDS");
+        if (envTtl != null && !envTtl.trim().isEmpty()) {
+            try {
+                this.defaultTtlSeconds = Long.parseLong(envTtl.trim());
+                log.info("Cache TTL configured from environment: {} seconds", this.defaultTtlSeconds);
+            } catch (NumberFormatException e) {
+                log.warn("Invalid CACHE_TTL_SECONDS value: {}, using default: 86400", envTtl);
+                this.defaultTtlSeconds = 86400;
+            }
+        } else {
+            this.defaultTtlSeconds = 86400; // 24 hours default
+        }
     }
     
     @Override
@@ -35,7 +49,7 @@ public class RedisCacheServiceImpl implements RateCacheService {
         }
         
         try {
-            redisTemplate.opsForValue().set(key, rateDto, DEFAULT_TTL_SECONDS, TimeUnit.SECONDS);
+            redisTemplate.opsForValue().set(key, rateDto, defaultTtlSeconds, TimeUnit.SECONDS);
             log.debug("Cached rate with key: {}", key);
         } catch (Exception e) {
             log.error("Error caching rate for key {}: {}", key, e.getMessage(), e);

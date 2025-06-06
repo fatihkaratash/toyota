@@ -44,9 +44,24 @@ public class RedisConfig {
      */
     @Bean
     public RedisConnectionFactory redisConnectionFactory() {
+        // Check environment variables first, then fallback to properties
+        String envRedisHost = System.getenv("REDIS_HOST");
+        String envRedisPort = System.getenv("REDIS_PORT");
+        
+        String finalHost = (envRedisHost != null && !envRedisHost.trim().isEmpty()) ? envRedisHost : redisHost;
+        int finalPort = redisPort;
+        
+        if (envRedisPort != null && !envRedisPort.trim().isEmpty()) {
+            try {
+                finalPort = Integer.parseInt(envRedisPort.trim());
+            } catch (NumberFormatException e) {
+                log.warn("Invalid REDIS_PORT environment value: {}, using default: {}", envRedisPort, redisPort);
+            }
+        }
+        
         RedisStandaloneConfiguration redisConfig = new RedisStandaloneConfiguration();
-        redisConfig.setHostName(redisHost);
-        redisConfig.setPort(redisPort);
+        redisConfig.setHostName(finalHost);
+        redisConfig.setPort(finalPort);
         
         if (!redisPassword.isEmpty()) {
             redisConfig.setPassword(redisPassword);
@@ -54,7 +69,7 @@ public class RedisConfig {
         
         redisConfig.setDatabase(redisDatabase);
         
-        log.info("Redis bağlantısı yapılandırılıyor: {}:{}, database: {}", redisHost, redisPort, redisDatabase);
+        log.info("Redis bağlantısı yapılandırılıyor: {}:{}, database: {}", finalHost, finalPort, redisDatabase);
         return new LettuceConnectionFactory(redisConfig);
     }
 

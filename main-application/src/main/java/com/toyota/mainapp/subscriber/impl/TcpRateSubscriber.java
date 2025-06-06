@@ -30,9 +30,14 @@ public class TcpRateSubscriber implements PlatformSubscriber {
     private int retries = 10;
     private String[] symbols = new String[0];
 
-    // Authentication credentials - will be loaded from environment/config
+    // Authentication and retry configuration from environment
     private String username;
     private String password;
+    private int authTimeoutSeconds;
+    private int connectionTimeoutSeconds;
+    private int maxRetryAttempts;
+    private int initialRetryDelayMs;
+    private double retryBackoffMultiplier;
 
     private static final String AUTH_SUCCESS_RESPONSE = "OK|Authenticated";
     private static final String AUTH_FAILED_PREFIX = "ERROR|";
@@ -42,15 +47,22 @@ public class TcpRateSubscriber implements PlatformSubscriber {
         this.providerName = config.getName();
         this.callback = callback;
 
+        // Load timeout and retry configurations from environment
+        this.authTimeoutSeconds = getEnvInt("AUTH_TIMEOUT_SECONDS", 5);
+        this.connectionTimeoutSeconds = getEnvInt("CONNECTION_TIMEOUT_SECONDS", 3);
+        this.maxRetryAttempts = getEnvInt("MAX_RETRY_ATTEMPTS", 3);
+        this.initialRetryDelayMs = getEnvInt("INITIAL_RETRY_DELAY_MS", 100);
+        this.retryBackoffMultiplier = getEnvDouble("RETRY_BACKOFF_MULTIPLIER", 2.0);
+
         if (config.getConnectionConfig() != null) {
             Map<String, Object> connConfig = config.getConnectionConfig();
             this.host = SubscriberUtils.getConfigValue(connConfig, "host", "tcp-rate-provider");
             this.port = SubscriberUtils.getConfigValue(connConfig, "port", 8081);
-            this.timeout = SubscriberUtils.getConfigValue(connConfig, "connectionTimeoutMs", 30000);
-            this.retries = SubscriberUtils.getConfigValue(connConfig, "retryAttempts", 10);
+            this.timeout = this.connectionTimeoutSeconds * 1000; // Convert to ms
+            this.retries = this.maxRetryAttempts;
             this.symbols = SubscriberUtils.getSymbols(connConfig, this.providerName);
 
-            // Get authentication credentials from config first, then environment variables
+            // Get authentication credentials
             this.username = SubscriberUtils.getConfigValue(connConfig, "username",
                     System.getenv("CLIENT_TCP_USERNAME"));
             this.password = SubscriberUtils.getConfigValue(connConfig, "password",
@@ -83,22 +95,24 @@ public class TcpRateSubscriber implements PlatformSubscriber {
     public void connect() {
         int attempt = 0;
         Exception lastError = null;
+        long currentDelay = initialRetryDelayMs;
 
         while (attempt < retries && !connected.get()) {
             try {
                 attempt++;
-                log.info("[{}] TCP bağlantısı deneniyor: {} ({}/{}) to {}:{}", providerName, attempt, retries, host,
-                        port);
+                log.info("[{}] TCP bağlantısı deneniyor: {} ({}/{}) to {}:{} - Timeout: {}ms", 
+                        providerName, attempt, retries, host, port, timeout);
 
-                socket = new Socket(host, port);
-                socket.setSoTimeout(timeout);
+                socket = new Socket();
+                socket.connect(new java.net.InetSocketAddress(host, port), timeout);
+                socket.setSoTimeout(authTimeoutSeconds * 1000); // Auth timeout
                 reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 writer = new PrintWriter(socket.getOutputStream(), true);
 
                 connected.set(true);
                 log.info("[{}] TCP bağlantısı başarıyla kuruldu: {}:{}", providerName, host, port);
 
-                // Perform authentication immediately after connection
+                // Perform authentication with timeout
                 if (performAuthentication()) {
                     authenticated.set(true);
                     callback.onProviderConnectionStatus(providerName, true,
@@ -114,13 +128,18 @@ public class TcpRateSubscriber implements PlatformSubscriber {
             } catch (IOException e) {
                 lastError = e;
                 log.warn("[{}] TCP bağlantı hatası deneme {}/{}: {}:{} - {}",
-                        providerName, attempt, retries, host, port, e.getMessage(), e);
-                try {
-                    Thread.sleep(1000 * attempt);
-                } catch (InterruptedException ie) {
-                    log.warn("[{}] TCP bağlantı denemesi bekleme kesintiye uğradı", providerName, ie);
-                    Thread.currentThread().interrupt();
-                    break;
+                        providerName, attempt, retries, host, port, e.getMessage());
+                
+                if (attempt < retries) {
+                    try {
+                        log.debug("[{}] Exponential backoff: {}ms bekleniyor", providerName, currentDelay);
+                        Thread.sleep(currentDelay);
+                        currentDelay = (long)(currentDelay * retryBackoffMultiplier);
+                    } catch (InterruptedException ie) {
+                        log.warn("[{}] TCP bağlantı denemesi bekleme kesintiye uğradı", providerName);
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
                 }
             }
         }
@@ -389,5 +408,29 @@ public class TcpRateSubscriber implements PlatformSubscriber {
             log.error("[{}] TCP kaynakları kapatılırken hata: {}", providerName, e.getMessage(), e);
         }
         log.debug("[{}] TCP kaynakları kapatıldı.", providerName);
+    }
+
+    private int getEnvInt(String envName, int defaultValue) {
+        String envValue = System.getenv(envName);
+        if (envValue != null && !envValue.trim().isEmpty()) {
+            try {
+                return Integer.parseInt(envValue.trim());
+            } catch (NumberFormatException e) {
+                log.warn("Invalid integer value for {}: {}, using default: {}", envName, envValue, defaultValue);
+            }
+        }
+        return defaultValue;
+    }
+
+    private double getEnvDouble(String envName, double defaultValue) {
+        String envValue = System.getenv(envName);
+        if (envValue != null && !envValue.trim().isEmpty()) {
+            try {
+                return Double.parseDouble(envValue.trim());
+            } catch (NumberFormatException e) {
+                log.warn("Invalid double value for {}: {}, using default: {}", envName, envValue, defaultValue);
+            }
+        }
+        return defaultValue;
     }
 }
