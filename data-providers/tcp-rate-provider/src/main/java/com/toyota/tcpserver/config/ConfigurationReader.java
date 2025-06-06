@@ -120,4 +120,21 @@ public class ConfigurationReader {
         // Orijinal listenin değiştirilmesini önlemek için kopyalar döndür
         return initialRates.stream().map(Rate::copy).toList();
     }
+
+    // Security Configuration Methods
+    public String getSecurityUsername() {
+        String username = System.getenv("APP_SECURITY_USERNAME");
+        if (username == null || username.trim().isEmpty()) {
+            username = properties.getProperty("app.security.username", "defaultuser");
+        }
+        return username.trim();
+    }
+
+    public String getSecurityPassword() {
+        String password = System.getenv("APP_SECURITY_PASSWORD");
+        if (password == null || password.trim().isEmpty()) {
+            password = properties.getProperty("app.security.password", "defaultpass");
+        }
+        return password.trim();
+    }
 }

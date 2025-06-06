@@ -31,11 +31,29 @@ public class TcpServer {
         this.port = configurationReader.getServerPort();
         this.clientExecutorService = Executors.newCachedThreadPool(r -> {
             Thread t = new Thread(r, "ClientHandlerThread-" + System.currentTimeMillis());
-            t.setDaemon(true); // Sadece daemon thread
+            t.setDaemon(true);
             return t;
         });
-        // RatePublisher
         this.ratePublisher = new RatePublisher(configurationReader, null);
+        
+        // Log security configuration at startup
+        logSecurityConfiguration();
+    }
+
+    private void logSecurityConfiguration() {
+        String username = configurationReader.getSecurityUsername();
+        String password = configurationReader.getSecurityPassword();
+        
+        log.info(LoggingHelper.OPERATION_START, LoggingHelper.PLATFORM_TCP, null, 
+                "TCP Server Security Configuration - Username: '" + username + "'");
+        log.info(LoggingHelper.OPERATION_START, LoggingHelper.PLATFORM_TCP, null, 
+                "TCP Server Security Configuration - Password configured: " + 
+                (password != null && !password.isEmpty() && !"defaultpass".equals(password)));
+        
+        if ("defaultuser".equals(username) || "defaultpass".equals(password)) {
+            log.warn(LoggingHelper.OPERATION_ALERT, LoggingHelper.PLATFORM_TCP, null, 
+                    "TCP Server kullanıyor default credentials! Lütfen APP_SECURITY_USERNAME ve APP_SECURITY_PASSWORD environment variables configure edin.");
+        }
     }
 
     public void start() {
@@ -55,15 +73,15 @@ public class TcpServer {
         try {
             serverSocket = new ServerSocket(port);
             log.info(LoggingHelper.OPERATION_START, LoggingHelper.PLATFORM_TCP, null, 
-                    "TCP Sunucusu " + port + " portunda başlatıldı");
+                    "TCP Sunucusu " + port + " portunda başlatıldı - Authentication aktif");
 
             while (running) {
                 try {
                     Socket clientSocket = serverSocket.accept();
                     log.info(LoggingHelper.OPERATION_CONNECT, LoggingHelper.PLATFORM_TCP, null, 
-                            "Yeni istemci bağlantısı kabul edildi: " + clientSocket.getRemoteSocketAddress());
+                            "Yeni istemci bağlantısı kabul edildi (Authentication bekleniyor): " + clientSocket.getRemoteSocketAddress());
 
-                    ClientHandler clientHandler = new ClientHandler(clientSocket, ratePublisher);
+                    ClientHandler clientHandler = new ClientHandler(clientSocket, ratePublisher, configurationReader);
                     clientHandlers.add(clientHandler);
                     clientExecutorService.submit(clientHandler);
                     cleanupClientHandlers();

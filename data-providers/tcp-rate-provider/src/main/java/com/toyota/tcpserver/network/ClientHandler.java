@@ -4,6 +4,7 @@ import com.toyota.tcpserver.model.Rate;
 import com.toyota.tcpserver.event.RateUpdateListener;
 import com.toyota.tcpserver.service.RatePublisher;
 import com.toyota.tcpserver.logging.LoggingHelper;
+import com.toyota.tcpserver.config.ConfigurationReader;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -15,16 +16,24 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class ClientHandler implements Runnable, RateUpdateListener {
     private static final LoggingHelper log = new LoggingHelper(ClientHandler.class);
+    private static final String AUTH_PREFIX = "AUTH|";
+    private static final String AUTH_SUCCESS_RESPONSE = "OK|Authenticated";
+    private static final String AUTH_FAILED_RESPONSE = "ERROR|Authentication failed";
+    private static final String AUTH_FORMAT_ERROR_RESPONSE = "ERROR|Invalid authentication format";
+    
     private final Socket clientSocket;
     private final RatePublisher ratePublisher;
-    private final Set<String> subscriptions = ConcurrentHashMap.newKeySet(); // Abonelikler için thread-safe set
+    private final ConfigurationReader configurationReader;
+    private final Set<String> subscriptions = ConcurrentHashMap.newKeySet();
     private PrintWriter out;
     private BufferedReader in;
     private volatile boolean running = true;
+    private boolean authenticated = false;
 
-    public ClientHandler(Socket socket, RatePublisher ratePublisher) {
+    public ClientHandler(Socket socket, RatePublisher ratePublisher, ConfigurationReader configurationReader) {
         this.clientSocket = socket;
         this.ratePublisher = ratePublisher;
+        this.configurationReader = configurationReader;
         try {
             this.out = new PrintWriter(clientSocket.getOutputStream(), true);
             this.in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
@@ -34,21 +43,35 @@ public class ClientHandler implements Runnable, RateUpdateListener {
             running = false;
         }
         
-        // Başlangıç
-        if (ratePublisher != null && running) {
-            ratePublisher.addListener(this); // RatePublisher dinleyici 
-            log.debug(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, null,
-                    clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode() + " dinleyici olarak RatePublisher'a eklendi.");
-        }
+        // RatePublisher listener registration will be done after authentication
     }
 
     @Override
     public void run() {
-        if (!running) return; // Kurulum başarısız olduysa çık
+        if (!running) return;
 
         log.info(LoggingHelper.OPERATION_CONNECT, LoggingHelper.PLATFORM_TCP, null, 
-                "İstemci bağlandı: " + clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode());
+                "İstemci bağlandı: " + clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode() + " - Authentication bekleniyor");
+        
         try {
+            // First handle authentication
+            if (!handleAuthentication()) {
+                log.warn(LoggingHelper.OPERATION_AUTH, LoggingHelper.PLATFORM_TCP, null,
+                        "Authentication başarısız, bağlantı kapatılıyor: " + clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode());
+                return;
+            }
+
+            log.info(LoggingHelper.OPERATION_AUTH, LoggingHelper.PLATFORM_TCP, null,
+                    "Authentication başarılı: " + clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode());
+
+            // Now register with RatePublisher after successful authentication
+            if (ratePublisher != null) {
+                ratePublisher.addListener(this);
+                log.debug(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, null,
+                        clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode() + " dinleyici olarak RatePublisher'a eklendi.");
+            }
+
+            // Handle normal TCP communication
             String inputLine;
             while (running && (inputLine = in.readLine()) != null) {
                 log.debug(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, null, 
@@ -76,7 +99,80 @@ public class ClientHandler implements Runnable, RateUpdateListener {
         }
     }
 
+    private boolean handleAuthentication() throws IOException {
+        log.debug(LoggingHelper.OPERATION_AUTH, LoggingHelper.PLATFORM_TCP, null,
+                "Authentication süreci başlatılıyor: " + clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode());
+
+        // Read the first message from client - must be AUTH message
+        String authMessage = in.readLine();
+        log.info(LoggingHelper.OPERATION_AUTH, LoggingHelper.PLATFORM_TCP, null,
+                "Authentication mesajı alındı: " + clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode() + " - Ham mesaj: '" + authMessage + "'");
+
+        if (authMessage == null) {
+            log.warn(LoggingHelper.OPERATION_AUTH, LoggingHelper.PLATFORM_TCP, null,
+                    "Authentication başarısız: mesaj alınamadı - " + clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode());
+            out.println(AUTH_FAILED_RESPONSE);
+            return false;
+        }
+
+        // Check if message starts with AUTH|
+        if (!authMessage.startsWith(AUTH_PREFIX)) {
+            log.warn(LoggingHelper.OPERATION_AUTH, LoggingHelper.PLATFORM_TCP, null,
+                    "Authentication başarısız: mesaj AUTH| ile başlamıyor - " + clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode() + " - Alınan: '" + authMessage + "'");
+            out.println(AUTH_FORMAT_ERROR_RESPONSE);
+            return false;
+        }
+
+        // Parse the authentication message
+        String[] parts = authMessage.split("\\|");
+        if (parts.length != 3) {
+            log.warn(LoggingHelper.OPERATION_AUTH, LoggingHelper.PLATFORM_TCP, null,
+                    "Authentication başarısız: geçersiz mesaj formatı - beklenen 3 parça, alınan: " + parts.length + " - " + clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode());
+            out.println(AUTH_FORMAT_ERROR_RESPONSE);
+            return false;
+        }
+
+        // Extract and clean credentials
+        String receivedUsername = parts[1].trim();
+        String receivedPassword = parts[2].trim().replaceAll("[\r\n]", "");
+
+        log.debug(LoggingHelper.OPERATION_AUTH, LoggingHelper.PLATFORM_TCP, null,
+                "Kimlik bilgileri ayrıştırıldı - Kullanıcı: '" + receivedUsername + "', Şifre uzunluğu: " + receivedPassword.length() + " - " + clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode());
+
+        // Get expected credentials from configuration
+        String expectedUsername = configurationReader.getSecurityUsername();
+        String expectedPassword = configurationReader.getSecurityPassword();
+
+        // Authenticate using equals() method (not ==)
+        boolean usernameMatch = expectedUsername.equals(receivedUsername);
+        boolean passwordMatch = expectedPassword.equals(receivedPassword);
+        boolean isAuthenticated = usernameMatch && passwordMatch;
+
+        log.debug(LoggingHelper.OPERATION_AUTH, LoggingHelper.PLATFORM_TCP, null,
+                "Kimlik bilgisi karşılaştırması - Username match: " + usernameMatch + ", Password match: " + passwordMatch + " - " + clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode());
+
+        if (isAuthenticated) {
+            out.println(AUTH_SUCCESS_RESPONSE);
+            authenticated = true;
+            log.info(LoggingHelper.OPERATION_AUTH, LoggingHelper.PLATFORM_TCP, null,
+                    "TCP authentication başarılı - Kullanıcı: '" + receivedUsername + "' - " + clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode());
+            return true;
+        } else {
+            out.println(AUTH_FAILED_RESPONSE);
+            log.warn(LoggingHelper.OPERATION_AUTH, LoggingHelper.PLATFORM_TCP, null,
+                    "TCP authentication başarısız - Kullanıcı: '" + receivedUsername + "' - " + clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode());
+            return false;
+        }
+    }
+
     private void processCommand(String command) {
+        if (!authenticated) {
+            log.warn(LoggingHelper.OPERATION_ALERT, LoggingHelper.PLATFORM_TCP, null,
+                    "Komut işleme reddedildi: istemci authenticated değil - " + clientSocket.getRemoteSocketAddress() + " ID: " + this.hashCode());
+            out.println("ERROR|Authentication required");
+            return;
+        }
+
         String[] parts = command.split("\\|",2);
         if (parts.length == 0) {
             out.println("ERROR|Geçersiz komut formatı");
@@ -210,5 +306,9 @@ public class ClientHandler implements Runnable, RateUpdateListener {
 
     public boolean isRunning() {
         return running && clientSocket != null && !clientSocket.isClosed();
+    }
+
+    public boolean isAuthenticated() {
+        return authenticated;
     }
 }

@@ -15,6 +15,11 @@ public class TcpRateProviderApplication {
 
         try {
             ConfigurationReader configReader = new ConfigurationReader();
+            
+            // Log security configuration at application startup
+            log.info(LoggingHelper.OPERATION_START, LoggingHelper.PLATFORM_TCP, null, 
+                    "TCP Kur Sağlayıcı Uygulaması başlatılıyor - Authentication aktif...");
+            
             final TcpServer server = new TcpServer(configReader);
             
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {

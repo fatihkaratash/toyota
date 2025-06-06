@@ -8,11 +8,16 @@ spring:
     redis:
       host: ${SPRING_REDIS_HOST:localhost}
       port: ${SPRING_REDIS_PORT:6379}
+app:
+  security:
+    username: ${APP_SECURITY_USERNAME:defaultuser}
+    password: ${APP_SECURITY_PASSWORD:defaultpass}
 
 logging:
   level:
     root: INFO
     com.toyota: INFO
+    org.springframework.security:  INFO
 
 rate:
   simulation:

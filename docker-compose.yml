@@ -127,6 +127,8 @@ services:
       TREND_REDIS_POLL_INTERVAL_SECONDS: ${TREND_REDIS_POLL_INTERVAL_SECONDS:-10}
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
+      APP_SECURITY_USERNAME: ${REST_PROVIDER_USER}
+      APP_SECURITY_PASSWORD: ${REST_PROVIDER_PASSWORD}
     volumes:
       - ./logs/rest-provider:/app/logs
     depends_on:
@@ -151,6 +153,8 @@ services:
       TREND_REDIS_POLL_INTERVAL_SECONDS: ${TREND_REDIS_POLL_INTERVAL_SECONDS:-10}
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
+      APP_SECURITY_USERNAME: ${TCP_PROVIDER_USER}
+      APP_SECURITY_PASSWORD: ${TCP_PROVIDER_PASSWORD}
     volumes:
       - ./logs/tcp-provider:/app/logs
     depends_on:
@@ -182,6 +186,10 @@ services:
       PROVIDER_REST_BASE_URL: http://rest-rate-provider:8080/api # Önceki gibi /v1/rates eklenebilir
       PROVIDER_TCP_HOST: tcp-rate-provider
       PROVIDER_TCP_PORT: 8081
+      CLIENT_REST_USERNAME: ${MAINAPP_CLIENT_REST_USER}
+      CLIENT_REST_PASSWORD: ${MAINAPP_CLIENT_REST_PASSWORD}
+      CLIENT_TCP_USERNAME: ${MAINAPP_CLIENT_TCP_USER}
+      CLIENT_TCP_PASSWORD: ${MAINAPP_CLIENT_TCP_PASSWORD}
     volumes:
       - ./logs/main-application:/app/logs
     networks:

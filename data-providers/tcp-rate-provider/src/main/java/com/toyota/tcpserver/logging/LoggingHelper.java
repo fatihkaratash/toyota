@@ -20,6 +20,7 @@ public class LoggingHelper {
     public static final String OPERATION_INFO = "INFO";
     public static final String OPERATION_START = "START";
     public static final String OPERATION_STOP = "STOP";
+    public static final String OPERATION_AUTH = "AUTH";
     
     // Platform sabitleri
     public static final String PLATFORM_PF1 = "PF1";
