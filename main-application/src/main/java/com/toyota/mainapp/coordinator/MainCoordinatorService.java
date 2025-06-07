@@ -1,8 +1,7 @@
 package com.toyota.mainapp.coordinator;
 
-//import com.toyota.mainapp.aggregator.TwoWayWindowAggregator;
 import com.toyota.mainapp.cache.RateCacheService;
-import com.toyota.mainapp.calculator.RealTimeBatchProcessor; // ✅ NEW IMPORT
+import com.toyota.mainapp.calculator.RealTimeBatchProcessor;
 import com.toyota.mainapp.coordinator.callback.PlatformCallback;
 import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.dto.model.ProviderRateDto;
@@ -18,7 +17,6 @@ import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 
@@ -26,9 +24,12 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+// Import ApplicationProperties if it exists in your project
+import com.toyota.mainapp.config.ApplicationProperties;
+
 /**
- * Ana koordinasyon servisi - veri akışını yöneten ve işlemleri koordine eden servis
- * ✅ PHASE 3: Cleaned up, window aggregation removed, real-time pipeline only
+ * ✅ MODERNIZED: Real-time pipeline coordinator with ApplicationProperties integration
+ * Clean separation: data acquisition → validation → real-time batch processing
  */
 @Service
 @RequiredArgsConstructor
@@ -45,10 +46,8 @@ public class MainCoordinatorService implements PlatformCallback {
     private final RateCacheService rateCacheService;
     private final KafkaPublishingService kafkaPublishingService;
     private final RealTimeBatchProcessor realTimeBatchProcessor;
+    private final ApplicationProperties appProperties;
 
-    @Value("${subscribers.config.path}")
-    private String subscribersConfigPath;
-    
     private final Map<String, PlatformSubscriber> activeSubscribers = new ConcurrentHashMap<>();
 
     /**
@@ -70,10 +69,11 @@ public class MainCoordinatorService implements PlatformCallback {
             Thread.currentThread().interrupt();
         }
 
-        log.info("Aboneler yükleniyor: {}", subscribersConfigPath);
+        String configPathToUse = appProperties.getSubscribersConfigPath();
+        log.info("Aboneler yükleniyor: {}", configPathToUse);
         
         try {
-            Collection<PlatformSubscriber> subscribers = dynamicSubscriberLoader.loadSubscribers(subscribersConfigPath, this);
+            Collection<PlatformSubscriber> subscribers = dynamicSubscriberLoader.loadSubscribers(configPathToUse, this);
             
             if (subscribers.isEmpty()) {
                 log.warn("Hiç abone yüklenemedi");
@@ -116,55 +116,55 @@ public class MainCoordinatorService implements PlatformCallback {
     }
 
     /**
-     * ✅ OPTIMIZED: Use dedicated pipeline executor for real-time processing
+     * ✅ REAL-TIME PIPELINE: Optimized data flow with dedicated executor
      */
     @Override
     public void onRateAvailable(String providerName, ProviderRateDto providerRate) {
-        log.info("Sağlayıcıdan veri alındı {}: Symbol={}, Bid={}, Ask={}", 
+        log.info("📊 Raw data received from {}: Symbol={}, Bid={}, Ask={}", 
                 providerName, providerRate.getSymbol(), providerRate.getBid(), providerRate.getAsk());
         
-        // ✅ Process asynchronously on dedicated pipeline executor
+        // ✅ ASYNC PROCESSING: Use dedicated pipeline executor
         pipelineTaskExecutor.execute(() -> {
             try {
-                // Sağlayıcı adını ayarla
+                // Set provider name if missing
                 if (providerRate.getProviderName() == null) {
                     providerRate.setProviderName(providerName);
                 }
 
-                // 1. Veriyi doğrudan BaseRateDto'ya dönüştür
+                // 1. Convert to BaseRateDto
                 BaseRateDto baseRate = rateMapper.toBaseRateDto(providerRate);
-                log.debug("ProviderRateDto'dan BaseRateDto oluşturuldu: {}", baseRate);
+                log.debug("✅ ProviderRateDto converted to BaseRateDto: {}", baseRate);
 
-                // 2. Symbol normalize kontrolü
+                // 2. Symbol normalization and validation
                 String normalizedSymbol = SymbolUtils.normalizeSymbol(baseRate.getSymbol());
                 if (!SymbolUtils.isValidSymbol(normalizedSymbol)) {
-                    log.warn("Invalid symbol format, veri işlenmiyor: '{}'", baseRate.getSymbol());
+                    log.warn("❌ Invalid symbol format, skipping: '{}'", baseRate.getSymbol());
                     return;
                 }
                 baseRate.setSymbol(normalizedSymbol);
 
-                // 3. Veriyi doğrula
+                // 3. Rate validation
                 rateValidatorService.validate(baseRate);
                 baseRate.setValidatedAt(System.currentTimeMillis());
-                log.debug("Kur doğrulama başarılı: {}", normalizedSymbol);
+                log.debug("✅ Rate validation successful: {}", normalizedSymbol);
 
                 // 4. Cache raw rate
                 rateCacheService.cacheRawRate(baseRate);
-                log.info("Kur başarıyla işlendi ve önbelleğe alındı: {}, sağlayıcı: {}", 
+                log.info("✅ Rate cached successfully: {}, provider: {}", 
                         normalizedSymbol, providerName);
 
                 // 5. Publish to individual raw rate topic
                 kafkaPublishingService.publishRawRate(baseRate);
 
-                // 6. ✅ REAL-TIME PIPELINE: Trigger batch processing
+                // 6. ✅ TRIGGER REAL-TIME PIPELINE: Each rate triggers complete processing
                 realTimeBatchProcessor.processNewRate(baseRate);
-                log.debug("Real-time batch processing triggered for: {}", normalizedSymbol);
+                log.debug("🚀 Real-time pipeline triggered for: {}", normalizedSymbol);
 
             } catch (AggregatedRateValidationException e) {
-                log.warn("{} sağlayıcısından gelen veri doğrulanamadı: Sembol={}, Hatalar={}", 
+                log.warn("⚠️ Rate validation failed from {}: Symbol={}, Errors={}", 
                         providerName, providerRate.getSymbol(), e.getErrors());
             } catch (Exception e) {
-                log.error("{} sağlayıcısından gelen veri işlenirken hata oluştu: Sembol={}", 
+                log.error("❌ Error processing rate from {}: Symbol={}", 
                         providerName, providerRate.getSymbol(), e);
             }
         });

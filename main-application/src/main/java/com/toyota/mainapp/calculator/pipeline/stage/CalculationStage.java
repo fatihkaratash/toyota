@@ -1,7 +1,6 @@
 package com.toyota.mainapp.calculator.pipeline.stage;
 
 import com.toyota.mainapp.calculator.pipeline.ExecutionContext;
-import com.toyota.mainapp.calculator.pipeline.StageExecutionException;
 
 /**
  * ✅ CALCULATION STAGE INTERFACE
@@ -12,7 +11,7 @@ public interface CalculationStage {
     /**
      * Execute this stage with given context
      */
-    void execute(ExecutionContext context) throws StageExecutionException;
+    void execute(ExecutionContext context);
     
     /**
      * Get stage name for logging

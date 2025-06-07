@@ -1,139 +1,163 @@
 package com.toyota.mainapp.calculator.pipeline.stage;
 
 import com.toyota.mainapp.cache.RateCacheService;
-import com.toyota.mainapp.calculator.RuleEngineService;
+import com.toyota.mainapp.calculator.engine.CalculationStrategyFactory;
 import com.toyota.mainapp.calculator.pipeline.ExecutionContext;
-import com.toyota.mainapp.calculator.pipeline.StageExecutionException;
+import com.toyota.mainapp.calculator.engine.CalculationStrategy;
+import com.toyota.mainapp.config.ApplicationProperties;
 import com.toyota.mainapp.dto.config.CalculationRuleDto;
 import com.toyota.mainapp.dto.model.BaseRateDto;
+import com.toyota.mainapp.dto.model.RateType;
 import com.toyota.mainapp.kafka.KafkaPublishingService;
-import com.toyota.mainapp.util.SymbolUtils;
+import com.toyota.mainapp.util.CalculationInputUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import com.toyota.mainapp.calculator.pipeline.StageResult;
+import java.util.stream.Collectors;
 
 /**
- * ✅ STAGE 3: Cross Rate Calculation  
- * Calculate cross rates and publish to individual JSON topic
+ * ✅ MODERNIZED: Cross rate calculation stage with strategy factory integration
+ * Handles CROSS rate calculations using config-driven strategies
  */
 @Component
-@Slf4j
 @RequiredArgsConstructor
+@Slf4j
 public class CrossRateCalculationStage implements CalculationStage {
 
+    private final ApplicationProperties applicationProperties;
+    private final CalculationStrategyFactory calculationStrategyFactory; // ✅ FIXED: Use calculationStrategyFactory
     private final RateCacheService rateCacheService;
     private final KafkaPublishingService kafkaPublishingService;
-    private final RuleEngineService ruleEngineService;
+    private final CalculationInputUtils calculationInputUtils;
 
     @Override
-    public void execute(ExecutionContext context) throws StageExecutionException {
+    public void execute(ExecutionContext context) {
+        String pipelineId = context.getPipelineId();
+        log.debug("🔄 CrossRateCalculationStage started for pipeline: {}", pipelineId);
+        
         try {
-            BaseRateDto triggeringRate = context.getTriggeringRate();
-            String pipelineId = context.getPipelineId(); // ✅ CORRECTED: getPipelineId()
-            
-            log.debug("Stage 3 [{}]: Processing cross rate calculations for symbol: {}", 
-                    pipelineId, triggeringRate.getSymbol());
+            // ✅ FIXED: Get rules from ApplicationProperties configuration
+            List<CalculationRuleDto> crossRules = applicationProperties.getCalculationRules().stream()
+                    .filter(rule -> "CROSS".equals(rule.getType()))
+                    .collect(Collectors.toList());
 
-            // ✅ CONFIG-DRIVEN: Find CROSS rules that use this symbol as input
-            List<CalculationRuleDto> crossRules = ruleEngineService.getRulesByInputSymbol(triggeringRate.getSymbol());
-            
+            if (crossRules.isEmpty()) {
+                log.debug("No cross rate calculation rules found for pipeline: {}", pipelineId);
+                return;
+            }
+
+            log.debug("Processing {} cross rate rules for pipeline: {}", crossRules.size(), pipelineId);
+
+            // ✅ ENHANCED: Per-rule processing with error isolation
             for (CalculationRuleDto rule : crossRules) {
-                // ✅ CONFIG-DRIVEN: Check strategy type from rule config  
-                if (!"CROSS".equals(rule.getStrategyType())) {
-                    continue;
-                }
-                
                 try {
-                    // Collect required input rates (both raw and calculated)
-                    Map<String, BaseRateDto> inputRates = collectInputRates(rule, context);
-                    
-                    // ✅ CONFIG-DRIVEN: Execute rule using strategy specified in config
-                    Optional<BaseRateDto> crossResult = ruleEngineService.executeRule(rule, inputRates);
-                    
-                    if (crossResult.isPresent()) {
-                        BaseRateDto crossRate = crossResult.get();
-                        
-                        // Ensure correct calculation type
-                        crossRate.setRateType(com.toyota.mainapp.dto.model.RateType.CALCULATED);
-                        
-                        // Cache calculated rate
-                        rateCacheService.cacheCalculatedRate(crossRate);
-                        
-                        // Publish to individual JSON topic
-                        kafkaPublishingService.publishCalculatedJson(crossRate);
-                        
-                        // Add to context
-                        context.addCalculatedRate(crossRate);
-                        
-                        log.info("Stage 3 [{}]: CROSS calculated: {} -> {} (strategy: {})", 
-                                pipelineId, rule.getOutputSymbol(), crossRate.getBid(), rule.getImplementation());
-                    }
-                    
+                    processCrossRateRule(rule, context);
                 } catch (Exception e) {
-                    log.error("Stage 3 [{}]: CROSS calculation failed for rule {}: {}", 
-                            pipelineId, rule.getOutputSymbol(), e.getMessage());
-                    context.addError("CROSS calculation failed: " + rule.getOutputSymbol());
+                    log.warn("❌ Cross rate rule failed: {} in pipeline: {} - Error: {}", 
+                            rule.getOutputSymbol(), pipelineId, e.getMessage());
+                    
+                    // ✅ ERROR TRACKING: Record rule-level error but continue with other rules
+                    context.addStageError("CrossRateCalculationStage", 
+                            String.format("Rule %s failed: %s", rule.getOutputSymbol(), e.getMessage()));
+                    
+                    // Check if we should continue based on configuration
+                    if (!shouldContinueOnError(context)) {
+                        log.warn("⚠️ Maximum stage errors reached for pipeline: {}", pipelineId);
+                        break;
+                    }
                 }
             }
-            
-            context.addStageResult("Stage 3: CROSS calculations completed");
+
+            log.debug("✅ CrossRateCalculationStage completed for pipeline: {}", pipelineId);
             
         } catch (Exception e) {
-            throw new StageExecutionException("Stage 3 failed: " + e.getMessage(), e);
+            log.error("❌ CrossRateCalculationStage failed for pipeline: {}", pipelineId, e);
+            context.addStageError("CrossRateCalculationStage", 
+                    String.format("Stage execution failed: %s", e.getMessage()));
         }
     }
-    
-    // ✅ CONFIG-DRIVEN: Collect input rates based on rule dependencies
-    private Map<String, BaseRateDto> collectInputRates(CalculationRuleDto rule, ExecutionContext context) {
-        Map<String, BaseRateDto> inputRates = new HashMap<>();
+
+    /**
+     * ✅ ENHANCED: Process single cross rate rule with comprehensive dependency collection
+     */
+    private void processCrossRateRule(CalculationRuleDto rule, ExecutionContext context) {
+        String outputSymbol = rule.getOutputSymbol();
+        String pipelineId = context.getPipelineId();
         
-        // Use rule's input symbols (config-driven)
-        for (String inputSymbol : rule.getInputSymbols()) {
-            String normalizedSymbol = SymbolUtils.normalizeSymbol(inputSymbol);
-            
-            // 1. Try from context first (recently calculated rates)
-            for (BaseRateDto calculatedRate : context.getCalculatedRates()) {
-                if (SymbolUtils.symbolsEquivalent(normalizedSymbol, calculatedRate.getSymbol())) {
-                    String key = "CALCULATED_" + calculatedRate.getSymbol();
-                    inputRates.put(key, calculatedRate);
-                    continue;
-                }
-            }
-            
-            // 2. Try from cache (calculated rates)
-            Optional<BaseRateDto> cachedCalculated = rateCacheService.getCalculatedRate(normalizedSymbol);
-            if (cachedCalculated.isPresent()) {
-                String key = "CACHED_CALC_" + normalizedSymbol;
-                inputRates.put(key, cachedCalculated.get());
-                continue;
-            }
-            
-            // 3. Fallback to raw rates
-            var rawRates = rateCacheService.getRawRatesBySymbol(normalizedSymbol);
-            for (BaseRateDto rawRate : rawRates) {
-                String key = rawRate.getProviderName() + "_" + rawRate.getSymbol();
-                inputRates.put(key, rawRate);
-            }
+        log.debug("Processing cross rate rule: {} for pipeline: {}", outputSymbol, pipelineId);
+
+        // ✅ COLLECT RAW DEPENDENCIES: Gather required raw rates
+        Map<String, BaseRateDto> rawInputs = calculationInputUtils.collectInputRates(rule, context);
+        
+        // ✅ COLLECT CALCULATED DEPENDENCIES: Gather required calculated rates (AVG)
+        Map<String, BaseRateDto> calculatedInputs = calculationInputUtils.collectCalculatedInputRates(rule, context);
+        
+        // ✅ SNAPSHOT COLLECTION: Add all dependencies to snapshot for transparency
+        context.addAllRatesToSnapshot(rawInputs.values());
+        context.addAllRatesToSnapshot(calculatedInputs.values());
+        
+        log.debug("Added {} raw + {} calculated dependency rates to snapshot for rule: {}", 
+                rawInputs.size(), calculatedInputs.size(), outputSymbol);
+
+        // ✅ VALIDATION: Check if we have sufficient dependencies
+        if (rawInputs.isEmpty() && calculatedInputs.isEmpty()) {
+            log.warn("⚠️ No dependency rates available for cross rate rule: {} in pipeline: {}", 
+                    outputSymbol, pipelineId);
+            return;
+        }
+
+        // ✅ STRATEGY EXECUTION: Calculate cross rate using strategy factory
+        CalculationStrategy strategy = calculationStrategyFactory.getStrategy(rule.getStrategyType());
+        if (strategy == null) {
+            log.error("❌ No strategy found for type: {} in rule: {}", rule.getStrategyType(), outputSymbol);
+            context.addStageError("CrossRateCalculationStage", 
+                    String.format("No strategy found for type: %s", rule.getStrategyType()));
+            return;
         }
         
-        log.debug("Collected {} input rates for CROSS rule: {}", inputRates.size(), rule.getOutputSymbol());
-        return inputRates;
+        // ✅ COMBINE INPUTS: Merge raw and calculated inputs for strategy call
+        Map<String, BaseRateDto> allInputs = new HashMap<>(rawInputs);
+        allInputs.putAll(calculatedInputs);
+        
+        Optional<BaseRateDto> calculatedRateOpt = strategy.calculate(rule, allInputs);
+
+        if (calculatedRateOpt.isPresent()) {
+            BaseRateDto calculatedRate = calculatedRateOpt.get();
+            
+            // ✅ CACHE: Store calculated cross rate
+            rateCacheService.cacheCalculatedRate(calculatedRate);
+            
+            // ✅ KAFKA: Publish to individual JSON topic
+            kafkaPublishingService.publishCalculatedRate(calculatedRate);
+            
+            // ✅ SNAPSHOT: Add calculated output to snapshot
+            context.addRateToSnapshot(calculatedRate);
+            context.addCalculatedRate(calculatedRate); // For backward compatibility
+            
+            log.info("✅ Cross rate calculated and added to snapshot: {} = {} bid, {} ask (pipeline: {})", 
+                    outputSymbol, calculatedRate.getBid(), calculatedRate.getAsk(), pipelineId);
+        } else {
+            log.warn("⚠️ Cross rate calculation returned empty result for: {} in pipeline: {}", 
+                    outputSymbol, pipelineId);
+            context.addStageError("CrossRateCalculationStage", 
+                    String.format("No result for rule %s", outputSymbol));
+        }
     }
-    
-    @Override
-    public String getStageName() {
-        return "CrossRateCalculationStage";
-    }
-    
-    public boolean canExecute(ExecutionContext context) {
-        // ✅ FIXED: Correct method name
-        return ruleEngineService.hasRules() && context.getTriggeringRate() != null;
+
+    /**
+     * ✅ CONFIG-DRIVEN: Check if pipeline should continue on errors
+     */
+    private boolean shouldContinueOnError(ExecutionContext context) {
+        if (!applicationProperties.getPipeline().getErrorHandling().isContinueOnStageFailure()) {
+            return false;
+        }
+        
+        int maxErrors = applicationProperties.getPipeline().getErrorHandling().getMaxStageErrors();
+        return context.getStageErrorCount() < maxErrors;
     }
 }

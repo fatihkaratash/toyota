@@ -27,33 +27,62 @@ def scale = defaultScale.toInteger()
 def roundingMode = RoundingMode.HALF_UP
 def calculationInputs = []
 
-// Get USD/TRY average rate from inputRates map
-def usdTryAvgRate = inputRates.get(usdTryAvgSourceKey)
-log.debug("İlk bakışta USD/TRY kuru için {} anahtarı ile sonuç: {}", 
-    usdTryAvgSourceKey, usdTryAvgRate != null ? "BULUNDU" : "BULUNAMADI")
+// ✅ ENHANCED: Smart input resolution using multiple key formats
+def usdTryAvgRate = null
+def gbpUsdAvgRate = null
 
-if (!usdTryAvgRate) {
-    // Try both with and without slash format
-    def altUsdTryKey = usdTryAvgSourceKey.contains("/") ? 
-        usdTryAvgSourceKey.replace("/", "") : 
-        usdTryAvgSourceKey.substring(0, 3) + "/" + usdTryAvgSourceKey.substring(3)
-    
-    log.info("USD/TRY kuru '{}' anahtarıyla bulunamadı, alternatif anahtar deneniyor: {}", 
-        usdTryAvgSourceKey, altUsdTryKey)
-    usdTryAvgRate = inputRates.get(altUsdTryKey)
-    
-    if (!usdTryAvgRate) {
-        log.error("GBP/TRY hesaplaması için gerekli ortalama USD/TRY kuru eksik: {} ve {} (inputRates üzerinden alınamadı)", 
-            usdTryAvgSourceKey, altUsdTryKey)
-        log.debug("Kullanılabilir anahtarlar: {}", inputRates.keySet().join(", "))
-        return null
+// ✅ CONFIG-DRIVEN: Try multiple key formats for USD/TRY input
+def usdTryKeys = [
+    usdTryAvgSourceKey,
+    "USDTRY_AVG", 
+    "USD/TRY_AVG",
+    "USDTRY",
+    "USD/TRY"
+]
+
+for (String key : usdTryKeys) {
+    if (inputRates.containsKey(key)) {
+        usdTryAvgRate = inputRates.get(key)
+        log.info("✅ USD/TRY input found with key: {}", key)
+        break
     }
-    log.info("USD/TRY kuru '{}' alternatif anahtarıyla BULUNDU", altUsdTryKey)
 }
 
+if (!usdTryAvgRate) {
+    log.error("❌ USD/TRY input not found. Available keys: {}", inputRates.keySet().join(", "))
+    return null
+}
+
+// ✅ CONFIG-DRIVEN: Try multiple key formats for GBP/USD input
+def gbpUsdKeys = [
+    gbpUsdAvgKey,
+    "GBPUSD_AVG",
+    "GBP/USD_AVG", 
+    "GBPUSD",
+    "GBP/USD"
+]
+
+for (String key : gbpUsdKeys) {
+    if (inputRates.containsKey(key)) {
+        gbpUsdAvgRate = inputRates.get(key)
+        log.info("✅ GBP/USD input found with key: {}", key)
+        break
+    }
+}
+
+if (!gbpUsdAvgRate) {
+    log.error("❌ GBP/USD input not found. Available keys: {}", inputRates.keySet().join(", "))
+    return null
+}
+
+// ✅ VALIDATION: Check rate data quality
 if (usdTryAvgRate.bid == null || usdTryAvgRate.ask == null) {
-    log.error("USD/TRY_AVG kuru ({}) için bid/ask değerleri null. {} hesaplanamıyor.", 
-        usdTryAvgSourceKey, outputSymbol)
+    log.error("❌ USD/TRY rate has null bid/ask values")
+    return null
+}
+
+if (gbpUsdAvgRate.bid == null || gbpUsdAvgRate.ask == null) {
+    log.error("❌ GBP/USD rate has null bid/ask values") 
     return null
 }
 
@@ -70,36 +99,6 @@ calculationInputs.add(
         .timestamp(usdTryAvgRate.timestamp)
         .build()
 )
-
-// Get GBP/USD average rate from inputRates map
-def gbpUsdAvgRate = inputRates.get(gbpUsdAvgKey)
-log.debug("İlk bakışta GBP/USD kuru için {} anahtarı ile sonuç: {}", 
-    gbpUsdAvgKey, gbpUsdAvgRate != null ? "BULUNDU" : "BULUNAMADI")
-
-if (!gbpUsdAvgRate) {
-    // Try both with and without slash format
-    def altGbpUsdKey = gbpUsdAvgKey.contains("/") ? 
-        gbpUsdAvgKey.replace("/", "") : 
-        gbpUsdAvgKey.substring(0, 3) + "/" + gbpUsdAvgKey.substring(3)  // ✅ FIX: gbpUsdAvgKey instead of gbpUsdAvgRate
-    
-    log.info("GBP/USD kuru '{}' anahtarıyla bulunamadı, alternatif anahtar deneniyor: {}", 
-        gbpUsdAvgKey, altGbpUsdKey)
-    gbpUsdAvgRate = inputRates.get(altGbpUsdKey)
-    
-    if (!gbpUsdAvgRate) {
-        log.error("GBP/TRY hesaplaması için gerekli ortalama GBP/USD kuru eksik: {} ve {} (inputRates üzerinden alınamadı)", 
-            gbpUsdAvgKey, altGbpUsdKey)
-        log.debug("Kullanılabilir anahtarlar: {}", inputRates.keySet().join(", "))
-        return null
-    }
-    log.info("GBP/USD kuru '{}' alternatif anahtarıyla BULUNDU", altGbpUsdKey)
-}
-
-if (gbpUsdAvgRate.bid == null || gbpUsdAvgRate.ask == null) {
-    log.error("GBP/USD_AVG kuru ({}) için bid/ask değerleri null. {} hesaplanamıyor.", 
-        gbpUsdAvgKey, outputSymbol)
-    return null
-}
 
 log.info("GBP/USD Kuru BULUNDU: bid={}, ask={}, timestamp={}", 
     gbpUsdAvgRate.bid, gbpUsdAvgRate.ask, gbpUsdAvgRate.timestamp)
@@ -148,11 +147,12 @@ log.info("Hesaplanan GBP/TRY ({}): Bid={}, Ask={}", outputSymbol, calculatedBid,
 // Make sure we're always using the expected format
 String finalOutputSymbol = outputSymbol ?: "GBP/TRY"
 
+// ✅ ARCHITECTURE: Return format optimized for pipeline
 return [
-    symbol: finalOutputSymbol,
+    symbol: outputSymbol ?: "GBPTRY_CROSS",
     bid: calculatedBid,
     ask: calculatedAsk,
-    rateTimestamp: currentTimestamp,
+    rateTimestamp: System.currentTimeMillis(),
     rateType: RateType.CALCULATED.toString(),
     providerName: "GbpTryScriptCalculator",
     calculationInputs: calculationInputs,

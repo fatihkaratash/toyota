@@ -2,7 +2,6 @@ package com.toyota.mainapp.calculator.pipeline.stage;
 
 import com.toyota.mainapp.cache.RateCacheService;
 import com.toyota.mainapp.calculator.pipeline.ExecutionContext;
-import com.toyota.mainapp.calculator.pipeline.StageExecutionException;
 import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.kafka.KafkaPublishingService;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +21,7 @@ public class RawDataHandlingStage implements CalculationStage {
     private final KafkaPublishingService kafkaPublishingService;
 
     @Override
-    public void execute(ExecutionContext context) throws StageExecutionException {
+    public void execute(ExecutionContext context) {
         try {
             BaseRateDto triggeringRate = context.getTriggeringRate();
             String pipelineId = context.getPipelineId();
@@ -34,17 +33,17 @@ public class RawDataHandlingStage implements CalculationStage {
             rateCacheService.cacheRawRate(triggeringRate);
             
             // 2. Publish to individual JSON topic  
-            kafkaPublishingService.publishRawJson(triggeringRate);
+            kafkaPublishingService.publishRawRate(triggeringRate);
             
             // 3. Add to context for next stages
             context.addRawRate(triggeringRate.getSymbol(), triggeringRate);
-            context.addStageResult("Stage 1: Raw rate cached and published");
             
             log.info("Stage 1 [{}]: Raw rate processed successfully: {}", 
                     pipelineId, triggeringRate.getSymbol());
 
         } catch (Exception e) {
-            throw new StageExecutionException("Stage 1 failed: " + e.getMessage(), e);
+            log.error("❌ Stage 1 failed for pipeline: {}", context.getPipelineId(), e);
+            // Don't throw exception - handle gracefully and continue pipeline
         }
     }
 }

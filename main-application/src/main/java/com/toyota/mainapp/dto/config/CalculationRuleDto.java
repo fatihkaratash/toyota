@@ -8,27 +8,52 @@ import lombok.NoArgsConstructor;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * ✅ CONSOLIDATED: Single source of truth for calculation rules
+ * Used by: ApplicationProperties, CalculationStrategyFactory, Pipeline Stages
+ */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class CalculationRuleDto {
     
-    private String outputSymbol;
-    private String description;
+    private String outputSymbol;        // ✅ USED: Target symbol (USDTRY_AVG, EURTRY_CROSS)
+    private String description;         // ✅ USED: Human readable description
     
-    // ✅ CONFIG-DRIVEN: Strategy selection
-    private String strategyType; // "AVG", "CROSS", "GROOVY"
-    private String implementation; // "groovy/average.groovy", "java:ConfigurableAverageStrategy"
+    // ✅ ENUM INTEGRATION: Type safety with enum support
+    private String type;               // ✅ USED: Rule type (AVG, CROSS) - for stage filtering
+    private String strategyType;       // ✅ USED: Strategy bean name for factory lookup
     
-    private List<String> inputSymbols;
-    private Map<String, String> inputParameters;
+    // ✅ GROOVY SUPPORT: Implementation path for script strategies
+    private String implementation;     // ✅ USED: Script path for GroovyScriptCalculationStrategy
     
-    // ✅ NEW: Strategy-specific configuration
-    private Map<String, Object> strategyConfig;
+    private List<String> inputSymbols; // ✅ USED: Required input symbols
+    private Map<String, Object> inputParameters; // ✅ USED: Strategy-specific parameters (Object for flexibility)
     
     /**
-     * ✅ Helper: Determine if this is a Groovy strategy
+     * ✅ ENUM INTEGRATION: Get rule type as enum
+     */
+    public CalculationRuleType getTypeEnum() {
+        return CalculationRuleType.fromString(this.type);
+    }
+    
+    /**
+     * ✅ ENUM INTEGRATION: Set rule type from enum
+     */
+    public void setTypeEnum(CalculationRuleType typeEnum) {
+        this.type = typeEnum != null ? typeEnum.getCode() : null;
+    }
+    
+    /**
+     * ✅ VALIDATION: Check if rule type is valid
+     */
+    public boolean isValidType() {
+        return CalculationRuleType.isValidType(this.type);
+    }
+    
+    /**
+     * ✅ GROOVY DETECTION: Check if this uses Groovy script strategy
      */
     public boolean isGroovyStrategy() {
         return implementation != null && 
@@ -36,10 +61,21 @@ public class CalculationRuleDto {
     }
     
     /**
-     * ✅ Helper: Determine if this is a Java strategy
+     * ✅ JAVA DETECTION: Check if this uses Java strategy
      */
     public boolean isJavaStrategy() {
-        return implementation != null && 
-               (implementation.startsWith("java:") || implementation.contains("Strategy"));
+        return strategyType != null && 
+               (strategyType.contains("Strategy") || strategyType.contains("CalculationStrategy"));
+    }
+    
+    /**
+     * ✅ BACKWARD COMPATIBILITY: Keep existing getters
+     */
+    public String getType() {
+        return type;
+    }
+    
+    public String getStrategyType() {
+        return strategyType;
     }
 }

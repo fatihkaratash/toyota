@@ -1,114 +1,61 @@
 package com.toyota.mainapp.calculator.pipeline;
 
 import com.toyota.mainapp.dto.model.BaseRateDto;
-import com.toyota.mainapp.dto.config.CalculationRuleDto;
-import lombok.Data;
 import lombok.Builder;
-import lombok.extern.slf4j.Slf4j;
+import lombok.Data;
 
 import java.util.ArrayList;
-import java.util.Map;
+import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
-import java.time.Instant;
+import java.util.Map;
 
 /**
- * Pipeline execution context - carries state through calculation stages
+ * ✅ EXECUTION CONTEXT: Pipeline state management
+ * Contains all data needed throughout pipeline execution
  */
 @Data
 @Builder
-@Slf4j
 public class ExecutionContext {
     
-    /**
-     * Original triggering rate that started this pipeline
-     */
+    private String pipelineId;
+    private long startTime;
     private BaseRateDto triggeringRate;
     
-    /**
-     * Unique pipeline execution ID for tracking
-     */
-    private String pipelineId;
-    
-    /**
-     * Pipeline start time for latency measurement
-     */
-    private long startTime;
-    
-    // Configuration
-    private final List<CalculationRuleDto> availableRules;
-    
-    /**
-     * Raw rates collected during pipeline execution
-     */
+    // Stage results storage
     @Builder.Default
-    private Map<String, BaseRateDto> collectedRawRates = new ConcurrentHashMap<>();
+    private Map<String, BaseRateDto> rawRates = new HashMap<>();
     
-    /**
-     * Calculated rates produced during pipeline execution
-     */
     @Builder.Default
     private List<BaseRateDto> calculatedRates = new ArrayList<>();
     
-    /**
-     * Stage execution results for monitoring
-     */
-    @Builder.Default
+    @Builder.Default  
     private List<String> stageResults = new ArrayList<>();
     
     /**
-     * Error tracking
+     * ✅ ADD RAW RATE: Store raw rate by symbol
      */
-    @Builder.Default
-    private List<String> errors = new ArrayList<>();
+    public void addRawRate(String symbol, BaseRateDto rate) {
+        this.rawRates.put(symbol, rate);
+    }
     
     /**
-     * Add calculated rate to context
+     * ✅ ADD CALCULATED RATE: Store calculated rate
      */
     public void addCalculatedRate(BaseRateDto rate) {
-        if (rate != null) {
-            calculatedRates.add(rate);
-        }
+        this.calculatedRates.add(rate);
     }
     
     /**
-     * Add raw rate to context
-     */
-    public void addRawRate(String key, BaseRateDto rate) {
-        if (key != null && rate != null) {
-            collectedRawRates.put(key, rate);
-        }
-    }
-    
-    /**
-     * Add stage result
+     * ✅ ADD STAGE RESULT: Log stage completion
      */
     public void addStageResult(String result) {
-        if (result != null) {
-            stageResults.add(result);
-        }
+        this.stageResults.add(result);
     }
     
     /**
-     * Add error
+     * ✅ GET CALCULATED RATES: For batch assembly
      */
-    public void addError(String error) {
-        if (error != null) {
-            errors.add(error);
-        }
-    }
-    
-    /**
-     * Check if pipeline has errors
-     */
-    public boolean hasErrors() {
-        return !errors.isEmpty();
-    }
-    
-    /**
-     * Get execution duration
-     */
-    public long getExecutionDuration() {
-        return System.currentTimeMillis() - startTime;
+    public List<BaseRateDto> getCalculatedRates() {
+        return new ArrayList<>(calculatedRates);
     }
 }

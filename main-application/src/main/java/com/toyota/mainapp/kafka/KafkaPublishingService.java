@@ -222,4 +222,11 @@ public class KafkaPublishingService {
                     batchString.length(), e.getMessage(), e);
         }
     }
+
+    /**
+     * ✅ ALTERNATIVE: Publish simple batch (for compatibility) - ALIAS
+     */
+    public void publishSimpleBatch(String batchString) {
+        publishStringBatch(batchString);
+    }
 }

@@ -1,48 +1,66 @@
 {
-  "rules": [
+  "calculationRules": [
     {
       "outputSymbol": "USDTRY_AVG",
       "type": "AVG",
-      "strategyType": "averageCalculationStrategy", 
+      "strategyType": "averageCalculationStrategy",
       "inputSymbols": ["USDTRY"],
-      "inputParameters": {}
+      "inputParameters": {
+        "weightingMethod": "equal",
+        "minProviders": 1,
+        "maxAge": 15000
+      }
     },
     {
-      "outputSymbol": "EURUSD_AVG",
+      "outputSymbol": "EURUSD_AVG", 
       "type": "AVG",
       "strategyType": "averageCalculationStrategy",
-      "inputSymbols": ["EURUSD"], 
-      "inputParameters": {}
+      "inputSymbols": ["EURUSD"],
+      "inputParameters": {
+        "weightingMethod": "equal",
+        "minProviders": 1,
+        "maxAge": 15000
+      }
+    },
+    {
+      "outputSymbol": "GBPUSD_AVG",
+      "type": "AVG", 
+      "strategyType": "averageCalculationStrategy",
+      "inputSymbols": ["GBPUSD"],
+      "inputParameters": {
+        "weightingMethod": "equal",
+        "minProviders": 1,
+        "maxAge": 15000
+      }
     },
     {
       "outputSymbol": "EURTRY_CROSS",
       "type": "CROSS",
-      "strategyType": "groovyScriptCalculationStrategy",
+      "strategyType": "groovyScriptCalculationStrategy", 
       "implementation": "scripts/eur_try_calculator.groovy",
       "inputSymbols": ["EURUSD_AVG", "USDTRY_AVG"],
       "inputParameters": {
         "eurUsdAvgKey": "EURUSD_AVG",
-        "usdTryAvgSourceKey": "USDTRY_AVG"
+        "usdTryAvgSourceKey": "USDTRY_AVG",
+        "defaultScale": "5"
+      }
+    },
+    {
+      "outputSymbol": "GBPTRY_CROSS",
+      "type": "CROSS", 
+      "strategyType": "groovyScriptCalculationStrategy",
+      "implementation": "scripts/gbp_try_calculator.groovy", 
+      "inputSymbols": ["GBPUSD_AVG", "USDTRY_AVG"],
+      "inputParameters": {
+        "gbpUsdAvgKey": "GBPUSD_AVG",
+        "usdTryAvgSourceKey": "USDTRY_AVG",
+        "defaultScale": "5"
       }
     }
   ],
   "symbolProviders": {
     "USDTRY": ["TCPProvider2", "RESTProvider1"],
-    "EURUSD": ["TCPProvider2", "RESTProvider1"],
+    "EURUSD": ["TCPProvider2", "RESTProvider1"], 
     "GBPUSD": ["TCPProvider2", "RESTProvider1"]
-  },
-  "symbolConfigs": [
-    {
-      "baseSymbol": "USDTRY",
-      "expectedProviders": ["TCPProvider2", "RESTProvider1"]
-    },
-    {
-      "baseSymbol": "EURUSD", 
-      "expectedProviders": ["TCPProvider2", "RESTProvider1"]
-    },
-    {
-      "baseSymbol": "GBPUSD",
-      "expectedProviders": ["TCPProvider2", "RESTProvider1"]
-    }
-  ]
+  }
 }

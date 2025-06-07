@@ -4,13 +4,20 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.regex.Pattern;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Symbol işlemleri için utility sınıfı
- * TEK FORMAT: USDTRY (6 karakter, büyük harf, underscore yok)
+ * ✅ ENHANCED: TEK FORMAT + Performance optimizations
  */
 @Slf4j
 public final class SymbolUtils {
+
+    // ✅ PERFORMANCE: Cache for normalized symbols
+    private static final Map<String, String> NORMALIZE_CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, List<String>> VARIANTS_CACHE = new ConcurrentHashMap<>();
+    private static final int MAX_CACHE_SIZE = 1000;
 
     // TEK PATTERN - Sadece 6 karakter currency pair
     private static final Pattern CURRENCY_PAIR_PATTERN = Pattern.compile("^[A-Z]{6}$");
@@ -20,12 +27,19 @@ public final class SymbolUtils {
     }
 
     /**
-     * Symbol'ü standart 6-karakter formatına normalize et: USDTRY
+     * ✅ ENHANCED: Symbol'ü standart formatına normalize et (cached)
+     * ✅ ACTIVELY USED: Symbol normalization in MainCoordinatorService
+     * Usage: normalizeSymbol() called for every incoming rate
      */
     public static String normalizeSymbol(String symbol) {
         if (symbol == null || symbol.trim().isEmpty()) {
-            log.debug("Null veya boş symbol normalize edildi: ''");
             return "";
+        }
+
+        // ✅ PERFORMANCE: Check cache first
+        String cached = NORMALIZE_CACHE.get(symbol);
+        if (cached != null) {
+            return cached;
         }
 
         String normalized = symbol.trim().toUpperCase();
@@ -34,18 +48,14 @@ public final class SymbolUtils {
         if (normalized.contains("_")) {
             String[] parts = normalized.split("_");
             if (parts.length >= 2) {
-                // Calculation suffix varsa kaldır (USDTRY_AVG -> USDTRY)
                 String symbolPart = parts[parts.length - 1];
                 if (symbolPart.equals("AVG") || symbolPart.equals("CROSS") || symbolPart.equals("CALC")) {
-                    // Suffix ise, önceki parça symbol'dür
                     if (parts.length >= 3) {
                         normalized = parts[parts.length - 2];
                     } else {
-                        // PF1_AVG gibi durumlar için ilk parçayı al
                         normalized = parts[0];
                     }
                 } else {
-                    // Normal provider_symbol formatı
                     normalized = symbolPart;
                 }
             }
@@ -59,9 +69,9 @@ public final class SymbolUtils {
             normalized = normalized.substring("CALC_RATE:".length());
         }
 
-        // Son kontrol ve log
-        if (!normalized.isEmpty() && !isValidSymbol(normalized)) {
-            log.warn("Symbol normalize edildi ama geçersiz format: '{}' -> '{}'", symbol, normalized);
+        // ✅ PERFORMANCE: Cache result (with size limit)
+        if (NORMALIZE_CACHE.size() < MAX_CACHE_SIZE) {
+            NORMALIZE_CACHE.put(symbol, normalized);
         }
 
         return normalized;
@@ -69,6 +79,8 @@ public final class SymbolUtils {
 
     /**
      * Symbol'ün doğru 6-karakter formatında olup olmadığını kontrol et
+     * ✅ ACTIVELY USED: Validation in MainCoordinatorService
+     * Usage: isValidSymbol() called after normalization
      */
     public static boolean isValidSymbol(String symbol) {
         if (symbol == null) {
@@ -79,6 +91,8 @@ public final class SymbolUtils {
 
     /**
      * Base currency'yi al (USDTRY -> USD)
+     * ✅ ACTIVELY USED: Currency extraction for cross-rate calculations
+     * Usage: getBaseCurrency(), getQuoteCurrency() in GroovyScriptCalculationStrategy
      */
     public static String getBaseCurrency(String symbol) {
         String normalized = normalizeSymbol(symbol);
@@ -90,6 +104,8 @@ public final class SymbolUtils {
 
     /**
      * Quote currency'yi al (USDTRY -> TRY)
+     * ✅ ACTIVELY USED: Currency extraction for cross-rate calculations
+     * Usage: getBaseCurrency(), getQuoteCurrency() in GroovyScriptCalculationStrategy
      */
     public static String getQuoteCurrency(String symbol) {
         String normalized = normalizeSymbol(symbol);
@@ -100,40 +116,38 @@ public final class SymbolUtils {
     }
 
     /**
-     * Symbol variants generate et - cross rate ve cache lookup için
-     * Tek format'ta sadece temel variations
+     * ✅ ENHANCED: Symbol variants generate et (cached)
      */
     public static List<String> generateSymbolVariants(String symbol) {
-        List<String> variants = new ArrayList<>();
-
         if (symbol == null || symbol.trim().isEmpty()) {
-            return variants;
+            return List.of();
         }
 
+        // ✅ PERFORMANCE: Check cache first
+        List<String> cached = VARIANTS_CACHE.get(symbol);
+        if (cached != null) {
+            return cached;
+        }
+
+        List<String> variants = new ArrayList<>();
         String normalized = normalizeSymbol(symbol);
 
-        // 1. Normalized format (temel)
         if (isValidSymbol(normalized)) {
             variants.add(normalized);
-
-            // 2. AVG suffix
             variants.add(normalized + "_AVG");
-
-            // 3. CROSS suffix
             variants.add(normalized + "_CROSS");
-
-            // 4. CALC suffix
             variants.add(normalized + "_CALC");
         }
 
-        // 5. Original format (eğer farklıysa)
         String originalNormalized = symbol.trim().toUpperCase();
         if (!originalNormalized.equals(normalized) && !variants.contains(originalNormalized)) {
             variants.add(originalNormalized);
         }
 
-        log.debug("Generated {} variants for symbol '{}': {}",
-                variants.size(), symbol, String.join(", ", variants));
+        // ✅ PERFORMANCE: Cache result (with size limit)
+        if (VARIANTS_CACHE.size() < MAX_CACHE_SIZE) {
+            VARIANTS_CACHE.put(symbol, List.copyOf(variants));
+        }
 
         return variants;
     }
@@ -166,6 +180,8 @@ public final class SymbolUtils {
 
     /**
      * ✅ NEW: Check if symbol represents a cross rate (like EURTRY from USDTRY+EURUSD)
+     * ✅ ACTIVELY USED: Cross rate detection in strategy selection
+     * Usage: isCrossRate() in CalculationStrategyFactory
      */
     public static boolean isCrossRate(String symbol) {
         if (symbol == null) return false;
@@ -178,6 +194,8 @@ public final class SymbolUtils {
 
     /**
      * ✅ NEW: Determine calculation type from symbol or metadata
+     * ✅ ACTIVELY USED: Strategy type determination
+     * Usage: determineCalculationType() in pipeline stages
      */
     public static String determineCalculationType(String symbol, String strategy) {
         if (symbol == null) return "UNKNOWN";
@@ -227,5 +245,24 @@ public final class SymbolUtils {
      */
     public static String removeSlash(String symbol) {
         return normalizeSymbol(symbol);
+    }
+
+    /**
+     * ✅ NEW: Clear symbol caches (for testing/monitoring)
+     */
+    public static void clearCaches() {
+        NORMALIZE_CACHE.clear();
+        VARIANTS_CACHE.clear();
+        log.debug("🔄 SymbolUtils caches cleared");
+    }
+
+    /**
+     * ✅ NEW: Get cache statistics
+     */
+    public static Map<String, Integer> getCacheStats() {
+        return Map.of(
+            "normalizeCacheSize", NORMALIZE_CACHE.size(),
+            "variantsCacheSize", VARIANTS_CACHE.size()
+        );
     }
 }

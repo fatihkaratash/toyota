@@ -26,6 +26,8 @@ import java.util.List;
 
 /**
  * Yapılandırma dosyalarından aboneleri dinamik olarak yükleyen sınıf
+ * ✅ MODERNIZED: Dynamic subscriber loader with updated dependencies
+ * Uses new BeanConfig executor beans and ApplicationProperties integration
  */
 @Slf4j
 @Component
@@ -36,6 +38,9 @@ public class DynamicSubscriberLoader {
     private final WebClient.Builder webClientBuilder;
     private final TaskExecutor subscriberTaskExecutor;
 
+    /**
+     * ✅ UPDATED: Constructor with @Qualifier for new executor bean names
+     */
     public DynamicSubscriberLoader(ObjectMapper objectMapper,
                                    ResourceLoader resourceLoader,
                                    @Autowired(required = false) WebClient.Builder webClientBuilder,
@@ -44,6 +49,8 @@ public class DynamicSubscriberLoader {
         this.resourceLoader = resourceLoader;
         this.webClientBuilder = webClientBuilder;
         this.subscriberTaskExecutor = subscriberTaskExecutor;
+        
+        log.info("✅ DynamicSubscriberLoader initialized with updated dependencies");
     }
 
     /**
@@ -124,39 +131,42 @@ public class DynamicSubscriberLoader {
 
     /**
      * Abone örneği oluştur
+     * ✅ ENHANCED: Better error handling and logging
      */
     private PlatformSubscriber createSubscriberInstance(SubscriberConfigDto config, PlatformCallback callback) 
             throws ReflectiveOperationException, SubscriberInitializationException {
         
         if (config.getImplementationClass() == null || config.getImplementationClass().isEmpty()) {
-            throw new IllegalArgumentException("Uygulama sınıfı belirtilmemiş: " + config.getName());
+            throw new IllegalArgumentException("Implementation class not specified: " + config.getName());
         }
         
         // RestRateSubscriber için özel işlem
         if (config.getImplementationClass().contains("RestRateSubscriber")) {
-            log.debug("RestRateSubscriber için WebClient.Builder, ObjectMapper, TaskExecutor ile özel oluşturma: {}", config.getName());
+            log.debug("✅ Creating RestRateSubscriber with specialized dependencies: {}", config.getName());
 
             if (this.objectMapper == null) {
-                log.error("ObjectMapper is null in DynamicSubscriberLoader. Cannot create RestRateSubscriber: {}", config.getName());
+                log.error("❌ ObjectMapper is null in DynamicSubscriberLoader");
                 throw new SubscriberInitializationException("ObjectMapper is null, cannot create " + config.getName());
             }
             if (this.subscriberTaskExecutor == null) {
-                log.error("subscriberTaskExecutor is null in DynamicSubscriberLoader. Cannot create RestRateSubscriber: {}", config.getName());
+                log.error("❌ subscriberTaskExecutor is null in DynamicSubscriberLoader");
                 throw new SubscriberInitializationException("TaskExecutor is null, cannot create " + config.getName());
             }
 
             RestRateSubscriber subscriber = new RestRateSubscriber(webClientBuilder, this.objectMapper, this.subscriberTaskExecutor);
             subscriber.init(config, callback);
+            log.info("✅ RestRateSubscriber created successfully: {}", config.getName());
             return subscriber;
         }
         
-        // ✅ TcpRateSubscriber için özel işlem
+        // TcpRateSubscriber için özel işlem
         if (config.getImplementationClass().contains("TcpRateSubscriber")) {
-            log.debug("TcpRateSubscriber için standart oluşturma: {}", config.getName());
+            log.debug("✅ Creating TcpRateSubscriber: {}", config.getName());
             
             com.toyota.mainapp.subscriber.impl.TcpRateSubscriber subscriber = 
                 new com.toyota.mainapp.subscriber.impl.TcpRateSubscriber();
             subscriber.init(config, callback);
+            log.info("✅ TcpRateSubscriber created successfully: {}", config.getName());
             return subscriber;
         }
         

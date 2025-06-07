@@ -6,7 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Ham sağlayıcı verisini temsil eden DTO - SIMPLE FORMAT
+ * ✅ ACTIVELY USED: Provider data input DTO
+ * Used by: RestRateSubscriber, TcpRateSubscriber, MainCoordinatorService, RateMapper
  */
 @Data
 @Builder
@@ -14,28 +15,31 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ProviderRateDto {
     
-    private String symbol;
-    private String bid;
-    private String ask;
-    private String providerName;
-    private Object timestamp; // ✅ Object olarak - hem String hem Long kabul eder
-    
+    private String symbol;              // ✅ USED: Symbol from provider
+    private String bid;                 // ✅ USED: Bid price as string
+    private String ask;                 // ✅ USED: Ask price as string  
+    private String providerName;        // ✅ USED: Provider identification
+    private Object timestamp;           // ✅ USED: Flexible timestamp handling
+
     /**
-     * Zaman damgası (uzun tamsayı olarak) - backward compatibility
+     * ✅ ACTIVELY USED: Long timestamp setter (TCP provider)
+     * Usage: TcpRateSubscriber sets timestamp as long
      */
     public void setTimestamp(long timestamp) {
         this.timestamp = timestamp;
     }
     
     /**
-     * String timestamp setter
+     * ✅ ACTIVELY USED: String timestamp setter (REST provider)  
+     * Usage: RestRateSubscriber sets ISO timestamp strings
      */
     public void setTimestamp(String timestamp) {
         this.timestamp = timestamp;
     }
     
     /**
-     * Timestamp getter - her format için
+     * ✅ ACTIVELY USED: Generic timestamp getter
+     * Usage: RateMapper.safelyConvertTimestamp() handles Object → Long conversion
      */
     public Object getTimestamp() {
         return this.timestamp;
