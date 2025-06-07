@@ -7,7 +7,8 @@ public enum RateType {
 
     RAW("RAW_RATE"),
     CALCULATED("CALCULATED_RATE"),
-    STATUS("RATE_STATUS");
+    STATUS("RATE_STATUS"),
+    CROSS("CROSS_RATE");
     
     private final String eventType;
     

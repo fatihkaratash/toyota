@@ -2,167 +2,112 @@ package com.toyota.mainapp.calculator.impl;
 
 import com.toyota.mainapp.calculator.RuleEngineService;
 import com.toyota.mainapp.calculator.engine.CalculationStrategy;
-import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.dto.config.CalculationRuleDto;
+import com.toyota.mainapp.dto.model.BaseRateDto;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
-import com.toyota.mainapp.util.SymbolUtils;
-import com.toyota.mainapp.calculator.dependency.RateDependencyManager;
-import jakarta.annotation.PostConstruct;
+
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.stream.Collectors;
 
+/**
+ * Rule Engine Service Implementation
+ * ✅ ENHANCED: Strategy execution added
+ */
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class RuleEngineServiceImpl implements RuleEngineService {
-
-    private final ApplicationContext context;
-    private final Map<String, CalculationStrategy> strategies = new ConcurrentHashMap<>();
-    private final RateDependencyManager rateDependencyManager;
-    private List<CalculationRuleDto> activeRules = new CopyOnWriteArrayList<>();
     
-    public RuleEngineServiceImpl(ApplicationContext context, RateDependencyManager rateDependencyManager) {
-        this.context = context;
-        this.rateDependencyManager = rateDependencyManager;
-    }
-
-    @PostConstruct
-    public void init() {
-        loadStrategies();
-        log.info("RuleEngineServiceImpl initialized. Strategies loaded. Rules will be set by CalculationConfigLoader.");
-    }
+    private final CalculationStrategy calculationStrategy;
     
-    private void loadStrategies() {
-        log.info("Loading calculation strategies...");
-        
-        Map<String, CalculationStrategy> strategyBeans = context.getBeansOfType(CalculationStrategy.class);
-        strategyBeans.forEach((name, strategy) -> {
-            String strategyName = strategy.getStrategyName();
-            strategies.put(strategyName, strategy);
-            log.info("Strategy loaded: {} ({})", strategyName, strategy.getClass().getSimpleName());
-        });
-        
-        log.info("Total {} calculation strategies loaded", strategies.size());
-    }
-
-    @Override
-    public void loadRules() {
-        log.info("loadRules() called. Rules are expected to be set externally via setCalculationRules().");
-    }
-
-    @Override
-    public List<CalculationRuleDto> getRulesByInputSymbol(String symbol) {
-        return activeRules.stream()
-                .filter(rule -> rule.getDependsOnRaw() != null && rule.getDependsOnRaw().contains(symbol))
-                .collect(Collectors.toList());
-    }
-
-    @Override
-    public List<CalculationRuleDto> getRulesByInputBaseSymbol(String baseSymbol) {
-        return activeRules.stream()
-                .filter(rule -> {
-                    List<String> dependsOnRaw = rule.getDependsOnRaw();
-                    if (dependsOnRaw == null) {
-                        return false;
-                    }
-                    for (String rawSymbol : dependsOnRaw) {
-                        String derived = deriveBaseSymbol(rawSymbol); // Use the corrected deriveBaseSymbol
-                        if (derived.equals(baseSymbol)) {
-                            return true;
-                        }
-                    }
-                    return false;
-                })
-                .collect(Collectors.toList());
-    }
+    private final Map<String, CalculationRuleDto> rulesByOutputSymbol = new ConcurrentHashMap<>();
+    private final Map<String, List<CalculationRuleDto>> rulesByInputSymbol = new ConcurrentHashMap<>();
+    private volatile List<CalculationRuleDto> allRules = Collections.emptyList();
     
-   private String deriveBaseSymbol(String providerSymbol) {
-    return SymbolUtils.deriveBaseSymbol(providerSymbol);
-}
-
-    @Override
-    public BaseRateDto executeRule(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates) {
-        CalculationStrategy strategy;
-        String strategyLookupKey;
-
-        if ("GROOVY_SCRIPT".equalsIgnoreCase(rule.getStrategyType())) {
-            strategyLookupKey = "groovyScriptCalculationStrategy"; // Bean name of GroovyScriptCalculationStrategy
-        } else if ("JAVA_CLASS".equalsIgnoreCase(rule.getStrategyType())) {
-            strategyLookupKey = rule.getImplementation();
-        } else {
-            log.error("Unsupported strategy type '{}' for rule: {}", rule.getStrategyType(), rule.getOutputSymbol());
-            return null;
-        }
-
-        strategy = strategies.get(strategyLookupKey);
-        
-        if (strategy == null) {
-            log.error("Strategy not found for rule: {}, strategyType: {}, lookupKey: {}, availableStrategies: {}",
-                    rule.getOutputSymbol(), rule.getStrategyType(), strategyLookupKey, strategies.keySet());
-            return null;
-        }
-        
-        try {
-            log.debug("Executing rule {} with strategy {} (lookupKey: {})", rule.getOutputSymbol(), strategy.getClass().getSimpleName(), strategyLookupKey);
-            Optional<BaseRateDto> result = strategy.calculate(rule, inputRates);
-            return result.orElse(null);
-        } catch (Exception e) {
-            log.error("Error executing rule: {}", rule.getOutputSymbol(), e);
-            return null;
-        }
-    }
-
-    @Override
-    public List<CalculationRuleDto> getAllRules() {
-        return Collections.unmodifiableList(new ArrayList<>(activeRules)); // Return a copy
-    }
-
-    @Override
-    public void addRule(CalculationRuleDto rule) {
-        if (rule != null) {
-            // Ensure not to add duplicates if outputSymbol is a unique key
-            if (activeRules.stream().noneMatch(r -> r.getOutputSymbol().equals(rule.getOutputSymbol()))) {
-                activeRules.add(rule);
-                log.info("New rule added: {}", rule.getOutputSymbol());
-            } else {
-                log.warn("Rule with outputSymbol {} already exists. Not adding.", rule.getOutputSymbol());
-            }
-        }
-    }
-
     @Override
     public void setCalculationRules(List<CalculationRuleDto> rules) {
-        this.activeRules.clear();
-        if (rules != null) {
-            List<CalculationRuleDto> sortedRules = new ArrayList<>(rules);
-            sortedRules.sort(Comparator.comparing(CalculationRuleDto::getPriority));
-            this.activeRules.addAll(sortedRules);
-            
-            log.info("{} adet hesaplama kuralı RuleEngineService'e set edildi.", this.activeRules.size());
-            if (rateDependencyManager != null) {
-                rateDependencyManager.buildDependencyGraph(this.activeRules);
-                log.info("Hesaplama kuralları için bağımlılık grafiği oluşturuldu.");
-            } else {
-                log.warn("RateDependencyManager is null, cannot build dependency graph.");
-            }
-        } else {
-            log.warn("RuleEngineService'e null kural listesi set edilmeye çalışıldı. Aktif kurallar temizlendi.");
+        if (rules == null) {
+            rules = Collections.emptyList();
         }
-    }
-
-    @Override
-    public List<CalculationRuleDto> getCalculationRules() { 
-        return Collections.unmodifiableList(this.activeRules); 
-    }
-
-    @Override
-    public List<CalculationRuleDto> getRulesDependingOnCalculatedRate(String outputSymbol) {
-        return activeRules.stream()
-                .filter(rule -> rule.getDependsOnRaw() != null && rule.getDependsOnRaw().contains(outputSymbol))
-                .collect(Collectors.toList());
+        
+        log.info("setCalculationRules called with {} rules", rules.size());
+        for (CalculationRuleDto rule : rules) {
+            log.debug("Loading rule: {} -> {} (inputs: {})", 
+                    rule.getOutputSymbol(), rule.getStrategyType(), 
+                    String.join(",", rule.getInputSymbols()));
+        }
+        
+        synchronized (this) {
+            // Clear existing data
+            rulesByOutputSymbol.clear();
+            rulesByInputSymbol.clear();
+            
+            // Build lookup maps
+            for (CalculationRuleDto rule : rules) {
+                // By output symbol
+                rulesByOutputSymbol.put(rule.getOutputSymbol(), rule);
+                
+                // By input symbols
+                for (String inputSymbol : rule.getInputSymbols()) {
+                    rulesByInputSymbol.computeIfAbsent(inputSymbol, k -> new ArrayList<>()).add(rule);
+                }
+            }
+            
+            allRules = Collections.unmodifiableList(new ArrayList<>(rules));
+        }
+        
+        log.info("Rules engine updated: {} rules loaded, {} by output symbol, {} by input symbol", 
+                rules.size(), rulesByOutputSymbol.size(), rulesByInputSymbol.size());
     }
     
+    @Override
+    public List<CalculationRuleDto> getCalculationRules() {
+        log.debug("getCalculationRules() returning {} rules", allRules.size());
+        return allRules;
+    }
+    
+    @Override
+    public CalculationRuleDto getRuleByOutputSymbol(String outputSymbol) {
+        return rulesByOutputSymbol.get(outputSymbol);
+    }
+    
+    @Override
+    public List<CalculationRuleDto> getRulesByInputSymbol(String inputSymbol) {
+        return rulesByInputSymbol.getOrDefault(inputSymbol, Collections.emptyList());
+    }
+    
+    @Override
+    public boolean hasRules() {
+        boolean hasRules = !allRules.isEmpty();
+        log.debug("hasRules() = {}, total rules: {}", hasRules, allRules.size());
+        return hasRules;
+    }
+    
+    /**
+     * ✅ KEY METHOD: Execute rule using config-driven strategy selection
+     * Called by stages for both AVG and CROSS calculations
+     */
+    @Override
+    public Optional<BaseRateDto> executeRule(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates) {
+        if (rule == null || inputRates == null) {
+            log.warn("Invalid rule or input rates for execution");
+            return Optional.empty();
+        }
+
+        try {
+            // ✅ CONFIG-DRIVEN: Use strategy specified in rule configuration
+            log.debug("Executing rule: {} with strategy: {} (type: {})", 
+                    rule.getOutputSymbol(), rule.getImplementation(), rule.getStrategyType());
+            
+            // Delegate to strategy - the strategy implementation will handle
+            // config-driven logic based on rule.getImplementation()
+            return calculationStrategy.calculate(rule, inputRates);
+            
+        } catch (Exception e) {
+            log.error("Rule execution failed for {}: {}", rule.getOutputSymbol(), e.getMessage(), e);
+            return Optional.empty();
+        }
+    }
 }

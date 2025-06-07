@@ -1,284 +1,220 @@
 package com.toyota.mainapp.calculator.engine.impl;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.toyota.mainapp.cache.RateCacheService;
 import com.toyota.mainapp.calculator.engine.CalculationStrategy;
 import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.dto.config.CalculationRuleDto;
-import com.toyota.mainapp.dto.model.InputRateInfo;
-import com.toyota.mainapp.dto.model.RateType;
-
-import groovy.lang.Binding;
-import groovy.lang.GroovyShell;
+import com.toyota.mainapp.util.SymbolUtils;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.codehaus.groovy.control.CompilerConfiguration;
-import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
+import org.springframework.context.annotation.Primary;
+import groovy.lang.Binding;
+import groovy.lang.GroovyShell;
+import org.codehaus.groovy.control.CompilerConfiguration;
+
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Component("groovyScriptCalculationStrategy")
+@Primary // ✅ PRIMARY STRATEGY
 @Slf4j
+@RequiredArgsConstructor
 public class GroovyScriptCalculationStrategy implements CalculationStrategy {
 
     private final ResourceLoader resourceLoader;
-    private final RateCacheService rateCacheService;
-    private final ObjectMapper objectMapper; // For robust conversion of calculationInputs
 
-    public GroovyScriptCalculationStrategy(ResourceLoader resourceLoader,
-                                           RateCacheService rateCacheService,
-                                           ObjectMapper objectMapper) {
-        this.resourceLoader = resourceLoader;
-        this.rateCacheService = rateCacheService;
-        this.objectMapper = objectMapper;
-    }
+    // Script cache - performance için
+    private final Map<String, String> scriptCache = new ConcurrentHashMap<>();
 
-  @Override
-public Optional<BaseRateDto> calculate(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates) {
-    String scriptPath = rule.getImplementation();
-    log.info("GROOVY-CALC-START: Kural [{}] için '{}' betiği çalıştırılıyor", 
-        rule.getOutputSymbol(), scriptPath);
+    @Override
+    public Optional<BaseRateDto> calculate(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates) {
+        try {
+            String scriptContent = loadScript(rule.getImplementation());
 
-    try {
-        // Script kaynağını kontrol et
-        Resource scriptResource = resourceLoader.getResource("classpath:" + scriptPath);
-        if (!scriptResource.exists()) {
-            log.error("GROOVY-MISSING: '{}' betiği bulunamadı!", scriptPath);
-            return Optional.empty();
-        }
+            Binding binding = new Binding();
+            binding.setVariable("log", log);
+            binding.setVariable("outputSymbol", rule.getOutputSymbol());
 
-        // Script içeriğini oku
-        String scriptContent = new String(scriptResource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        
-        // Script bağlamını hazırla
-        CompilerConfiguration compilerConfig = new CompilerConfiguration();
-        Binding binding = new Binding();
-        binding.setVariable("cache", this.rateCacheService);
-        binding.setVariable("log", log);
-        binding.setVariable("outputSymbol", rule.getOutputSymbol());
-        
-        // Input parameters
-        if (rule.getInputParameters() != null && !rule.getInputParameters().isEmpty()) {
-            for (Map.Entry<String, String> param : rule.getInputParameters().entrySet()) {
-                binding.setVariable(param.getKey(), param.getValue());
+            // Input parameters
+            if (rule.getInputParameters() != null && !rule.getInputParameters().isEmpty()) {
+                for (Map.Entry<String, String> param : rule.getInputParameters().entrySet()) {
+                    binding.setVariable(param.getKey(), param.getValue());
+                }
             }
-        }
-        
-        // Mevcut kurları adapte et
-        Map<String, BaseRateDto> adaptedInputRates = adaptInputRatesForScript(inputRates);
-        binding.setVariable("inputRates", adaptedInputRates);
-        
-        if (adaptedInputRates.isEmpty()) {
-            log.error("GROOVY-NO-INPUTS: Script için input kurlar yok!");
-            return Optional.empty();
-        }
-        
-        // Script'i çalıştır
-        GroovyShell shell = new GroovyShell(getClass().getClassLoader(), binding, compilerConfig);
-        Object result = shell.evaluate(scriptContent);
-        
-        // Sonucu işle
-        if (result instanceof Map) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> resultMap = (Map<String, Object>) result;
-            
-            if (!resultMap.containsKey("bid") || !resultMap.containsKey("ask")) {
-                log.error("GROOVY-INVALID-RESULT: Script bid/ask sonuçları döndürmedi: {}", resultMap);
+
+            // ✅ ADAPTATION LOGIC - GERİ EKLENDİ
+            Map<String, BaseRateDto> adaptedInputs = adaptInputRatesForScript(inputRates);
+            binding.setVariable("inputRates", adaptedInputs);
+
+            log.debug("Script execution for rule: {}, adapted inputs: {}",
+                    rule.getOutputSymbol(), adaptedInputs.keySet());
+
+            // Script execution...
+            CompilerConfiguration compilerConfig = new CompilerConfiguration();
+            GroovyShell shell = new GroovyShell(getClass().getClassLoader(), binding, compilerConfig);
+            Object result = shell.evaluate(scriptContent);
+
+            // Expecting the script to return a Map<String, Object> with bid, ask,
+            // timestamp, etc.
+            if (result instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> resultMap = (Map<String, Object>) result;
+                BaseRateDto dto = mapToBaseRateDto(resultMap, rule);
+                return Optional.of(dto);
+            } else {
+                log.error("Script did not return a Map result for rule: {}", rule.getOutputSymbol());
                 return Optional.empty();
             }
-            
-            BaseRateDto dto = mapToBaseRateDto(resultMap, rule);
-            log.info("GROOVY-SUCCESS: Hesaplama başarılı: {} -> bid={}, ask={}", 
-                dto.getSymbol(), dto.getBid(), dto.getAsk());
-            return Optional.of(dto);
-        } else {
-            log.error("GROOVY-WRONG-RETURN: Script Map dönmedi, dönen tip: {}", 
-                result != null ? result.getClass().getName() : "null");
+        } catch (Exception e) {
+            log.error("Script execution error for rule {}: {}", rule.getOutputSymbol(), e.getMessage(), e);
             return Optional.empty();
         }
-    } catch (Exception e) {
-        log.error("GROOVY-ERROR: Script çalıştırılırken hata: {}", e.getMessage(), e);
-        return Optional.empty();
     }
-}
+
+    /**
+     * ✅ GERİ EKLENDİ - Input rates'i script'lerin beklediği formatlara adapt et
+     */
+    private Map<String, BaseRateDto> adaptInputRatesForScript(Map<String, BaseRateDto> inputRates) {
+        Map<String, BaseRateDto> adaptedRates = new HashMap<>();
+
+        for (Map.Entry<String, BaseRateDto> entry : inputRates.entrySet()) {
+            BaseRateDto rate = entry.getValue();
+            String symbol = rate.getSymbol();
+            String normalizedSymbol = SymbolUtils.normalizeSymbol(symbol);
+
+            if (SymbolUtils.isValidSymbol(normalizedSymbol)) {
+                // 1. Normalized format (USDTRY)
+                adaptedRates.put(normalizedSymbol, rate);
+
+                // 2. AVG suffix (USDTRY_AVG)
+                adaptedRates.put(normalizedSymbol + "_AVG", rate);
+
+                // 3. Slash format (USD/TRY)
+                String slashFormat = SymbolUtils.addSlash(normalizedSymbol);
+                adaptedRates.put(slashFormat, rate);
+
+                // 4. Slash + AVG format (USD/TRY_AVG)
+                adaptedRates.put(slashFormat + "_AVG", rate);
+
+                // 5. CROSS suffix (USDTRY_CROSS)
+                adaptedRates.put(normalizedSymbol + "_CROSS", rate);
+
+                // 6. CALC suffix (USDTRY_CALC)
+                adaptedRates.put(normalizedSymbol + "_CALC", rate);
+
+                log.debug("Adapted rate '{}' to multiple formats: {}, {}, {}, {}",
+                        symbol, normalizedSymbol, normalizedSymbol + "_AVG", slashFormat, slashFormat + "_AVG");
+            } else {
+                log.warn("Skipping invalid symbol for adaptation: '{}'", symbol);
+            }
+        }
+
+        log.info("Adapted {} input rates to {} key formats for script execution",
+                inputRates.size(), adaptedRates.size());
+
+        return adaptedRates;
+    }
+
+    private String loadScript(String scriptPath) throws IOException {
+        // Cache kontrolü
+        String cachedScript = scriptCache.get(scriptPath);
+        if (cachedScript != null) {
+            return cachedScript;
+        }
+
+        try {
+            var resource = resourceLoader.getResource("classpath:" + scriptPath);
+            if (!resource.exists()) {
+                throw new IOException("Script not found: " + scriptPath);
+            }
+
+            String scriptContent = new String(resource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+
+            // Cache'e ekle
+            scriptCache.put(scriptPath, scriptContent);
+            log.debug("Script loaded and cached: {}", scriptPath);
+
+            return scriptContent;
+        } catch (IOException e) {
+            log.error("Failed to load script: {}", scriptPath, e);
+            throw e;
+        }
+    }
+
+    private BaseRateDto mapToBaseRateDto(Map<String, Object> resultMap, CalculationRuleDto rule) {
+        BaseRateDto result = new BaseRateDto();
+
+        // Output symbol'ü normalize et
+        String normalizedOutputSymbol = SymbolUtils.normalizeSymbol(rule.getOutputSymbol());
+        result.setSymbol(normalizedOutputSymbol);
+
+        // Rate type set et
+        result.setRateType(com.toyota.mainapp.dto.model.RateType.CALCULATED);
+
+        // Calculation type'ı belirle - Symbol'den çıkar
+        String calculationType;
+        if (rule.getOutputSymbol().contains("CROSS")) {
+            calculationType = "CROSS";
+        } else if (rule.getOutputSymbol().contains("AVG")) {
+            calculationType = "AVG";
+        } else {
+            calculationType = "AVG"; // Default
+        }
+
+        // BaseRateDto'da calculationType field varsa set et
+        try {
+            // Reflection ile field varlığını kontrol et
+            java.lang.reflect.Field calcTypeField = BaseRateDto.class.getDeclaredField("calculationType");
+            calcTypeField.setAccessible(true);
+            calcTypeField.set(result, calculationType);
+            log.debug("CalculationType set: {}", calculationType);
+        } catch (NoSuchFieldException e) {
+            log.debug("BaseRateDto'da calculationType field yok, atlanıyor");
+            // Field yoksa bir şey yapma, problem değil
+        } catch (Exception e) {
+            log.warn("CalculationType set edilemedi: {}", e.getMessage());
+        }
+
+        // Bid/Ask değerleri
+        Object bidObj = resultMap.get("bid");
+        Object askObj = resultMap.get("ask");
+
+        if (bidObj instanceof Number && askObj instanceof Number) {
+            result.setBid(new BigDecimal(bidObj.toString()));
+            result.setAsk(new BigDecimal(askObj.toString()));
+        } else {
+            throw new IllegalArgumentException("Invalid bid/ask types in script result");
+        }
+
+        // Timestamp
+        Object timestampObj = resultMap.get("timestamp");
+        if (timestampObj instanceof Number) {
+            result.setTimestamp(((Number) timestampObj).longValue());
+        } else {
+            result.setTimestamp(System.currentTimeMillis());
+        }
+
+        // Provider bilgisi - calculated için
+        result.setProviderName("CALCULATED");
+
+        log.debug("Mapped script result to BaseRateDto: symbol={}, calculationType={}, bid={}, ask={}",
+                result.getSymbol(), calculationType, result.getBid(), result.getAsk());
+        return result;
+    }
+
     @Override
     public String getStrategyName() {
         return "groovyScriptCalculationStrategy";
     }
-    
-    private BaseRateDto mapToBaseRateDto(Map<String, Object> resultMap, CalculationRuleDto rule) {
-        BaseRateDto dto = BaseRateDto.builder()
-            .rateType(RateType.CALCULATED)
-            .symbol(rule.getOutputSymbol())
-            .build();
 
-        if (resultMap.containsKey("symbol") && resultMap.get("symbol") instanceof String) {
-            dto.setSymbol((String) resultMap.get("symbol"));
-        }
-        
-        dto.setBid(convertToBigDecimal(resultMap.get("bid")));
-        dto.setAsk(convertToBigDecimal(resultMap.get("ask")));
-        dto.setTimestamp(convertToLong(resultMap.get("timestamp"), System.currentTimeMillis()));
-
-        Object inputsObj = resultMap.get("calculationInputs");
-        if (inputsObj != null) {
-            try {
-                List<InputRateInfo> calculationInputs = objectMapper.convertValue(inputsObj, 
-                    new TypeReference<List<InputRateInfo>>() {});
-                dto.setCalculationInputs(calculationInputs);
-            } catch (IllegalArgumentException e) {
-                log.warn("Betikten 'calculationInputs' dönüştürülemedi, kural [{}]: {}. Girdiler: {}",
-                        rule.getOutputSymbol(), e.getMessage(), inputsObj);
-                dto.setCalculationInputs(new ArrayList<>()); // Set to empty list or handle as error
-            }
-        } else {
-            dto.setCalculationInputs(new ArrayList<>());
-        }
-        
-        if (resultMap.containsKey("calculatedByStrategy")) {
-            dto.setCalculatedByStrategy((String) resultMap.get("calculatedByStrategy"));
-        }
-        
-        return dto;
-    }
-
-    private BigDecimal convertToBigDecimal(Object value) {
-        if (value == null) return null;
-        if (value instanceof BigDecimal) return (BigDecimal) value;
-        if (value instanceof String) {
-            try {
-                return new BigDecimal((String) value);
-            } catch (NumberFormatException e) {
-                log.warn("String, BigDecimal'e dönüştürülemedi: {}", value, e);
-                return null;
-            }
-        }
-        if (value instanceof Number) return BigDecimal.valueOf(((Number) value).doubleValue());
-        // For other types, try converting to string first
-        try {
-            return new BigDecimal(value.toString());
-        } catch (NumberFormatException e) {
-            log.warn("BigDecimal'e dönüştürülemedi: {}", value, e);
-            return null;
-        }
-    }
-
-    private long convertToLong(Object value, long defaultValue) {
-        if (value == null) return defaultValue;
-        if (value instanceof Number) return ((Number) value).longValue();
-        if (value instanceof String) {
-            try {
-                return Long.parseLong((String) value);
-            } catch (NumberFormatException e) {
-                log.warn("String, long'a dönüştürülemedi: {}. Varsayılan kullanılıyor: {}", value, defaultValue, e);
-                return defaultValue;
-            }
-        }
-        try {
-            return Long.parseLong(value.toString());
-        } catch (NumberFormatException e) {
-            log.warn("Long'a dönüştürülemedi: {}. Varsayılan kullanılıyor: {}", value, defaultValue, e);
-            return defaultValue;
-        }
-    }
-
-    private Map<String, BaseRateDto> adaptInputRatesForScript(Map<String, BaseRateDto> originalInputRates) {
-        Map<String, BaseRateDto> adaptedRates = new HashMap<>();
-        
-        if (originalInputRates == null || originalInputRates.isEmpty()) {
-            log.warn("adaptInputRatesForScript: Orijinal inputRates boş veya null");
-            return adaptedRates;
-        }
-
-        adaptedRates.putAll(originalInputRates);
-
-        for (Map.Entry<String, BaseRateDto> entry : originalInputRates.entrySet()) {
-            String originalKey = entry.getKey();
-            BaseRateDto rate = entry.getValue();
-            
-            if (originalKey == null || originalKey.isEmpty() || rate == null) {
-                log.warn("adaptInputRatesForScript: Geçersiz giriş, anahtar={}, rate={}", originalKey, rate);
-                continue;
-            }
-            
-            // Handle calc_rate: prefix
-            if (originalKey.startsWith("calc_rate:")) {
-                String unprefixedKey = originalKey.substring("calc_rate:".length());
-                if (!adaptedRates.containsKey(unprefixedKey)) {
-                    adaptedRates.put(unprefixedKey, rate);
-                    log.debug("adaptInputRatesForScript: Öneksiz alternatif eklendi: {} -> {}", originalKey, unprefixedKey);
-                }
-            } else {
-                // Add prefixed version if it doesn't exist
-                String prefixedKey = "calc_rate:" + originalKey;
-                if (!adaptedRates.containsKey(prefixedKey)) {
-                    adaptedRates.put(prefixedKey, rate);
-                    log.debug("adaptInputRatesForScript: Önekli alternatif eklendi: {} -> {}", originalKey, prefixedKey);
-                }
-            }
-            
-            // Add both slashed and unslashed versions for compatibility
-            if (!originalKey.contains("/")) {
-                String slashedSymbol = com.toyota.mainapp.util.SymbolUtils.formatWithSlash(originalKey);
-                if (!originalKey.equals(slashedSymbol) && !adaptedRates.containsKey(slashedSymbol)) {
-                    adaptedRates.put(slashedSymbol, rate);
-                    log.debug("adaptInputRatesForScript: Alternatif eğik çizgili sembol eklendi: {} -> {}", originalKey, slashedSymbol);
-                }
-                
-                // Also add prefixed version with slashes
-                String prefixedSlashedSymbol = "calc_rate:" + slashedSymbol;
-                if (!adaptedRates.containsKey(prefixedSlashedSymbol)) {
-                    adaptedRates.put(prefixedSlashedSymbol, rate);
-                    log.debug("adaptInputRatesForScript: Önekli eğik çizgili alternatif eklendi: {} -> {}", originalKey, prefixedSlashedSymbol);
-                }
-            } else {
-                // Add version without slashes for scripts that expect it
-                String unslashedSymbol = com.toyota.mainapp.util.SymbolUtils.removeSlash(originalKey);
-                if (!originalKey.equals(unslashedSymbol) && !adaptedRates.containsKey(unslashedSymbol)) {
-                    adaptedRates.put(unslashedSymbol, rate);
-                    log.debug("adaptInputRatesForScript: Alternatif eğik çizgisiz sembol eklendi: {} -> {}", originalKey, unslashedSymbol);
-                }
-                
-                // Also add prefixed version without slashes
-                String prefixedUnslashedSymbol = "calc_rate:" + unslashedSymbol;
-                if (!adaptedRates.containsKey(prefixedUnslashedSymbol)) {
-                    adaptedRates.put(prefixedUnslashedSymbol, rate);
-                    log.debug("adaptInputRatesForScript: Önekli eğik çizgisiz alternatif eklendi: {} -> {}", originalKey, prefixedUnslashedSymbol);
-                }
-            }
-            
-            // Also handle _AVG suffix variants
-            if (originalKey.endsWith("_AVG")) {
-                String baseSymbol = originalKey.substring(0, originalKey.length() - 4);
-                // Add version with slashes for base symbol if needed
-                if (!baseSymbol.contains("/")) {
-                    String slashedBase = com.toyota.mainapp.util.SymbolUtils.formatWithSlash(baseSymbol);
-                    String slashedKeyWithAvg = slashedBase + "_AVG";
-                    if (!adaptedRates.containsKey(slashedKeyWithAvg)) {
-                        adaptedRates.put(slashedKeyWithAvg, rate);
-                        log.debug("adaptInputRatesForScript: _AVG için alternatif sembol eklendi: {} -> {}", originalKey, slashedKeyWithAvg);
-                    }
-                } else {
-                    String unslashedBase = com.toyota.mainapp.util.SymbolUtils.removeSlash(baseSymbol);
-                    String unslashedKeyWithAvg = unslashedBase + "_AVG";
-                    if (!adaptedRates.containsKey(unslashedKeyWithAvg)) {
-                        adaptedRates.put(unslashedKeyWithAvg, rate);
-                        log.debug("adaptInputRatesForScript: _AVG için alternatif sembol eklendi: {} -> {}", originalKey, unslashedKeyWithAvg);
-                    }
-                }
-            }
-        }
-        
-        log.debug("adaptInputRatesForScript: {} orijinal sembole karşılık toplam {} sembol oluşturuldu", 
-                originalInputRates.size(), adaptedRates.size());
-        
-        return adaptedRates;
-    }
+    // SİLİNDİ: adaptInputRatesForScript() method (200+ satır kaldırıldı)
+    // SİLİNDİ: Format conversion logic
+    // SİLİNDİ: calc_rate: prefix handling
+    // SİLİNDİ: Slash format handling
+    // SİLİNDİ: _AVG suffix handling
+    // SİLİNDİ: Complex key mapping logic
 }

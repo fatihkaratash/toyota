@@ -1,23 +1,44 @@
 package com.toyota.mainapp.calculator;
 
-import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.dto.config.CalculationRuleDto;
+import com.toyota.mainapp.dto.model.BaseRateDto;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
- * Service interface for the rule engine that manages calculation rules
+ * Rule Engine Service Interface
+ * Calculation rules yönetimi ve execution için servis arayüzü
  */
 public interface RuleEngineService {
     
-
+    /**
+     * Calculation rules'ları set et
+     */
     void setCalculationRules(List<CalculationRuleDto> rules);
+    
+    /**
+     * Tüm calculation rules'ları al
+     */
     List<CalculationRuleDto> getCalculationRules();
-    void loadRules();
-    List<CalculationRuleDto> getRulesByInputSymbol(String symbol);
-    List<CalculationRuleDto> getRulesByInputBaseSymbol(String baseSymbol);
-    BaseRateDto executeRule(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates);
-    List<CalculationRuleDto> getAllRules();
-    void addRule(CalculationRuleDto rule);
-    List<CalculationRuleDto> getRulesDependingOnCalculatedRate(String calculatedRateSymbol);
+    
+    /**
+     * Output symbol'a göre rule al
+     */
+    CalculationRuleDto getRuleByOutputSymbol(String outputSymbol);
+    
+    /**
+     * Input symbol'a göre rules al
+     */
+    List<CalculationRuleDto> getRulesByInputSymbol(String inputSymbol);
+    
+    /**
+     * Rule'lar yüklenmiş mi kontrol et
+     */
+    boolean hasRules();
+    
+    /**
+     * ✅ NEW: Rule'ı execute et - Strategy pattern delegation
+     */
+    Optional<BaseRateDto> executeRule(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates);
 }

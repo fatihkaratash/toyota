@@ -1,9 +1,14 @@
-import com.toyota.mainapp.dto.BaseRateDto
-import com.toyota.mainapp.dto.RateType
-import com.toyota.mainapp.dto.common.InputRateInfo
+import com.toyota.mainapp.dto.model.BaseRateDto  // ✅ CORRECT PATH
+import com.toyota.mainapp.dto.model.RateType      // ✅ CORRECT PATH
+import com.toyota.mainapp.dto.model.InputRateInfo // ✅ CORRECT PATH
 
 import java.math.BigDecimal
 import java.math.RoundingMode
+
+// ✅ SCRIPT PARAMETERS FROM CONFIG - Default values if not provided
+def eurUsdAvgKey = eurUsdAvgKey ?: "EURUSD_AVG"
+def usdTryAvgSourceKey = usdTryAvgSourceKey ?: "USDTRY_AVG"  
+def defaultScale = defaultScale ?: "5"
 
 // Log all input variables at the start of the script
 log.info("EUR/TRY çapraz kur hesaplaması başlatılıyor: {}", outputSymbol)
@@ -112,8 +117,8 @@ calculationInputs.add(
 
 // Calculate EUR/TRY cross rate: (EUR/USD_AVG) * (USD/TRY_AVG)
 // Convert to BigDecimal if needed - ensure proper numeric calculation
-def calculateBid = null
-def calculateAsk = null
+def calculatedBid = null  // ✅ FIX: calculatedBid instead of calculateBid
+def calculatedAsk = null  // ✅ FIX: calculatedAsk instead of calculateAsk
 
 // Ensure we're working with BigDecimal for all calculations
 if (eurUsdAvgRate.bid instanceof BigDecimal && usdTryAvgRate.bid instanceof BigDecimal) {

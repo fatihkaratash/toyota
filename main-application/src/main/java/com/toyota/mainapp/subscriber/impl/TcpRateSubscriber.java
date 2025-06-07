@@ -100,8 +100,6 @@ public class TcpRateSubscriber implements PlatformSubscriber {
         while (attempt < retries && !connected.get()) {
             try {
                 attempt++;
-                log.info("[{}] TCP bağlantısı deneniyor: {} ({}/{}) to {}:{} - Timeout: {}ms", 
-                        providerName, attempt, retries, host, port, timeout);
 
                 socket = new Socket();
                 socket.connect(new java.net.InetSocketAddress(host, port), timeout);
@@ -227,7 +225,9 @@ public class TcpRateSubscriber implements PlatformSubscriber {
                         continue;
                     }
 
+                    // ✅ OPTIMIZED: Process immediately for real-time pipeline
                     processLine(line);
+                    
                 } catch (IOException e) {
                     if (running.get()) {
                         log.error("[{}] TCP okuma hatası: {}", providerName, e.getMessage(), e);
@@ -240,12 +240,14 @@ public class TcpRateSubscriber implements PlatformSubscriber {
                     }
                 }
 
+                // ✅ OPTIMIZED: Reduced sleep time for real-time processing
                 if (!connected.get() && running.get()) {
                     try {
-                        Thread.sleep(1000);
+                        Thread.sleep(500); // Reduced from 1000ms
                     } catch (InterruptedException ie) {
                         log.warn("[{}] Yeniden bağlanma beklemesi kesintiye uğradı", providerName, ie);
                         Thread.currentThread().interrupt();
+                        break;
                     }
                 }
             }

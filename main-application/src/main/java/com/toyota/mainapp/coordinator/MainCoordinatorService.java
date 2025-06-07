@@ -1,7 +1,8 @@
 package com.toyota.mainapp.coordinator;
 
-import com.toyota.mainapp.aggregator.TwoWayWindowAggregator;
+//import com.toyota.mainapp.aggregator.TwoWayWindowAggregator;
 import com.toyota.mainapp.cache.RateCacheService;
+import com.toyota.mainapp.calculator.RealTimeBatchProcessor; // ✅ NEW IMPORT
 import com.toyota.mainapp.coordinator.callback.PlatformCallback;
 import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.dto.model.ProviderRateDto;
@@ -10,6 +11,7 @@ import com.toyota.mainapp.kafka.KafkaPublishingService;
 import com.toyota.mainapp.mapper.RateMapper;
 import com.toyota.mainapp.subscriber.api.PlatformSubscriber;
 import com.toyota.mainapp.subscriber.dynamic.DynamicSubscriberLoader;
+import com.toyota.mainapp.util.SymbolUtils;
 import com.toyota.mainapp.validation.RateValidatorService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -26,6 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Ana koordinasyon servisi - veri akışını yöneten ve işlemleri koordine eden servis
+ * ✅ PHASE 3: Cleaned up, window aggregation removed, real-time pipeline only
  */
 @Service
 @RequiredArgsConstructor
@@ -35,11 +38,13 @@ public class MainCoordinatorService implements PlatformCallback {
     private final DynamicSubscriberLoader dynamicSubscriberLoader;
     @Qualifier("subscriberTaskExecutor")
     private final TaskExecutor subscriberTaskExecutor;
+    @Qualifier("pipelineTaskExecutor")
+    private final TaskExecutor pipelineTaskExecutor;
     private final RateMapper rateMapper;
     private final RateValidatorService rateValidatorService;
     private final RateCacheService rateCacheService;
-    private final KafkaPublishingService sequentialPublisher;
-    private final TwoWayWindowAggregator aggregator;
+    private final KafkaPublishingService kafkaPublishingService;
+    private final RealTimeBatchProcessor realTimeBatchProcessor;
 
     @Value("${subscribers.config.path}")
     private String subscribersConfigPath;
@@ -111,51 +116,58 @@ public class MainCoordinatorService implements PlatformCallback {
     }
 
     /**
-     * Abonelerden gelen kur verilerini işle - BaseRateDto ile çalışacak şekilde güncellendi
+     * ✅ OPTIMIZED: Use dedicated pipeline executor for real-time processing
      */
     @Override
     public void onRateAvailable(String providerName, ProviderRateDto providerRate) {
         log.info("Sağlayıcıdan veri alındı {}: Symbol={}, Bid={}, Ask={}", 
                 providerName, providerRate.getSymbol(), providerRate.getBid(), providerRate.getAsk());
         
-        try {
-            // Sağlayıcı adını ayarla
-            if (providerRate.getProviderName() == null) {
-                providerRate.setProviderName(providerName);
+        // ✅ Process asynchronously on dedicated pipeline executor
+        pipelineTaskExecutor.execute(() -> {
+            try {
+                // Sağlayıcı adını ayarla
+                if (providerRate.getProviderName() == null) {
+                    providerRate.setProviderName(providerName);
+                }
+
+                // 1. Veriyi doğrudan BaseRateDto'ya dönüştür
+                BaseRateDto baseRate = rateMapper.toBaseRateDto(providerRate);
+                log.debug("ProviderRateDto'dan BaseRateDto oluşturuldu: {}", baseRate);
+
+                // 2. Symbol normalize kontrolü
+                String normalizedSymbol = SymbolUtils.normalizeSymbol(baseRate.getSymbol());
+                if (!SymbolUtils.isValidSymbol(normalizedSymbol)) {
+                    log.warn("Invalid symbol format, veri işlenmiyor: '{}'", baseRate.getSymbol());
+                    return;
+                }
+                baseRate.setSymbol(normalizedSymbol);
+
+                // 3. Veriyi doğrula
+                rateValidatorService.validate(baseRate);
+                baseRate.setValidatedAt(System.currentTimeMillis());
+                log.debug("Kur doğrulama başarılı: {}", normalizedSymbol);
+
+                // 4. Cache raw rate
+                rateCacheService.cacheRawRate(baseRate);
+                log.info("Kur başarıyla işlendi ve önbelleğe alındı: {}, sağlayıcı: {}", 
+                        normalizedSymbol, providerName);
+
+                // 5. Publish to individual raw rate topic
+                kafkaPublishingService.publishRawRate(baseRate);
+
+                // 6. ✅ REAL-TIME PIPELINE: Trigger batch processing
+                realTimeBatchProcessor.processNewRate(baseRate);
+                log.debug("Real-time batch processing triggered for: {}", normalizedSymbol);
+
+            } catch (AggregatedRateValidationException e) {
+                log.warn("{} sağlayıcısından gelen veri doğrulanamadı: Sembol={}, Hatalar={}", 
+                        providerName, providerRate.getSymbol(), e.getErrors());
+            } catch (Exception e) {
+                log.error("{} sağlayıcısından gelen veri işlenirken hata oluştu: Sembol={}", 
+                        providerName, providerRate.getSymbol(), e);
             }
-
-            // 1. Veriyi doğrudan BaseRateDto'ya dönüştür
-            BaseRateDto baseRate = rateMapper.toBaseRateDto(providerRate);
-            log.debug("ProviderRateDto'dan BaseRateDto oluşturuldu: {}", baseRate);
-
-            // 2. Veriyi doğrula
-            rateValidatorService.validate(baseRate);
-            baseRate.setValidatedAt(System.currentTimeMillis());
-            log.debug("Kur doğrulama başarılı: {}", baseRate.getSymbol());
-            
-            // 3. Ham kuru önbelleğe al
-            String rateCacheKey = baseRate.getProviderName() + "_" + baseRate.getSymbol();
-            log.debug("Önbellek anahtarı oluşturuldu: {}", rateCacheKey);
-            rateCacheService.cacheRawRate(rateCacheKey, baseRate);
-            
-            log.info("Kur başarıyla işlendi ve önbelleğe alındı: {}, sağlayıcı: {}", 
-                    baseRate.getSymbol(), providerName);
-
-            // 4. Kuru Kafka'ya gönder
-            sequentialPublisher.publishRate(baseRate);
-            log.debug("Kur Kafka'ya gönderildi: {}", rateCacheKey);
-
-            // 5. Toplayıcıya gönder - tek hesaplama yaklaşımı olarak
-            log.debug("Kur toplayıcıya gönderiliyor: {}", rateCacheKey);
-            aggregator.accept(baseRate);
-
-        } catch (AggregatedRateValidationException e) {
-            log.warn("{} sağlayıcısından gelen veri doğrulanamadı: Sembol={}, Hatalar={}", 
-                    providerName, providerRate.getSymbol(), e.getErrors());
-        } catch (Exception e) {
-            log.error("{} sağlayıcısından gelen veri işlenirken hata oluştu: Sembol={}", 
-                    providerName, providerRate.getSymbol(), e);
-        }
+        });
     }
 
     /**
@@ -185,7 +197,7 @@ public class MainCoordinatorService implements PlatformCallback {
     public void onRateStatus(String providerName, BaseRateDto statusRate) {
         log.info("Kur durumu güncellendi, sağlayıcı: {}, durum: {}", providerName, statusRate.getStatus());
         
-        sequentialPublisher.publishRate(statusRate);
+        kafkaPublishingService.publishRate(statusRate);
         
         if (statusRate.getStatus() == BaseRateDto.RateStatusEnum.ERROR) {
             log.warn("{} sembolü için {} sağlayıcısından hata durumu algılandı", 

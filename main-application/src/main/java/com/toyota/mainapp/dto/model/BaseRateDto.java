@@ -28,6 +28,7 @@ public class BaseRateDto {
     private Long timestamp;
     private Long receivedAt;
     private Long validatedAt;
+    private String calculationType;
 
     @lombok.Builder.Default // Keep @Builder.Default if SuperBuilder doesn't initialize it
     private List<InputRateInfo> calculationInputs = new ArrayList<>();

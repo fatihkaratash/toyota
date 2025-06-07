@@ -1,9 +1,14 @@
-import com.toyota.mainapp.dto.BaseRateDto
-import com.toyota.mainapp.dto.RateType
-import com.toyota.mainapp.dto.common.InputRateInfo
+import com.toyota.mainapp.dto.model.BaseRateDto  // ✅ CORRECT PATH
+import com.toyota.mainapp.dto.model.RateType      // ✅ CORRECT PATH  
+import com.toyota.mainapp.dto.model.InputRateInfo // ✅ CORRECT PATH
 
 import java.math.BigDecimal
 import java.math.RoundingMode
+
+// ✅ SCRIPT PARAMETERS FROM CONFIG - Default values if not provided  
+def gbpUsdAvgKey = gbpUsdAvgKey ?: "GBPUSD_AVG"
+def usdTryAvgSourceKey = usdTryAvgSourceKey ?: "USDTRY_AVG"
+def defaultScale = defaultScale ?: "5"
 
 // Log all input variables at the start of the script
 log.info("GBP/TRY çapraz kur hesaplaması başlatılıyor: {}", outputSymbol)
@@ -75,7 +80,7 @@ if (!gbpUsdAvgRate) {
     // Try both with and without slash format
     def altGbpUsdKey = gbpUsdAvgKey.contains("/") ? 
         gbpUsdAvgKey.replace("/", "") : 
-        gbpUsdAvgKey.substring(0, 3) + "/" + gbpUsdAvgRate.substring(3)
+        gbpUsdAvgKey.substring(0, 3) + "/" + gbpUsdAvgKey.substring(3)  // ✅ FIX: gbpUsdAvgKey instead of gbpUsdAvgRate
     
     log.info("GBP/USD kuru '{}' anahtarıyla bulunamadı, alternatif anahtar deneniyor: {}", 
         gbpUsdAvgKey, altGbpUsdKey)
@@ -112,8 +117,8 @@ calculationInputs.add(
 
 // Calculate GBP/TRY cross rate: (GBP/USD_AVG) * (USD/TRY_AVG)
 // Convert to BigDecimal if needed - ensure proper numeric calculation
-def calculateBid = null
-def calculateAsk = null
+def calculatedBid = null  // ✅ FIX: calculatedBid instead of calculateBid
+def calculatedAsk = null  // ✅ FIX: calculatedAsk instead of calculateAsk
 
 // Ensure we're working with BigDecimal for all calculations
 if (gbpUsdAvgRate.bid instanceof BigDecimal && usdTryAvgRate.bid instanceof BigDecimal) {

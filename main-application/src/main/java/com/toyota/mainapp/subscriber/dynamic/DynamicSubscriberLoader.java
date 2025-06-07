@@ -23,7 +23,6 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Yapılandırma dosyalarından aboneleri dinamik olarak yükleyen sınıf
@@ -37,7 +36,6 @@ public class DynamicSubscriberLoader {
     private final WebClient.Builder webClientBuilder;
     private final TaskExecutor subscriberTaskExecutor;
 
-    @Autowired
     public DynamicSubscriberLoader(ObjectMapper objectMapper,
                                    ResourceLoader resourceLoader,
                                    @Autowired(required = false) WebClient.Builder webClientBuilder,
@@ -146,9 +144,18 @@ public class DynamicSubscriberLoader {
                 log.error("subscriberTaskExecutor is null in DynamicSubscriberLoader. Cannot create RestRateSubscriber: {}", config.getName());
                 throw new SubscriberInitializationException("TaskExecutor is null, cannot create " + config.getName());
             }
-            // webClientBuilder can be null if not configured, RestRateSubscriber's init handles this.
 
             RestRateSubscriber subscriber = new RestRateSubscriber(webClientBuilder, this.objectMapper, this.subscriberTaskExecutor);
+            subscriber.init(config, callback);
+            return subscriber;
+        }
+        
+        // ✅ TcpRateSubscriber için özel işlem
+        if (config.getImplementationClass().contains("TcpRateSubscriber")) {
+            log.debug("TcpRateSubscriber için standart oluşturma: {}", config.getName());
+            
+            com.toyota.mainapp.subscriber.impl.TcpRateSubscriber subscriber = 
+                new com.toyota.mainapp.subscriber.impl.TcpRateSubscriber();
             subscriber.init(config, callback);
             return subscriber;
         }

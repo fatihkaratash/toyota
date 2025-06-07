@@ -1,68 +1,48 @@
 {
-  "symbolConfigs": [
-    {
-      "baseSymbol": "USDTRY",
-      "expectedProviders": ["RESTProvider1", "TCPProvider2"]
-    },
-    {
-      "baseSymbol": "EURUSD",
-      "expectedProviders": ["RESTProvider1", "TCPProvider2"]
-    },
-    {
-      "baseSymbol": "GBPUSD",
-      "expectedProviders": ["RESTProvider1", "TCPProvider2"]
-    }
-  ],
-  "calculationRules": [
+  "rules": [
     {
       "outputSymbol": "USDTRY_AVG",
-      "priority": 10,
-      "strategyType": "averageUsdTryStrategy",
-      "implementation": null,
-      "dependsOnRaw": ["RESTProvider1_USDTRY", "TCPProvider2_USDTRY"],
-      "dependsOnCalculated": []
+      "type": "AVG",
+      "strategyType": "averageCalculationStrategy", 
+      "inputSymbols": ["USDTRY"],
+      "inputParameters": {}
     },
     {
       "outputSymbol": "EURUSD_AVG",
-      "priority": 10,
+      "type": "AVG",
       "strategyType": "averageCalculationStrategy",
-      "implementation": null,
-      "dependsOnRaw": ["RESTProvider1_EURUSD", "TCPProvider2_EURUSD"],
-      "dependsOnCalculated": []
+      "inputSymbols": ["EURUSD"], 
+      "inputParameters": {}
     },
     {
-      "outputSymbol": "GBPUSD_AVG",
-      "priority": 10,
-      "strategyType": "averageCalculationStrategy",
-      "implementation": null,
-      "dependsOnRaw": ["RESTProvider1_GBPUSD", "TCPProvider2_GBPUSD"],
-      "dependsOnCalculated": []
-    },
-    {
-      "outputSymbol": "EUR/TRY_AVG",
-      "priority": 20,
+      "outputSymbol": "EURTRY_CROSS",
+      "type": "CROSS",
       "strategyType": "groovyScriptCalculationStrategy",
       "implementation": "scripts/eur_try_calculator.groovy",
-      "dependsOnRaw": [],
-      "dependsOnCalculated": ["EURUSD_AVG", "USDTRY_AVG"],
+      "inputSymbols": ["EURUSD_AVG", "USDTRY_AVG"],
       "inputParameters": {
         "eurUsdAvgKey": "EURUSD_AVG",
-        "usdTryAvgSourceKey": "USDTRY_AVG",
-        "defaultScale": "6"
+        "usdTryAvgSourceKey": "USDTRY_AVG"
       }
+    }
+  ],
+  "symbolProviders": {
+    "USDTRY": ["TCPProvider2", "RESTProvider1"],
+    "EURUSD": ["TCPProvider2", "RESTProvider1"],
+    "GBPUSD": ["TCPProvider2", "RESTProvider1"]
+  },
+  "symbolConfigs": [
+    {
+      "baseSymbol": "USDTRY",
+      "expectedProviders": ["TCPProvider2", "RESTProvider1"]
     },
     {
-      "outputSymbol": "GBP/TRY_AVG",
-      "priority": 20,
-      "strategyType": "groovyScriptCalculationStrategy",
-      "implementation": "scripts/gbp_try_calculator.groovy",
-      "dependsOnRaw": [],
-      "dependsOnCalculated": ["GBPUSD_AVG", "USDTRY_AVG"],
-      "inputParameters": {
-        "gbpUsdAvgKey": "GBPUSD_AVG",
-        "usdTryAvgSourceKey": "USDTRY_AVG",
-        "defaultScale": "6"
-      }
+      "baseSymbol": "EURUSD", 
+      "expectedProviders": ["TCPProvider2", "RESTProvider1"]
+    },
+    {
+      "baseSymbol": "GBPUSD",
+      "expectedProviders": ["TCPProvider2", "RESTProvider1"]
     }
   ]
 }

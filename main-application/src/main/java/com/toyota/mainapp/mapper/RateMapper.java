@@ -36,7 +36,7 @@ public interface RateMapper {
     /**
      * Convert BaseRateDto to Kafka payload format
      */
-    @Mapping(target = "eventType", expression = "java(baseRateDto.getRateType().getEventType())")
+    @Mapping(target = "eventType", expression = "java(determineEventType(baseRateDto.getRateType()))")
     @Mapping(target = "eventTime", expression = "java(currentTimeMillis())")
     @Mapping(target = "sourceReceivedAt", source = "receivedAt")
     @Mapping(target = "sourceValidatedAt", source = "validatedAt")
@@ -137,5 +137,21 @@ public interface RateMapper {
      */
     default long currentTimeMillis() {
         return System.currentTimeMillis();
+    }
+
+    /**
+     * Determine event type from rate type
+     */
+    default String determineEventType(com.toyota.mainapp.dto.model.RateType rateType) {
+        if (rateType == null) {
+            return "UNKNOWN";
+        }
+        
+        return switch (rateType) {
+            case RAW -> "RATE_RECEIVED";
+            case CALCULATED -> "RATE_CALCULATED";
+            case STATUS -> "RATE_STATUS";
+            default -> "RATE_PROCESSED";
+        };
     }
 }
