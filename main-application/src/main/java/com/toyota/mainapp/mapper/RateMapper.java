@@ -18,9 +18,6 @@ import java.time.Instant;
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE)
 public interface RateMapper {
 
-    /**
-     * Convert provider data directly to BaseRateDto with RAW type
-     */
     @Mapping(target = "rateType", constant = "RAW")
     @Mapping(target = "bid", expression = "java(stringToBigDecimal(providerRateDto.getBid()))")
     @Mapping(target = "ask", expression = "java(stringToBigDecimal(providerRateDto.getAsk()))")
@@ -33,9 +30,6 @@ public interface RateMapper {
     @Mapping(target = "statusMessage", ignore = true)
     BaseRateDto toBaseRateDto(ProviderRateDto providerRateDto);
 
-    /**
-     * Convert BaseRateDto to Kafka payload format
-     */
     @Mapping(target = "eventType", expression = "java(determineEventType(baseRateDto.getRateType()))")
     @Mapping(target = "eventTime", expression = "java(currentTimeMillis())")
     @Mapping(target = "sourceReceivedAt", source = "receivedAt")
@@ -43,9 +37,6 @@ public interface RateMapper {
     @Mapping(target = "rateTimestamp", source = "timestamp")
     RatePayloadDto toRatePayloadDto(BaseRateDto baseRateDto);
 
-    /**
-     * Create a status DTO
-     */
     @Named("createStatusDto")
     default BaseRateDto createStatusDto(String symbol, String providerName,
                                      BaseRateDto.RateStatusEnum status,
@@ -60,19 +51,13 @@ public interface RateMapper {
                 .build();
     }
 
-    /**
-     * Convert raw rate to status DTO
-     */
     @Mapping(target = "rateType", constant = "STATUS")
     @Mapping(target = "status", source = "source", qualifiedByName = "determineStatus")
-    @Mapping(target = "statusMessage", constant = "Kur başarıyla işlendi")
+    @Mapping(target = "statusMessage", constant = "Rate processed successfully")
     @Mapping(target = "calculationInputs", ignore = true)
     @Mapping(target = "calculatedByStrategy", ignore = true)
     BaseRateDto toStatusDto(BaseRateDto source);
 
-    /**
-     * Determine status based on the raw rate
-     */
     @Named("determineStatus")
     default BaseRateDto.RateStatusEnum determineStatus(BaseRateDto source) {
         if (source == null) {
@@ -86,9 +71,6 @@ public interface RateMapper {
         return BaseRateDto.RateStatusEnum.PENDING;
     }
     
-    /**
-     * Safely convert string to BigDecimal
-     */
     default BigDecimal stringToBigDecimal(String value) {
         if (value == null || value.trim().isEmpty()) {
             return null;
@@ -100,9 +82,6 @@ public interface RateMapper {
         }
     }
     
-    /**
-     * Safely convert timestamp from various formats to Long
-     */
     default Long safelyConvertTimestamp(Object timestamp) {
         if (timestamp == null) {
             return currentTimeMillis();
@@ -132,16 +111,10 @@ public interface RateMapper {
         return currentTimeMillis();
     }
     
-    /**
-     * Get current time in milliseconds
-     */
     default long currentTimeMillis() {
         return System.currentTimeMillis();
     }
 
-    /**
-     * Determine event type from rate type
-     */
     default String determineEventType(com.toyota.mainapp.dto.model.RateType rateType) {
         if (rateType == null) {
             return "UNKNOWN";

@@ -140,36 +140,19 @@ public class DynamicSubscriberLoader {
             throw new IllegalArgumentException("Implementation class not specified: " + config.getName());
         }
         
-        // Validate required dependencies for immediate pipeline
-        if (this.objectMapper == null) {
-            throw new SubscriberInitializationException("ObjectMapper is null, required for immediate pipeline");
-        }
-        if (this.subscriberTaskExecutor == null) {
-            throw new SubscriberInitializationException("TaskExecutor is null, required for immediate pipeline");
-        }
-        
-        // RestRateSubscriber için özel işlem
         if (config.getImplementationClass().contains("RestRateSubscriber")) {
-            log.debug("✅ Creating RestRateSubscriber for immediate pipeline: {}", config.getName());
-
             RestRateSubscriber subscriber = new RestRateSubscriber(webClientBuilder, this.objectMapper, this.subscriberTaskExecutor);
             subscriber.init(config, callback);
-            log.info("✅ RestRateSubscriber created for immediate pipeline: {}", config.getName());
             return subscriber;
         }
         
-        // TcpRateSubscriber için özel işlem
         if (config.getImplementationClass().contains("TcpRateSubscriber")) {
-            log.debug("✅ Creating TcpRateSubscriber for immediate pipeline: {}", config.getName());
-            
             com.toyota.mainapp.subscriber.impl.TcpRateSubscriber subscriber = 
                 new com.toyota.mainapp.subscriber.impl.TcpRateSubscriber();
             subscriber.init(config, callback);
-            log.info("✅ TcpRateSubscriber created for immediate pipeline: {}", config.getName());
             return subscriber;
         }
         
-        // Diğer tüm aboneler için standart oluşturma
         Class<?> subscriberClass = Class.forName(config.getImplementationClass());
         
         if (!PlatformSubscriber.class.isAssignableFrom(subscriberClass)) {

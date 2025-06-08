@@ -12,16 +12,11 @@ import org.springframework.stereotype.Service;
 
 import java.util.concurrent.CompletableFuture;
 
-/**
- * ✅ SIMPLIFIED: Real-time pipeline processor
- * Simple sequential stage execution with snapshot-based data flow
- */
 @Service
 @Slf4j  
 @RequiredArgsConstructor
 public class RealTimeBatchProcessor {
 
-    // ✅ SIMPLIFIED: Direct stage injection - no complex factory needed
     private final RawDataHandlingStage rawDataHandlingStage;
     private final AverageCalculationStage averageCalculationStage;
     private final CrossRateCalculationStage crossRateCalculationStage;
@@ -29,22 +24,17 @@ public class RealTimeBatchProcessor {
     
     private final ApplicationProperties applicationProperties;
 
-    /**
-     * ✅ SIMPLIFIED: Single async entry point for rate processing
-     */
     @Async("pipelineTaskExecutor")
     public CompletableFuture<Void> processNewRate(BaseRateDto rawRate) {
         long startTime = System.currentTimeMillis();
         String pipelineId = SymbolUtils.generatePipelineId(rawRate);
         
         try {
-            // ✅ SIMPLIFIED: Quick config validation
             if (!applicationProperties.isConfigurationReady()) {
                 log.warn("Pipeline [{}]: Configuration not ready, skipping", pipelineId);
                 return CompletableFuture.completedFuture(null);
             }
             
-            // ✅ SIMPLIFIED: Create execution context with automatic snapshot initialization
             ExecutionContext context = ExecutionContext.builder()
                     .triggeringRate(rawRate)
                     .startTime(startTime)
@@ -53,7 +43,6 @@ public class RealTimeBatchProcessor {
 
             log.debug("Pipeline [{}]: Started for {}", pipelineId, rawRate.getSymbol());
 
-            // ✅ SIMPLIFIED: Sequential stage execution
             runPipelineStages(context);
 
             long duration = System.currentTimeMillis() - startTime;
@@ -68,9 +57,6 @@ public class RealTimeBatchProcessor {
         return CompletableFuture.completedFuture(null);
     }
 
-    /**
-     * ✅ ENHANCED: Execute all stages with detailed snapshot tracking
-     */
     private void runPipelineStages(ExecutionContext context) {
         // Stage 1: Process raw rate (add triggering rate to snapshot)
         rawDataHandlingStage.execute(context);
@@ -82,7 +68,7 @@ public class RealTimeBatchProcessor {
         log.info("Pipeline [{}]: Stage 2 completed - {} rates in snapshot", 
                 context.getPipelineId(), context.getSnapshotRates().size());
         
-        // ✅ DEBUG: Log snapshot contents before cross-rate stage
+        //  DEBUG: Log snapshot contents before cross-rate stage
         log.debug("📋 Snapshot before CROSS stage [{}]: {}", 
                 context.getPipelineId(), 
                 context.getSnapshotRates().stream()

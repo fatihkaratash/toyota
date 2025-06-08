@@ -1,13 +1,11 @@
 package com.toyota.mainapp.config;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.toyota.mainapp.dto.config.CalculationRuleDto;
-import jakarta.annotation.PostConstruct;
-import lombok.Data;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.locks.ReentrantLock;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -15,14 +13,18 @@ import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
 import org.springframework.util.FileCopyUtils;
 
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.locks.ReentrantLock;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.toyota.mainapp.dto.config.CalculationRuleDto;
+
+import jakarta.annotation.PostConstruct;
+import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 
 /**
- * ✅ FIXED: Configuration loading with resolved circular dependency
+ Configuration loading with resolved circular dependency
  * ObjectMapper injected via setter to prevent circular reference
  */
 @Component("applicationProperties")
@@ -34,14 +36,11 @@ public class ApplicationProperties {
 
     private final ResourceLoader resourceLoader;
     private final ReentrantLock configLock = new ReentrantLock();
-
-    // ✅ CRITICAL FIX: ObjectMapper injected via setter, NOT constructor
     private ObjectMapper objectMapper;
 
     @Value("${app.calculator.config.path:classpath:calculation-config.json}")
     private String calculationConfigPath;
 
-    // ✅ NEW: Subscribers configuration
     private SubscribersConfig subscribers = new SubscribersConfig();
 
     // Configuration state
@@ -49,31 +48,24 @@ public class ApplicationProperties {
     private Map<String, List<String>> symbolProvidersMap;
     private boolean configurationReady = false;
 
-    /**
-     * ✅ FIXED: Constructor without ObjectMapper dependency
-     */
+    private long pipelineMaxInputAgeForCalculationMs = 20000; // Default to 20 seconds
+    private int subscriberTcpReconnectDelayMs = 3000; // Default to 3 seconds
+
     public ApplicationProperties(ResourceLoader resourceLoader) {
         this.resourceLoader = resourceLoader;
         log.debug("✅ ApplicationProperties created without ObjectMapper dependency");
     }
 
-    /**
-     * ✅ CRITICAL: Setter injection for ObjectMapper
-     */
     @Autowired
     public void setObjectMapper(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
         log.debug("✅ ObjectMapper injected into ApplicationProperties");
     }
 
-    /**
-     * ✅ ENHANCED: PostConstruct with dependency validation
-     */
     @PostConstruct
     public void loadCalculationConfiguration() {
         log.info("🔧 Loading calculation configuration from: {}", calculationConfigPath);
-        
-        // ✅ CRITICAL: Validate ObjectMapper is available
+
         if (objectMapper == null) {
             log.error("❌ CRITICAL: ObjectMapper not injected - using fallback");
             this.objectMapper = new ObjectMapper(); // Fallback to prevent complete failure
@@ -90,8 +82,7 @@ public class ApplicationProperties {
 
             String json = new String(FileCopyUtils.copyToByteArray(resource.getInputStream()), StandardCharsets.UTF_8);
             JsonNode configNode = objectMapper.readTree(json);
-            
-            // ✅ STANDARDIZED: Try "calculationRules" first, fallback to "rules"
+
             JsonNode rulesNode = configNode.path("calculationRules");
             if (rulesNode.isMissingNode()) {
                 rulesNode = configNode.path("rules");
@@ -105,8 +96,7 @@ public class ApplicationProperties {
                 );
                 log.info("✅ Loaded {} calculation rules", calculationRules.size());
             }
-            
-            // Load symbol providers mapping
+
             JsonNode providersNode = configNode.path("symbolProviders");
             if (!providersNode.isMissingNode()) {
                 this.symbolProvidersMap = objectMapper.convertValue(
@@ -127,9 +117,6 @@ public class ApplicationProperties {
         }
     }
 
-    /**
-     * ✅ THREAD-SAFE: Configuration ready check
-     */
     public boolean isConfigurationReady() {
         configLock.lock();
         try {
@@ -139,9 +126,6 @@ public class ApplicationProperties {
         }
     }
 
-    /**
-     * Get calculation rules (thread-safe)
-     */
     public List<CalculationRuleDto> getCalculationRules() {
         configLock.lock();
         try {
@@ -151,16 +135,10 @@ public class ApplicationProperties {
         }
     }
 
-    /**
-     * ✅ NEW: Getter for subscribers config path
-     */
     public String getSubscribersConfigPath() {
         return subscribers.getConfigPath();
     }
 
-    /**
-     * ✅ NEW: Subscribers configuration inner class
-     */
     @Getter
     @Setter
     public static class SubscribersConfig {
@@ -172,37 +150,15 @@ public class ApplicationProperties {
         
         @Data
         public static class ErrorHandling {
-            /**
-             * Continue pipeline execution when individual stages fail
-             */
+           
             private boolean continueOnStageFailure = true;
-            
-            /**
-             * Maximum stage errors before stopping pipeline
-             */
             private int maxStageErrors = 3;
-            
-            /**
-             * Publish partial snapshots even with stage errors
-             */
             private boolean publishPartialSnapshots = true;
-            
-            /**
-             * Log stage errors as warnings instead of errors
-             */
             private boolean treatStageErrorsAsWarnings = false;
         }
         
         private ErrorHandling errorHandling = new ErrorHandling();
-        
-        /**
-         * Pipeline execution timeout in milliseconds
-         */
         private long executionTimeoutMs = 5000L;
-        
-        /**
-         * Maximum snapshot size before splitting
-         */
         private int maxSnapshotSize = 100;
     }
     

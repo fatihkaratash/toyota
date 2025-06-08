@@ -23,12 +23,10 @@ import org.springframework.stereotype.Service;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-
-// Import ApplicationProperties if it exists in your project
 import com.toyota.mainapp.config.ApplicationProperties;
 
 /**
- * ✅ MODERNIZED: Real-time pipeline coordinator with ApplicationProperties integration
+Real-time pipeline coordinator with ApplicationProperties integration
  * Clean separation: data acquisition → validation → real-time batch processing
  */
 @Service
@@ -116,106 +114,67 @@ public class MainCoordinatorService implements PlatformCallback {
     }
 
     /**
-     * ✅ ENHANCED: Immediate real-time pipeline with comprehensive snapshot collection
+     Immediate real-time pipeline with comprehensive snapshot collection
      */
     @Override
     public void onRateAvailable(String providerName, ProviderRateDto providerRate) {
-        log.info("📊 Raw data received from {}: Symbol={}, Bid={}, Ask={}", 
-                providerName, providerRate.getSymbol(), providerRate.getBid(), providerRate.getAsk());
-        
-        // ✅ IMMEDIATE PROCESSING: Use dedicated pipeline executor for instant response
         pipelineTaskExecutor.execute(() -> {
             try {
-                // Set provider name if missing
                 if (providerRate.getProviderName() == null) {
                     providerRate.setProviderName(providerName);
                 }
 
-                // 1. Convert to BaseRateDto
                 BaseRateDto baseRate = rateMapper.toBaseRateDto(providerRate);
-                log.debug("✅ ProviderRateDto converted to BaseRateDto: {}", baseRate);
 
-                // 2. Symbol normalization and validation
                 String normalizedSymbol = SymbolUtils.normalizeSymbol(baseRate.getSymbol());
                 if (!SymbolUtils.isValidSymbol(normalizedSymbol)) {
-                    log.warn("❌ Invalid symbol format, skipping immediate pipeline: '{}'", baseRate.getSymbol());
                     return;
                 }
                 baseRate.setSymbol(normalizedSymbol);
 
-                // 3. Rate validation
                 rateValidatorService.validate(baseRate);
                 baseRate.setValidatedAt(System.currentTimeMillis());
-                log.debug("✅ Rate validation successful: {}", normalizedSymbol);
 
-                // 4. Cache raw rate
                 rateCacheService.cacheRawRate(baseRate);
-                log.info("✅ Rate cached successfully: {}, provider: {}", 
-                        normalizedSymbol, providerName);
-
-                // 5. Publish to individual raw rate topic
                 kafkaPublishingService.publishRawRate(baseRate);
-
-                // 6. ✅ TRIGGER IMMEDIATE PIPELINE: Each rate triggers complete snapshot processing
                 realTimeBatchProcessor.processNewRate(baseRate);
-                log.debug("🚀 Immediate pipeline triggered for snapshot generation: {}", normalizedSymbol);
 
             } catch (AggregatedRateValidationException e) {
-                log.warn("⚠️ Rate validation failed from {}: Symbol={}, Errors={}", 
-                        providerName, providerRate.getSymbol(), e.getErrors());
+                log.warn("Rate validation failed from {}: {}", providerName, e.getErrors());
             } catch (Exception e) {
-                log.error("❌ Error in immediate pipeline from {}: Symbol={}", 
-                        providerName, providerRate.getSymbol(), e);
+                log.error("Error in pipeline from {}: {}", providerName, e.getMessage());
             }
         });
     }
 
-    /**
-     * Kur güncellemelerini işle
-     */
     @Override
     public void onRateUpdate(String providerName, ProviderRateDto rateUpdate) {
         onRateAvailable(providerName, rateUpdate);
     }
 
-    /**
-     * Sağlayıcı bağlantı durumu değişikliklerini işle
-     */
     @Override
     public void onProviderConnectionStatus(String providerName, boolean isConnected, String statusMessage) {
         if (isConnected) {
-            log.info("Sağlayıcı bağlandı {}: {}", providerName, statusMessage);
+            log.info("Provider connected {}", providerName);
         } else {
-            log.warn("Sağlayıcı bağlantısı kesildi {}: {}", providerName, statusMessage);
+            log.warn("Provider disconnected {}", providerName);
         }
     }
 
-    /**
-     * Kur durumu güncellemelerini işle
-     */
     @Override
     public void onRateStatus(String providerName, BaseRateDto statusRate) {
-        log.info("Kur durumu güncellendi, sağlayıcı: {}, durum: {}", providerName, statusRate.getStatus());
-        
         kafkaPublishingService.publishRate(statusRate);
         
         if (statusRate.getStatus() == BaseRateDto.RateStatusEnum.ERROR) {
-            log.warn("{} sembolü için {} sağlayıcısından hata durumu algılandı", 
-                    statusRate.getSymbol(), statusRate.getProviderName());
+            log.warn("Error status from provider {}: {}", providerName, statusRate.getSymbol());
         }
     }
-    
-    /**
-     * Sağlayıcı hatalarını işle
-     */
+
     @Override
     public void onProviderError(String providerName, String errorMessage, Throwable throwable) {
-        log.error("Sağlayıcıdan hata {}: {}", providerName, errorMessage, throwable);
+        log.error("Provider error {}: {}", providerName, errorMessage);
     }
 
-    /**
-     * Bir aboneyi durdur
-     */
     public void stopSubscriber(String providerName) {
         log.info("Abone durduruluyor: {}", providerName);
         
@@ -234,9 +193,6 @@ public class MainCoordinatorService implements PlatformCallback {
         }
     }
 
-    /**
-     * Servis sonlandırılırken tüm aboneleri durdur
-     */
     @PreDestroy
     public void shutdownCoordinator() {
         log.info("Koordinatör ve tüm aboneler kapatılıyor");

@@ -9,9 +9,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * ✅ ENHANCED: Raw data handling stage with comprehensive snapshot collection
  * Stage 1: Process triggering raw rate and add to snapshot
- * ✅ ACTIVELY USED: First stage in immediate pipeline processing
+ First stage in immediate pipeline processing
  */
 @Component
 @RequiredArgsConstructor
@@ -38,7 +37,7 @@ public class RawDataHandlingStage implements CalculationStage {
             log.debug("✅ Stage 1 [{}]: Processing raw rate: {}", 
                     context.getPipelineId(), triggeringRate.getSymbol());
 
-            // ✅ CLEAN: Simple cache operation
+            // Simple cache operation
             rateCacheService.cacheRawRate(triggeringRate);
             log.debug("Raw rate cached: {}", triggeringRate.getSymbol());
 
@@ -46,13 +45,11 @@ public class RawDataHandlingStage implements CalculationStage {
             kafkaPublishingService.publishRawRate(triggeringRate);
             log.debug("Raw rate published to individual topic: {}", triggeringRate.getSymbol());
 
-            // ✅ CRITICAL: Add triggering rate to snapshot for immediate publishing
+            // Add triggering rate to snapshot for immediate publishing
             context.addRateToSnapshot(triggeringRate);
             log.debug("✅ Triggering rate added to snapshot [{}]: {}", 
                     context.getPipelineId(), triggeringRate.getSymbol());
 
-            // Legacy support
-            context.addRawRate(triggeringRate.getSymbol(), triggeringRate);
             context.addStageResult("Raw data processed: " + triggeringRate.getSymbol());
 
             context.recordStageEnd(stageName);

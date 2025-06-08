@@ -7,12 +7,11 @@ import com.toyota.mainapp.dto.config.SubscriberConfigDto;
  * Interface for platform subscribers
  */
 public interface PlatformSubscriber {
-
-    void connect() throws Exception;
-    boolean isConnected();
+    void init(SubscriberConfigDto config, PlatformCallback callback);
+    void connect();
     void disconnect();
     void startMainLoop();
     void stopMainLoop();
+    boolean isConnected();
     String getProviderName();
-    void init(SubscriberConfigDto config, PlatformCallback callback);
 }

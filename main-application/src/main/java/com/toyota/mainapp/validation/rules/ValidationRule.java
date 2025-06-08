@@ -11,4 +11,5 @@ import java.util.List;
 public interface ValidationRule {
     
     List<ValidationError> validate(BaseRateDto rate);
+    
 }

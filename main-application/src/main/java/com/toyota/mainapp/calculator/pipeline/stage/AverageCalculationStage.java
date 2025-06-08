@@ -1,26 +1,26 @@
 package com.toyota.mainapp.calculator.pipeline.stage;
 
-import com.toyota.mainapp.calculator.pipeline.ExecutionContext;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import org.springframework.stereotype.Component;
+
 import com.toyota.mainapp.cache.RateCacheService;
+import com.toyota.mainapp.calculator.engine.CalculationStrategy;
+import com.toyota.mainapp.calculator.engine.CalculationStrategyFactory;
+import com.toyota.mainapp.calculator.pipeline.ExecutionContext;
 import com.toyota.mainapp.config.ApplicationProperties;
 import com.toyota.mainapp.dto.config.CalculationRuleDto;
 import com.toyota.mainapp.dto.config.CalculationRuleType;
 import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.kafka.KafkaPublishingService;
 import com.toyota.mainapp.util.CalculationInputUtils;
-import com.toyota.mainapp.calculator.engine.CalculationStrategy;
-import com.toyota.mainapp.calculator.engine.CalculationStrategyFactory;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
-/**
- * ✅ SIMPLIFIED: Average calculation stage implementation
+/** Average calculation stage implementation
  * Stage 2: Calculate AVG rates from multiple RAW providers with focused responsibility
  */
 @Component
@@ -32,7 +32,7 @@ public class AverageCalculationStage implements CalculationStage {
     private final KafkaPublishingService kafkaPublishingService;
     private final ApplicationProperties applicationProperties;
     private final CalculationStrategyFactory calculationStrategyFactory;
-    private final CalculationInputUtils calculationInputUtils; // Bu satırı ekle
+    private final CalculationInputUtils calculationInputUtils; 
 
     @Override
     public void execute(ExecutionContext context) {
@@ -47,7 +47,6 @@ public class AverageCalculationStage implements CalculationStage {
             log.debug("✅ Stage 2 [{}]: Processing AVG rules for triggering rate: {}", 
                     pipelineId, triggeringRate.getSymbol());
 
-            // ✅ Get all AVG type rules that might be affected by this triggering rate
             List<CalculationRuleDto> avgRules = findAffectedAverageRules(triggeringRate);
             
             if (avgRules.isEmpty()) {
@@ -64,15 +63,15 @@ public class AverageCalculationStage implements CalculationStage {
                     log.debug("Processing AVG rule: {} (sources: {})", 
                             rule.getOutputSymbol(), rule.getRawSources());
 
-                    // ✅ Collect required RAW inputs from cache using multiple providers
+                    // Collect required RAW inputs from cache using multiple providers
                     Map<String, BaseRateDto> rawInputs = collectRawInputsForRule(rule);
 
-                    // ✅ CRITICAL: Add ALL retrieved input rates to snapshot
+                    // Add ALL retrieved input rates to snapshot
                     context.addAllRatesToSnapshot(rawInputs.values());
                     log.debug("Added {} raw inputs to snapshot for rule: {}", 
                             rawInputs.size(), rule.getOutputSymbol());
 
-                    // ✅ Check if we have enough inputs for meaningful average
+                    //  Check if we have enough inputs for meaningful average
                     if (rawInputs.isEmpty()) {
                         context.addStageError(stageName, 
                                 "No raw inputs found for " + rule.getOutputSymbol());
@@ -80,7 +79,7 @@ public class AverageCalculationStage implements CalculationStage {
                         continue;
                     }
 
-                    // ✅ Get strategy from factory
+                    //  Get strategy from factory
                     CalculationStrategy strategy = calculationStrategyFactory.getStrategyForRule(rule);
                     if (strategy == null) {
                         context.addStageError(stageName, 
@@ -89,22 +88,20 @@ public class AverageCalculationStage implements CalculationStage {
                         continue;
                     }
 
-                    // ✅ Calculate AVG using strategy
+                    //  Calculate AVG using strategy
                     Optional<BaseRateDto> calculatedAvg = strategy.calculate(rule, rawInputs);
                     
                     if (calculatedAvg.isPresent()) {
                         BaseRateDto avgRate = calculatedAvg.get();
-                        
-                        // ✅ CRITICAL: Ensure symbol matches rule exactly
+
                         avgRate.setSymbol(rule.getOutputSymbol());
                         
-                        // ✅ Cache and publish calculated result
+                        //  Cache and publish calculated result
                         rateCacheService.cacheCalculatedRate(avgRate);
                         kafkaPublishingService.publishCalculatedRate(avgRate);
                         
-                        // ✅ CRITICAL: Add calculated result to snapshot
+                        //Add calculated result to snapshot
                         context.addRateToSnapshot(avgRate);
-                        context.addCalculatedRate(avgRate); // Legacy support
                         
                         processedCount++;
                         log.info("✅ AVG calculated [{}]: {} (symbol: {}) from {} inputs - ADDED TO SNAPSHOT", 
@@ -139,9 +136,6 @@ public class AverageCalculationStage implements CalculationStage {
         }
     }
 
-    /**
-     * ✅ Find AVG rules that might be affected by the triggering rate
-     */
     private List<CalculationRuleDto> findAffectedAverageRules(BaseRateDto triggeringRate) {
         List<CalculationRuleDto> allRules = applicationProperties.getCalculationRules();
         if (allRules == null) {
@@ -154,15 +148,11 @@ public class AverageCalculationStage implements CalculationStage {
                 .toList();
     }
 
-    /**
-     * ✅ Check if rule is affected by the triggering rate
-     */
     private boolean isRuleAffectedByRate(CalculationRuleDto rule, BaseRateDto triggeringRate) {
         if (rule.getRawSources() == null) {
             return false;
         }
-        
-        // Check if triggering rate's symbol is in the rule's raw sources
+
         String triggeringSymbol = triggeringRate.getSymbol();
         return rule.getRawSources().stream()
                 .anyMatch(source -> source.contains(triggeringSymbol) || 
@@ -170,7 +160,7 @@ public class AverageCalculationStage implements CalculationStage {
     }
 
 private Map<String, BaseRateDto> collectRawInputsForRule(CalculationRuleDto rule) {
-    // Önceki implementasyonu kaldırıp CalculationInputUtils'i kullan
+
     return calculationInputUtils.collectRawInputs(rule);
 }
     @Override

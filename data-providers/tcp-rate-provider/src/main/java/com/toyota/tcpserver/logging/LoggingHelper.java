@@ -74,41 +74,26 @@ public class LoggingHelper {
         logger.debug(formattedMessage);
     }
     
-    /**
-     * Kur bilgisiyle birlikte formatlanmış DEBUG log mesajı oluşturur.
-     */
     public void debug(String operationType, String platform, String pairName, String rateInfo, String message) {
         String formattedMessage = formatMessage(operationType, platform, pairName, rateInfo, message);
         logger.debug(formattedMessage);
     }
     
-    /**
-     * Formatlanmış WARN log mesajı oluşturur.
-     */
     public void warn(String operationType, String platform, String pairName, String message) {
         String formattedMessage = formatMessage(operationType, platform, pairName, null, message);
         logger.warn(formattedMessage);
     }
     
-    /**
-     * ALERT seviyesi için özel WARN log mesajı oluşturur (Log4j2'de doğrudan ALERT seviyesi olmadığından).
-     */
     public void alert(String platform, String pairName, String message) {
         String formattedMessage = formatMessage(OPERATION_ALERT, platform, pairName, null, message);
         logger.warn(formattedMessage);
     }
     
-    /**
-     * Formatlanmış ERROR log mesajı oluşturur.
-     */
     public void error(String platform, String pairName, String message, Throwable throwable) {
         String formattedMessage = formatMessage(OPERATION_ERROR, platform, pairName, null, message);
         logger.error(formattedMessage, throwable);
     }
     
-    /**
-     * Throwable olmadan formatlanmış ERROR log mesajı oluşturur.
-     */
     public void error(String platform, String pairName, String message) {
         String formattedMessage = formatMessage(OPERATION_ERROR, platform, pairName, null, message);
         logger.error(formattedMessage);

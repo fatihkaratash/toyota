@@ -1,13 +1,5 @@
 package com.toyota.mainapp.config;
 
-import com.fasterxml.jackson.annotation.JsonAutoDetect;
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.fasterxml.jackson.annotation.PropertyAccessor;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
-import com.toyota.mainapp.dto.model.BaseRateDto;
-import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,13 +9,20 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
+import com.toyota.mainapp.dto.model.BaseRateDto;
+
+import lombok.extern.slf4j.Slf4j;
+
 /**
- * ✅ MODERNIZED: Type-safe Redis configuration with specialized templates
- * Optimized for BaseRateDto serialization and pipeline performance
+serialization and pipeline performance
  */
 @Configuration
 @Slf4j
@@ -42,9 +41,6 @@ public class RedisConfig {
     @Value("${spring.redis.database:0}")
     private int redisDatabase;
 
-    /**
-     * ✅ CONNECTION FACTORY: Environment-aware configuration
-     */
     @Bean
     public RedisConnectionFactory redisConnectionFactory() {
         // Check environment variables first, then fallback to properties
@@ -76,9 +72,6 @@ public class RedisConfig {
         return new LettuceConnectionFactory(redisConfig);
     }
 
-    /**
-     * ✅ REDIS OBJECT MAPPER: Specialized for Redis serialization
-     */
     @Bean("redisObjectMapper")
     public ObjectMapper redisObjectMapper() {
         ObjectMapper mapper = new ObjectMapper();
@@ -91,10 +84,7 @@ public class RedisConfig {
         log.info("✅ Redis ObjectMapper configured with default typing");
         return mapper;
     }
-    
-    /**
-     * ✅ GENERIC REDIS TEMPLATE: For general usage with type information
-     */
+
     @Bean
     @Primary
     public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
@@ -118,9 +108,6 @@ public class RedisConfig {
         return template;
     }
 
-    /**
-     * ✅ RAW RATE TEMPLATE: Type-safe template for raw rates
-     */
     @Bean("rawRateRedisTemplate")
     public RedisTemplate<String, BaseRateDto> rawRateRedisTemplate(RedisConnectionFactory connectionFactory) {
         RedisTemplate<String, BaseRateDto> template = new RedisTemplate<>();
@@ -142,9 +129,6 @@ public class RedisConfig {
         return template;
     }
 
-    /**
-     * ✅ CALCULATED RATE TEMPLATE: Type-safe template for calculated rates
-     */
     @Bean("calculatedRateRedisTemplate")
     public RedisTemplate<String, BaseRateDto> calculatedRateRedisTemplate(RedisConnectionFactory connectionFactory) {
         RedisTemplate<String, BaseRateDto> template = new RedisTemplate<>();
@@ -166,12 +150,9 @@ public class RedisConfig {
         return template;
     }
 
-    /**
-     * ✅ UNIFIED RATE TEMPLATE: Backward compatibility for existing code
-     */
     @Bean("rateRedisTemplate")
     public RedisTemplate<String, BaseRateDto> rateRedisTemplate(RedisConnectionFactory connectionFactory) {
-        // Use the same configuration as rawRateRedisTemplate for consistency
+
         return rawRateRedisTemplate(connectionFactory);
     }
 }

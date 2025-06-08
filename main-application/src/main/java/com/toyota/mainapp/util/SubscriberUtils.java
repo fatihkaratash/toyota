@@ -74,41 +74,22 @@ public class SubscriberUtils {
 
     @SuppressWarnings("unchecked")
     public static <T> T getConfigValue(Map<String, Object> config, String key, T defaultValue) {
-        if (config == null || !config.containsKey(key) || config.get(key) == null) {
+        if (config == null || !config.containsKey(key)) {
             return defaultValue;
         }
+        
         Object value = config.get(key);
-        if (defaultValue == null) {
+        if (value == null) {
+            return defaultValue;
+        }
+        
+        try {
             return (T) value;
+        } catch (ClassCastException e) {
+            log.warn("Config value type mismatch for key {}: expected {}, got {}", 
+                    key, defaultValue.getClass().getSimpleName(), value.getClass().getSimpleName());
+            return defaultValue;
         }
-
-        if (value.getClass().isAssignableFrom(defaultValue.getClass())) {
-            return (T) value;
-        }
-        // Handle type conversion for numbers if defaultValue is a number type but value is a different number type
-        if (defaultValue instanceof Number && value instanceof Number) {
-            Number numValue = (Number) value;
-            if (defaultValue instanceof Integer) return (T) Integer.valueOf(numValue.intValue());
-            if (defaultValue instanceof Long) return (T) Long.valueOf(numValue.longValue());
-            if (defaultValue instanceof Double) return (T) Double.valueOf(numValue.doubleValue());
-            if (defaultValue instanceof Float) return (T) Float.valueOf(numValue.floatValue());
-        }
-        // Handle conversion from String to Number if config stores numbers as strings
-        if (defaultValue instanceof Number && value instanceof String) {
-            try {
-                String strValue = (String) value;
-                if (defaultValue instanceof Integer) return (T) Integer.valueOf(strValue);
-                if (defaultValue instanceof Long) return (T) Long.valueOf(strValue);
-                if (defaultValue instanceof Double) return (T) Double.valueOf(strValue);
-                if (defaultValue instanceof Float) return (T) Float.valueOf(strValue);
-            } catch (NumberFormatException e) {
-                log.warn("Could not parse string '{}' to number for key '{}'. Using default value '{}'.", value, key, defaultValue);
-                return defaultValue;
-            }
-        }
-        log.warn("Config value for key '{}' is of type {} but expected type {}. Using default value '{}'.",
-                key, value.getClass().getName(), defaultValue.getClass().getName(), defaultValue);
-        return defaultValue;
     }
 
     public static void sendRateStatus(PlatformCallback callback, String providerName, String symbol, 

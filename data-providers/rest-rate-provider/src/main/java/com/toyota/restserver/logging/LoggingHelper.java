@@ -70,7 +70,8 @@ public class LoggingHelper {
     public void error(String operationType, String platform, String message, Throwable t) {
         logger.error(formatMessage(operationType, platform, null, null, message), t);
     }
-     public void error(String operationType, String platform, String message) {
+    
+    public void error(String operationType, String platform, String message) {
         logger.error(formatMessage(operationType, platform, null, null, message));
     }
 }

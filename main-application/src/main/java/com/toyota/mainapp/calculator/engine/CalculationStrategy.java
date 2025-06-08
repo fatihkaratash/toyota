@@ -7,13 +7,12 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * ✅ STRATEGY PATTERN: Core interface for all calculation strategies
  * Config-driven calculation execution with standardized input/output
  */
 public interface CalculationStrategy {
     
     /**
-     * ✅ EXECUTE CALCULATION: Core strategy method
+     * EXECUTE CALCULATION: Core strategy method
      * @param rule Configuration rule defining the calculation
      * @param inputRates Map of symbol -> BaseRateDto (raw or calculated rates)
      * @return Optional calculated rate (empty if calculation fails)
@@ -21,13 +20,13 @@ public interface CalculationStrategy {
     Optional<BaseRateDto> calculate(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates);
     
     /**
-     * ✅ STRATEGY IDENTIFICATION: Must match @Component bean name
+     * Must match @Component bean name
      * @return Strategy name for factory discovery
      */
     String getStrategyName();
     
     /**
-     * ✅ STRATEGY TYPE: Category for rule filtering  
+     * : Category for rule filtering  
      * @return Strategy type (AVG, CROSS, etc.) - must match CalculationRuleType enum codes
      */
     default String getStrategyType() {
@@ -35,20 +34,18 @@ public interface CalculationStrategy {
     }
     
     /**
-     * ✅ VALIDATION: Check if strategy can handle the rule
+      Check if strategy can handle the rule
      * @param rule Configuration rule to validate
      * @return true if strategy can process this rule
      */
     default boolean canHandle(CalculationRuleDto rule) {
         if (rule == null) return false;
-        
-        // Check if strategy type matches rule type
+
         String ruleType = rule.getType();
         if (ruleType != null && ruleType.equals(getStrategyType())) {
             return true;
         }
-        
-        // Check if strategy name matches rule strategyType
+
         String ruleStrategyType = rule.getStrategyType();
         return ruleStrategyType != null && ruleStrategyType.equals(getStrategyName());
     }

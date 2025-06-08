@@ -18,19 +18,12 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.concurrent.ThreadPoolExecutor;
 
-/**
- * ✅ FIXED: Bean configuration without circular dependency
- * Removed @DependsOn to allow proper Spring initialization order
- */
 @Configuration
 @EnableAsync
 @EnableScheduling
 @Slf4j
 public class BeanConfig {
 
-    /**
-     * ✅ PRIMARY: JSON processing ObjectMapper
-     */
     @Bean
     @Primary
     public ObjectMapper objectMapper() {
@@ -40,9 +33,6 @@ public class BeanConfig {
         return mapper;
     }
 
-    /**
-     * ✅ TASK SCHEDULER: For scheduled operations
-     */
     @Bean
     public TaskScheduler taskScheduler() {
         ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
@@ -53,9 +43,6 @@ public class BeanConfig {
         return scheduler;
     }
 
-    /**
-     * ✅ PIPELINE EXECUTOR: RealTimeBatchProcessor dedicated executor
-     */
     @Bean(name = "pipelineTaskExecutor")
     public TaskExecutor pipelineTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
@@ -68,10 +55,6 @@ public class BeanConfig {
         log.info("✅ pipelineTaskExecutor configured: core=3, max=8, queue=15");
         return executor;
     }
-
-    /**
-     * ✅ SUBSCRIBER EXECUTOR: TCP/REST provider I/O operations
-     */
     @Bean(name = "subscriberTaskExecutor")
     public TaskExecutor subscriberTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
@@ -85,27 +68,18 @@ public class BeanConfig {
         return executor;
     }
 
-    /**
-     * ✅ WEB CLIENT: HTTP requests builder
-     */
     @Bean
     public WebClient.Builder webClientBuilder() {
         log.info("✅ WebClient.Builder bean configured");
         return WebClient.builder();
     }
 
-    /**
-     * ✅ RETRY REGISTRY: Resilience4j retry mechanism
-     */
     @Bean
     public RetryRegistry retryRegistry() {
         log.info("✅ RetryRegistry bean configured");
         return RetryRegistry.ofDefaults();
     }
 
-    /**
-     * ✅ CIRCUIT BREAKER: Resilience4j circuit breaker mechanism
-     */
     @Bean
     public CircuitBreakerRegistry circuitBreakerRegistry() {
         log.info("✅ CircuitBreakerRegistry bean configured");

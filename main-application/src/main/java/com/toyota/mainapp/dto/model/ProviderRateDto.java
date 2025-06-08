@@ -15,32 +15,21 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ProviderRateDto {
     
-    private String symbol;              // ✅ USED: Symbol from provider
-    private String bid;                 // ✅ USED: Bid price as string
-    private String ask;                 // ✅ USED: Ask price as string  
-    private String providerName;        // ✅ USED: Provider identification
-    private Object timestamp;           // ✅ USED: Flexible timestamp handling
+    private String symbol;          
+    private String bid;                
+    private String ask;              
+    private String providerName;        
+    private Object timestamp;          
 
-    /**
-     * ✅ ACTIVELY USED: Long timestamp setter (TCP provider)
-     * Usage: TcpRateSubscriber sets timestamp as long
-     */
+
     public void setTimestamp(long timestamp) {
         this.timestamp = timestamp;
     }
-    
-    /**
-     * ✅ ACTIVELY USED: String timestamp setter (REST provider)  
-     * Usage: RestRateSubscriber sets ISO timestamp strings
-     */
+
     public void setTimestamp(String timestamp) {
         this.timestamp = timestamp;
     }
     
-    /**
-     * ✅ ACTIVELY USED: Generic timestamp getter
-     * Usage: RateMapper.safelyConvertTimestamp() handles Object → Long conversion
-     */
     public Object getTimestamp() {
         return this.timestamp;
     }

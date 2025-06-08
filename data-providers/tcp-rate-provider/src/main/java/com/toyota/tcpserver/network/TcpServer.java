@@ -113,8 +113,6 @@ public class TcpServer {
     
     private void cleanupClientHandlers() {
         clientHandlers.removeIf(handler -> !handler.isRunning());
-        log.trace(LoggingHelper.OPERATION_INFO, LoggingHelper.PLATFORM_TCP, null, null, 
-                "Aktif istemci işleyicileri: " + clientHandlers.size());
     }
 
     public void stop() {

@@ -1,7 +1,6 @@
 package com.toyota.mainapp.validation;
 
 import com.toyota.mainapp.dto.model.BaseRateDto;
-import com.toyota.mainapp.dto.ValidationError;
 import com.toyota.mainapp.exception.AggregatedRateValidationException;
 import com.toyota.mainapp.validation.rules.ValidationRule;
 import lombok.RequiredArgsConstructor;
@@ -11,7 +10,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
+
 
 /**
  * Service for validating rate data using validation rules
@@ -68,36 +67,6 @@ public class RateValidatorService {
             throw new AggregatedRateValidationException(allPreliminaryErrors);
         }
         
-        // Apply all complex validation rules
-        List<ValidationError> complexErrors = new ArrayList<>();
-        for (ValidationRule rule : validationRules) {
-            try {
-                List<ValidationError> ruleErrors = rule.validate(rate);
-                if (ruleErrors != null && !ruleErrors.isEmpty()) {
-                    complexErrors.addAll(ruleErrors);
-                }
-            } catch (Exception e) {
-                log.error("Error executing validation rule {}: {}", 
-                        rule.getClass().getSimpleName(), e.getMessage(), e);
-                complexErrors.add(new ValidationError(
-                    "rule-execution",
-                    rule.getClass().getSimpleName(),
-                    "Validation rule execution error: " + e.getMessage()
-                ));
-            }
-        }
-        
-        // If there are complex errors, throw an exception
-        if (!complexErrors.isEmpty()) {
-            List<String> errorMessages = complexErrors.stream()
-                .map(e -> e.getField() + ": " + e.getMessage())
-                .collect(Collectors.toList());
-                
-            log.warn("Validation failed for {}: {}", 
-                    rate.getSymbol(), String.join(", ", errorMessages));
-                    
-            throw new AggregatedRateValidationException(errorMessages);
-        }
     }
     
     private List<String> validateBasicFields(BaseRateDto rate) {

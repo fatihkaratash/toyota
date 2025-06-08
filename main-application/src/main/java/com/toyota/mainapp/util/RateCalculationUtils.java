@@ -11,94 +11,57 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * ✅ COMPLETE: Rate calculation utilities for AVG and statistical operations
- */
-@Slf4j
 public class RateCalculationUtils {
 
-    private static final int DEFAULT_SCALE = 5;
-    private static final RoundingMode DEFAULT_ROUNDING = RoundingMode.HALF_UP;
-
-    /**
-     * ✅ Calculate average from multiple rate inputs with validation
-     */
-    public static BaseRateDto calculateAverage(CalculationRuleDto rule, Map<String, BaseRateDto> rates) {
-        if (rates == null || rates.isEmpty()) {
-            log.warn("No rates provided for average calculation: {}", rule.getOutputSymbol());
+    public static BaseRateDto calculateAverage(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates) {
+        if (inputRates == null || inputRates.isEmpty()) {
             return null;
         }
 
         BigDecimal totalBid = BigDecimal.ZERO;
         BigDecimal totalAsk = BigDecimal.ZERO;
-        int validRateCount = 0;
+        BigDecimal totalWeight = BigDecimal.ZERO;
+        
+        List<InputRateInfo> calculationInputs = new ArrayList<>();
         long latestTimestamp = 0;
-        List<InputRateInfo> inputs = new ArrayList<>();
 
-        for (BaseRateDto rate : rates.values()) {
+        for (Map.Entry<String, BaseRateDto> entry : inputRates.entrySet()) {
+            BaseRateDto rate = entry.getValue();
             if (rate.getBid() == null || rate.getAsk() == null) {
                 continue;
             }
+
+            BigDecimal weight = BigDecimal.valueOf(rule.getWeightForSymbol(entry.getKey()));
             
-            // ✅ ADD: Validate bid/ask are reasonable values
-            if (rate.getBid().compareTo(BigDecimal.ZERO) <= 0 || 
-                rate.getAsk().compareTo(BigDecimal.ZERO) <= 0) {
-                continue;
-            }
+            totalBid = totalBid.add(rate.getBid().multiply(weight));
+            totalAsk = totalAsk.add(rate.getAsk().multiply(weight));
+            totalWeight = totalWeight.add(weight);
             
-            totalBid = totalBid.add(rate.getBid());
-            totalAsk = totalAsk.add(rate.getAsk());
-            validRateCount++;
+            calculationInputs.add(InputRateInfo.fromBaseRateDto(rate));
             
-            // Track latest timestamp for the result
             if (rate.getTimestamp() != null && rate.getTimestamp() > latestTimestamp) {
                 latestTimestamp = rate.getTimestamp();
             }
-            
-            // Add to inputs list for tracking calculation sources
-            inputs.add(createInputInfo(rate));
         }
 
-        if (validRateCount == 0) {
-            log.warn("No valid rates found for average calculation: {}", rule.getOutputSymbol());
+        if (totalWeight.compareTo(BigDecimal.ZERO) == 0) {
             return null;
         }
 
-        // Calculate averages with proper precision
-        BigDecimal avgBid = totalBid.divide(BigDecimal.valueOf(validRateCount), DEFAULT_SCALE, DEFAULT_ROUNDING);
-        BigDecimal avgAsk = totalAsk.divide(BigDecimal.valueOf(validRateCount), DEFAULT_SCALE, DEFAULT_ROUNDING);
+        BigDecimal avgBid = totalBid.divide(totalWeight, 5, RoundingMode.HALF_UP);
+        BigDecimal avgAsk = totalAsk.divide(totalWeight, 5, RoundingMode.HALF_UP);
 
-        // Use current time if no valid timestamp found
-        if (latestTimestamp == 0) {
-            latestTimestamp = System.currentTimeMillis();
-        }
+        BaseRateDto result = new BaseRateDto();
+        result.setSymbol(rule.getOutputSymbol());
+        result.setRateType(RateType.CALCULATED);
+        result.setBid(avgBid);
+        result.setAsk(avgAsk);
+        result.setTimestamp(latestTimestamp > 0 ? latestTimestamp : System.currentTimeMillis());
+        result.setProviderName("CALCULATED");
+        result.setCalculationInputs(calculationInputs);
 
-        log.info("✅ Average calculated for {}: bid={}, ask={} from {} rates", 
-                rule.getOutputSymbol(), avgBid, avgAsk, validRateCount);
-
-        return BaseRateDto.builder()
-                .symbol(rule.getOutputSymbol())
-                .bid(avgBid)
-                .ask(avgAsk)
-                .timestamp(latestTimestamp)
-                .rateType(RateType.CALCULATED)
-                .providerName("AvgCalculator")
-                .calculationInputs(inputs)
-                .build();
+        return result;
     }
-
-    /**
-     * ✅ Create input info for calculation tracking
-     */
-    public static InputRateInfo createInputInfo(BaseRateDto rate) {
-        return InputRateInfo.fromBaseRateDto(rate);
-    }
-
-    /**
-     * ✅ Validate if rate values are reasonable
-     */
     public static boolean isValidRate(BaseRateDto rate) {
         if (rate == null || rate.getBid() == null || rate.getAsk() == null) {
             return false;
@@ -107,15 +70,5 @@ public class RateCalculationUtils {
         return rate.getBid().compareTo(BigDecimal.ZERO) > 0 && 
                rate.getAsk().compareTo(BigDecimal.ZERO) > 0 &&
                rate.getAsk().compareTo(rate.getBid()) >= 0; // Ask >= Bid
-    }
-
-    /**
-     * ✅ Calculate weighted average (if needed in future)
-     */
-    public static BaseRateDto calculateWeightedAverage(CalculationRuleDto rule, 
-                                                      Map<String, BaseRateDto> rates,
-                                                      Map<String, BigDecimal> weights) {
-        // Implementation for weighted averages if needed
-        return calculateAverage(rule, rates); // Fallback to simple average for now
     }
 }

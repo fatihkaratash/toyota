@@ -21,16 +21,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * ✅ MODERNIZED: Kafka configuration using ApplicationProperties
  * Config-driven topics and optimized for real-time pipeline
  */
 @Configuration
 @RequiredArgsConstructor
 @Slf4j
 public class KafkaConfig {
-
-    // ✅ OPTIONAL: Make ApplicationProperties optional to prevent circular dependency
-    private final ApplicationProperties applicationProperties;
 
     @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrapServers;
@@ -55,11 +51,8 @@ public class KafkaConfig {
 
     @PostConstruct
     public void logConfiguration() {
-        log.info("✅ Kafka Configuration:");
+        log.info("Kafka Configuration:");
         log.info("Bootstrap Servers: {}", bootstrapServers);
-        log.info("Acks: {}", acks);
-        log.info("Topic Partitions: {}", partitions);
-        log.info("Topic Replication Factor: {}", replicationFactor);
         log.info("Raw Rates Topic: {}", rawRatesTopic);
         log.info("Calculated Rates Topic: {}", calculatedRatesTopic);
         log.info("Simple Rates Topic: {}", simpleRatesTopic);
@@ -69,13 +62,9 @@ public class KafkaConfig {
     public KafkaAdmin kafkaAdmin() {
         Map<String, Object> configs = new HashMap<>();
         configs.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        log.info("✅ KafkaAdmin configured");
         return new KafkaAdmin(configs);
     }
 
-    /**
-     * ✅ REAL-TIME OPTIMIZED: JSON producer factory for individual topics
-     */
     @Bean
     public ProducerFactory<String, Object> jsonProducerFactory() {
         Map<String, Object> configProps = new HashMap<>();
@@ -85,16 +74,12 @@ public class KafkaConfig {
         configProps.put(ProducerConfig.ACKS_CONFIG, acks);
         configProps.put(ProducerConfig.RETRIES_CONFIG, 3);
         configProps.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
-        configProps.put(ProducerConfig.LINGER_MS_CONFIG, 0); // Real-time için
+        configProps.put(ProducerConfig.LINGER_MS_CONFIG, 0);
         configProps.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, "lz4");
         
-        log.info("✅ JSON ProducerFactory configured for real-time processing");
         return new DefaultKafkaProducerFactory<>(configProps);
     }
 
-    /**
-     * ✅ STRING OPTIMIZED: String producer factory for batch topics
-     */
     @Bean
     public ProducerFactory<String, String> stringProducerFactory() {
         Map<String, Object> configProps = new HashMap<>();
@@ -104,64 +89,41 @@ public class KafkaConfig {
         configProps.put(ProducerConfig.ACKS_CONFIG, acks);
         configProps.put(ProducerConfig.RETRIES_CONFIG, 3);
         configProps.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
-        configProps.put(ProducerConfig.LINGER_MS_CONFIG, 0); // Real-time için
+        configProps.put(ProducerConfig.LINGER_MS_CONFIG, 0);
         configProps.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, "lz4");
         
-        log.info("✅ String ProducerFactory configured for batch processing");
         return new DefaultKafkaProducerFactory<>(configProps);
     }
 
-    /**
-     * ✅ JSON KAFKA TEMPLATE: For individual JSON topics
-     */
     @Bean
     @Qualifier("jsonKafkaTemplate")
     public KafkaTemplate<String, Object> jsonKafkaTemplate() {
-        KafkaTemplate<String, Object> template = new KafkaTemplate<>(jsonProducerFactory());
-        log.info("✅ JSON KafkaTemplate configured");
-        return template;
+        return new KafkaTemplate<>(jsonProducerFactory());
     }
 
-    /**
-     * ✅ STRING KAFKA TEMPLATE: For batch string topics
-     */
     @Bean
     @Qualifier("stringKafkaTemplate")
     public KafkaTemplate<String, String> stringKafkaTemplate() {
-        KafkaTemplate<String, String> template = new KafkaTemplate<>(stringProducerFactory());
-        log.info("✅ String KafkaTemplate configured");
-        return template;
+        return new KafkaTemplate<>(stringProducerFactory());
     }
 
-    /**
-     * ✅ PRIMARY TEMPLATE: Default JSON template
-     */
     @Bean
     public KafkaTemplate<String, Object> kafkaTemplate() {
         return jsonKafkaTemplate();
     }
 
-    /**
-     * ✅ TOPIC CREATION: Auto-create topics
-     */
     @Bean
     public NewTopic rawRatesTopicBean() {
-        NewTopic topic = new NewTopic(rawRatesTopic, partitions, replicationFactor);
-        log.info("✅ Raw rates topic configured: {}", rawRatesTopic);
-        return topic;
+        return new NewTopic(rawRatesTopic, partitions, replicationFactor);
     }
 
     @Bean
     public NewTopic calculatedRatesTopicBean() {
-        NewTopic topic = new NewTopic(calculatedRatesTopic, partitions, replicationFactor);
-        log.info("✅ Calculated rates topic configured: {}", calculatedRatesTopic);
-        return topic;
+        return new NewTopic(calculatedRatesTopic, partitions, replicationFactor);
     }
 
     @Bean
     public NewTopic simpleRatesTopicBean() {
-        NewTopic topic = new NewTopic(simpleRatesTopic, partitions, replicationFactor);
-        log.info("✅ Simple rates topic configured: {}", simpleRatesTopic);
-        return topic;
+        return new NewTopic(simpleRatesTopic, partitions, replicationFactor);
     }
 }

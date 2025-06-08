@@ -1,51 +1,34 @@
 package com.toyota.mainapp.util;
 
-import lombok.extern.slf4j.Slf4j;
+import com.toyota.mainapp.dto.model.BaseRateDto;
+import com.toyota.mainapp.dto.model.RateType;
+
+import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import com.toyota.mainapp.dto.model.BaseRateDto;
 
-/**
- * Symbol işlemleri için utility sınıfı
- * ✅ ENHANCED: TEK FORMAT + Performance optimizations
- */
-@Slf4j
-public final class SymbolUtils {
+public class SymbolUtils {
 
-    // ✅ PERFORMANCE: Cache for normalized symbols
     private static final Map<String, String> NORMALIZE_CACHE = new ConcurrentHashMap<>();
     private static final Map<String, List<String>> VARIANTS_CACHE = new ConcurrentHashMap<>();
     private static final int MAX_CACHE_SIZE = 1000;
-
-    // TEK PATTERN - Sadece 6 karakter currency pair
     private static final Pattern CURRENCY_PAIR_PATTERN = Pattern.compile("^[A-Z]{6}$");
 
     private SymbolUtils() {
-        // Utility class - instantiation engellendi
     }
 
-    /**
-     * ✅ ENHANCED: Symbol'ü standart formatına normalize et (cached)
-     * ✅ ACTIVELY USED: Symbol normalization in MainCoordinatorService
-     * Usage: normalizeSymbol() called for every incoming rate
-     */
     public static String normalizeSymbol(String symbol) {
-        if (symbol == null || symbol.trim().isEmpty()) {
-            return "";
-        }
-
-        // ✅ PERFORMANCE: Check cache first
+        if (symbol == null) return null;
         String cached = NORMALIZE_CACHE.get(symbol);
         if (cached != null) {
             return cached;
         }
 
-        String normalized = symbol.trim().toUpperCase();
+        String normalized = symbol.trim().toUpperCase().replace("/", "");
 
-        // Provider prefix'ini kaldır (PF1_USDTRY -> USDTRY)
         if (normalized.contains("_")) {
             String[] parts = normalized.split("_");
             if (parts.length >= 2) {
@@ -62,15 +45,10 @@ public final class SymbolUtils {
             }
         }
 
-        // Slash'ı kaldır (USD/TRY -> USDTRY)
-        normalized = normalized.replace("/", "");
-
-        // calc_rate: prefix'ini kaldır
         if (normalized.startsWith("CALC_RATE:")) {
             normalized = normalized.substring("CALC_RATE:".length());
         }
 
-        // ✅ PERFORMANCE: Cache result (with size limit)
         if (NORMALIZE_CACHE.size() < MAX_CACHE_SIZE) {
             NORMALIZE_CACHE.put(symbol, normalized);
         }
@@ -78,126 +56,38 @@ public final class SymbolUtils {
         return normalized;
     }
 
-    /**
-     * Symbol'ün doğru 6-karakter formatında olup olmadığını kontrol et
-     * ✅ ACTIVELY USED: Validation in MainCoordinatorService
-     * Usage: isValidSymbol() called after normalization
-     */
     public static boolean isValidSymbol(String symbol) {
-        if (symbol == null) {
-            return false;
-        }
-        return CURRENCY_PAIR_PATTERN.matcher(symbol).matches();
-    }
-
-    /**
-     * Base currency'yi al (USDTRY -> USD)
-     * ✅ ACTIVELY USED: Currency extraction for cross-rate calculations
-     * Usage: getBaseCurrency(), getQuoteCurrency() in GroovyScriptCalculationStrategy
-     */
-    public static String getBaseCurrency(String symbol) {
-        String normalized = normalizeSymbol(symbol);
-        if (isValidSymbol(normalized)) {
-            return normalized.substring(0, 3);
-        }
-        return "";
-    }
-
-    /**
-     * Quote currency'yi al (USDTRY -> TRY)
-     * ✅ ACTIVELY USED: Currency extraction for cross-rate calculations
-     * Usage: getBaseCurrency(), getQuoteCurrency() in GroovyScriptCalculationStrategy
-     */
-    public static String getQuoteCurrency(String symbol) {
-        String normalized = normalizeSymbol(symbol);
-        if (isValidSymbol(normalized)) {
-            return normalized.substring(3, 6);
-        }
-        return "";
-    }
-
-    /**
-     * ✅ ENHANCED: Symbol variants generate et (cached)
-     */
-    public static List<String> generateSymbolVariants(String symbol) {
         if (symbol == null || symbol.trim().isEmpty()) {
-            return List.of();
-        }
-
-        // ✅ PERFORMANCE: Check cache first
-        List<String> cached = VARIANTS_CACHE.get(symbol);
-        if (cached != null) {
-            return cached;
-        }
-
-        List<String> variants = new ArrayList<>();
-        String normalized = normalizeSymbol(symbol);
-
-        if (isValidSymbol(normalized)) {
-            variants.add(normalized);
-            variants.add(normalized + "_AVG");
-            variants.add(normalized + "_CROSS");
-            variants.add(normalized + "_CALC");
-        }
-
-        String originalNormalized = symbol.trim().toUpperCase();
-        if (!originalNormalized.equals(normalized) && !variants.contains(originalNormalized)) {
-            variants.add(originalNormalized);
-        }
-
-        // ✅ PERFORMANCE: Cache result (with size limit)
-        if (VARIANTS_CACHE.size() < MAX_CACHE_SIZE) {
-            VARIANTS_CACHE.put(symbol, List.copyOf(variants));
-        }
-
-        return variants;
-    }
-
-    // GERİ EKLENEN METHODLAR - Backward compatibility için
-
-    /*
-     * @Deprecated
-     * public static String deriveBaseSymbol(String symbol) {
-     * return normalizeSymbol(symbol);
-     * }
-     */
-
-    /**
-     * İki symbol'ün eşdeğer olup olmadığını kontrol et
-     */
-    public static boolean symbolsEquivalent(String symbol1, String symbol2) {
-        if (symbol1 == null && symbol2 == null) {
-            return true;
-        }
-        if (symbol1 == null || symbol2 == null) {
             return false;
         }
-
-        String normalized1 = normalizeSymbol(symbol1);
-        String normalized2 = normalizeSymbol(symbol2);
-
-        return normalized1.equals(normalized2);
-    }
-
-    /**
-     * ✅ NEW: Check if symbol represents a cross rate (like EURTRY from USDTRY+EURUSD)
-     * ✅ ACTIVELY USED: Cross rate detection in strategy selection
-     * Usage: isCrossRate() in CalculationStrategyFactory
-     */
-    public static boolean isCrossRate(String symbol) {
-        if (symbol == null) return false;
-        
         String normalized = normalizeSymbol(symbol);
-        
-        // Check for TRY-based cross rates (EURTRY, GBPTRY, etc.)
-        return normalized.endsWith("TRY") && !normalized.equals("USDTRY");
+        return normalized.length() >= 6 && normalized.matches("^[A-Z]+$");
     }
 
-    /**
-     * ✅ NEW: Determine calculation type from symbol or metadata
-     * ✅ ACTIVELY USED: Strategy type determination
-     * Usage: determineCalculationType() in pipeline stages
-     */
+    public static String addSlash(String symbol) {
+        if (symbol == null || symbol.length() < 6) return symbol;
+        return symbol.substring(0, 3) + "/" + symbol.substring(3);
+    }
+
+    public static boolean symbolsEquivalent(String symbol1, String symbol2) {
+        if (symbol1 == null || symbol2 == null) return false;
+        return normalizeSymbol(symbol1).equals(normalizeSymbol(symbol2));
+    }
+
+    public static String generatePipelineId(BaseRateDto rate) {
+        if (rate == null) return UUID.randomUUID().toString();
+        return rate.getSymbol() + "_" + System.currentTimeMillis();
+    }
+
+    public static String generateSnapshotKey(BaseRateDto rate) {
+        if (rate == null) return "";
+        
+        String symbol = rate.getSymbol();
+        if (rate.getRateType() == RateType.RAW && rate.getProviderName() != null) {
+            return rate.getProviderName() + "_" + symbol;
+        }
+        return symbol;
+    }
     public static String determineCalculationType(String symbol, String strategy) {
         if (symbol == null) return "UNKNOWN";
         
@@ -217,89 +107,9 @@ public final class SymbolUtils {
         return "AVG"; // Default for calculated rates
     }
 
-    /**
-     * 
-     * @Deprecated
-     *             public static String formatWithSlash(String symbol) {
-     *             String normalized = normalizeSymbol(symbol);
-     *             if (isValidSymbol(normalized)) {
-     *             return normalized.substring(0, 3) + "/" +
-     *             normalized.substring(3);
-     *             }
-     *             return symbol;
-     *             }
-     */
-
-    /**
-     * Symbol'e slash ekle (USDTRY -> USD/TRY)
-     */
-    public static String addSlash(String symbol) {
-        String normalized = normalizeSymbol(symbol);
-        if (isValidSymbol(normalized)) {
-            return normalized.substring(0, 3) + "/" + normalized.substring(3);
-        }
-        return symbol;
-    }
-
-    /**
-     * Symbol'den slash kaldır (USD/TRY -> USDTRY)
-     */
-    public static String removeSlash(String symbol) {
-        return normalizeSymbol(symbol);
-    }
-
-    /**
-     * ✅ NEW: Clear symbol caches (for testing/monitoring)
-     */
-    public static void clearCaches() {
-        NORMALIZE_CACHE.clear();
-        VARIANTS_CACHE.clear();
-        log.debug("🔄 SymbolUtils caches cleared");
-    }
-
-    /**
-     * ✅ NEW: Get cache statistics
-     */
-    public static Map<String, Integer> getCacheStats() {
-        return Map.of(
-            "normalizeCacheSize", NORMALIZE_CACHE.size(),
-            "variantsCacheSize", VARIANTS_CACHE.size()
-        );
-    }
-
-    /**
-     * ✅ NEW: Generate snapshot key for ExecutionContext rate collection
-     * ✅ ACTIVELY USED: Snapshot key generation in ExecutionContext
-     * Usage: generateSnapshotKey() for consistent rate identification in snapshots
-     */
-    public static String generateSnapshotKey(BaseRateDto rate) {
-        if (rate == null) return "";
+    private static boolean isCrossRate(String symbol) {
         
-        String symbol = normalizeSymbol(rate.getSymbol());
-        
-        // For RAW rates: Include provider name
-        if (rate.getRateType() != null && "RAW".equals(rate.getRateType().toString())) {
-            String provider = rate.getProviderName() != null ? rate.getProviderName() : "UNKNOWN";
-            return String.format("RAW_%s_%s", provider, symbol);
-        }
-        
-        // For calculated rates: Use symbol only
-        return String.format("CALC_%s", symbol);
+        return !CURRENCY_PAIR_PATTERN.matcher(symbol).matches();
     }
 
-    /**
-     * ✅ NEW: Generate unique pipeline ID for message grouping
-     * ✅ ACTIVELY USED: Pipeline ID generation in RealTimeBatchProcessor
-     * Usage: generatePipelineId() for Kafka message key grouping
-     */
-    public static String generatePipelineId(BaseRateDto triggeringRate) {
-        if (triggeringRate == null) return "PIPE_UNKNOWN_" + System.currentTimeMillis();
-        
-        String provider = triggeringRate.getProviderName() != null ? 
-                          triggeringRate.getProviderName() : "UNKNOWN";
-        String symbol = normalizeSymbol(triggeringRate.getSymbol());
-        
-        return String.format("PIPE_%s_%s_%d", 
-                provider, symbol, System.currentTimeMillis());
-    }
 }

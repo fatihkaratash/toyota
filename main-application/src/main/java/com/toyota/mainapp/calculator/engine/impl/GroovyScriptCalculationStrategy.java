@@ -25,14 +25,12 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
 
     private final ResourceLoader resourceLoader;
 
-    // ✅ ENHANCED: Script cache with better performance
     private final Map<String, String> scriptCache = new ConcurrentHashMap<>();
     private static final int MAX_SCRIPT_CACHE_SIZE = 50;
 
     @Override
     public Optional<BaseRateDto> calculate(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates) {
         try {
-            // ✅ FIXED: Get script path from rule implementation field
             String scriptPath = rule.getImplementation();
             if (scriptPath == null || scriptPath.trim().isEmpty()) {
                 log.error("No script implementation specified for rule: {}", rule.getOutputSymbol());
@@ -40,11 +38,8 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
             }
 
             String scriptContent = loadScript(scriptPath);
-
-            // ✅ ENHANCED: Create optimized binding with rule context
             Binding binding = createScriptBinding(rule, inputRates);
 
-            // ✅ PERFORMANCE: Reuse compiler configuration
             CompilerConfiguration compilerConfig = new CompilerConfiguration();
             compilerConfig.setScriptBaseClass("groovy.lang.Script");
             
@@ -71,17 +66,13 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
         }
     }
 
-    /**
-     * ✅ FIXED: Enhanced script binding with proper parameter handling
-     */
     private Binding createScriptBinding(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates) {
         Binding binding = new Binding();
         
         // Core script variables
         binding.setVariable("log", log);
         binding.setVariable("outputSymbol", rule.getOutputSymbol());
-        
-        // ✅ FIXED: Handle Map<String, Object> parameters correctly
+
         if (rule.getInputParameters() != null && !rule.getInputParameters().isEmpty()) {
             for (Map.Entry<String, Object> param : rule.getInputParameters().entrySet()) {
                 String value = param.getValue() != null ? param.getValue().toString() : "";
@@ -90,7 +81,6 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
             }
         }
 
-        // ✅ OPTIMIZED: Adapt input rates for script consumption
         Map<String, BaseRateDto> adaptedInputs = adaptInputRatesForScript(inputRates, rule);
         binding.setVariable("inputRates", adaptedInputs);
         
@@ -101,9 +91,6 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
         return binding;
     }
 
-    /**
-     * ✅ ENHANCED: Comprehensive input adaptation for cross-rate scripts
-     */
     private Map<String, BaseRateDto> adaptInputRatesForScript(Map<String, BaseRateDto> inputRates, CalculationRuleDto rule) {
         Map<String, BaseRateDto> adaptedRates = new HashMap<>();
 
@@ -119,18 +106,14 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
                     originalKey, symbol, normalizedSymbol);
 
             if (SymbolUtils.isValidSymbol(normalizedSymbol)) {
-                // ✅ COMPREHENSIVE: Add all possible key formats that scripts might expect
-                
-                // Basic formats
+              
                 adaptedRates.put(normalizedSymbol, rate);                    // "USDTRY"
                 adaptedRates.put(normalizedSymbol + "_AVG", rate);           // "USDTRY_AVG"
                 adaptedRates.put(SymbolUtils.addSlash(normalizedSymbol), rate); // "USD/TRY"
                 adaptedRates.put(SymbolUtils.addSlash(normalizedSymbol) + "_AVG", rate); // "USD/TRY_AVG"
                 
-                // ✅ CRITICAL: Add the original input key (this is what cross-rate scripts expect)
                 adaptedRates.put(originalKey, rate);                         // "USDTRY_AVG" from config
                 
-                // ✅ CONFIG-SPECIFIC: Match inputParameters from rule configuration
                 if (rule.getInputParameters() != null) {
                     for (Map.Entry<String, Object> param : rule.getInputParameters().entrySet()) {
                         String paramKey = param.getKey();
@@ -144,8 +127,7 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
                         }
                     }
                 }
-                
-                // ✅ RULE-SPECIFIC: Add keys that match requiredCalculatedRates from config
+
                 if (rule.getRequiredCalculatedRates() != null) {
                     for (String requiredRate : rule.getRequiredCalculatedRates()) {
                         if (SymbolUtils.symbolsEquivalent(requiredRate, normalizedSymbol) ||
@@ -164,15 +146,14 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
 
         log.info("✅ Input adaptation complete: {} rates adapted to {} key variants for script: {}", 
                 inputRates.size(), adaptedRates.size(), rule.getOutputSymbol());
-        
-        // ✅ DEBUG: Log all adapted keys for troubleshooting
+
         log.debug("Adapted keys for script {}: {}", rule.getOutputSymbol(), adaptedRates.keySet());
 
         return adaptedRates;
     }
 
     private String loadScript(String scriptPath) throws IOException {
-        // ✅ PERFORMANCE: Check cache first
+
         String cachedScript = scriptCache.get(scriptPath);
         if (cachedScript != null) {
             return cachedScript;
@@ -186,7 +167,6 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
 
             String scriptContent = new String(resource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
-            // ✅ PERFORMANCE: Cache with size limit
             if (scriptCache.size() < MAX_SCRIPT_CACHE_SIZE) {
                 scriptCache.put(scriptPath, scriptContent);
                 log.debug("Script cached: {}", scriptPath);
@@ -202,15 +182,12 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
     private BaseRateDto mapToBaseRateDto(Map<String, Object> resultMap, CalculationRuleDto rule) {
         BaseRateDto result = new BaseRateDto();
 
-        // ✅ ARCHITECTURE: Maintain symbol normalization
         String normalizedOutputSymbol = SymbolUtils.normalizeSymbol(rule.getOutputSymbol());
         result.setSymbol(normalizedOutputSymbol);
         result.setRateType(com.toyota.mainapp.dto.model.RateType.CALCULATED);
 
-        // ✅ ENHANCED: Better calculation type determination
         String calculationType = rule.getStrategyType(); // Use rule's strategyType directly
-        
-        // Set calculation type if field exists (defensive programming)
+
         try {
             java.lang.reflect.Field calcTypeField = BaseRateDto.class.getDeclaredField("calculationType");
             calcTypeField.setAccessible(true);
@@ -222,7 +199,6 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
             log.warn("Could not set calculationType: {}", e.getMessage());
         }
 
-        // ✅ CORE: Process bid/ask with validation
         Object bidObj = resultMap.get("bid");
         Object askObj = resultMap.get("ask");
 
@@ -233,7 +209,6 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
             throw new IllegalArgumentException("Invalid bid/ask types in script result for " + rule.getOutputSymbol());
         }
 
-        // ✅ ENHANCED: Handle timestamp with multiple field names
         Object timestampObj = resultMap.get("rateTimestamp");
         if (timestampObj == null) {
             timestampObj = resultMap.get("timestamp");
@@ -246,7 +221,6 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
             log.debug("Using current timestamp for {}", rule.getOutputSymbol());
         }
 
-        // ✅ ARCHITECTURE: Consistent provider naming
         result.setProviderName("CALCULATED");
 
         log.debug("✅ Script result mapped: symbol={}, bid={}, ask={}, timestamp={}", 
@@ -257,7 +231,7 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
 
     @Override
     public String getStrategyName() {
-        return "groovyScriptCalculationStrategy"; // ✅ Match config strategyType exactly
+        return "groovyScriptCalculationStrategy";
     }
 
     @Override
@@ -273,18 +247,12 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
                rule.getImplementation() != null &&
                !rule.getImplementation().trim().isEmpty();
     }
-    
-    /**
-     * ✅ NEW: Clear script cache (for testing/reloading)
-     */
+
     public void clearScriptCache() {
         scriptCache.clear();
         log.info("🔄 Script cache cleared");
     }
-    
-    /**
-     * ✅ NEW: Get script cache statistics
-     */
+
     public Map<String, Integer> getScriptCacheStats() {
         return Map.of("scriptCacheSize", scriptCache.size());
     }

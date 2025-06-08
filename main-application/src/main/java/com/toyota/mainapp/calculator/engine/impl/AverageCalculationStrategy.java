@@ -11,10 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.HashMap;
 
-/**
- * ✅ COMPLETE: Average calculation strategy implementation
- */
-@Component("averageCalculationStrategy") // ✅ FIXED: Explicit bean name for consistency
+@Component("averageCalculationStrategy") 
 @Slf4j
 public class AverageCalculationStrategy implements CalculationStrategy {
 
@@ -28,23 +25,19 @@ public class AverageCalculationStrategy implements CalculationStrategy {
                 log.warn("No input rates provided for average calculation: {}", rule.getOutputSymbol());
                 return Optional.empty();
             }
-            
-            // Filter rates to only include relevant symbol rates
+
             Map<String, BaseRateDto> relevantRates = filterRatesForRule(rule, inputRates);
             
             if (relevantRates.isEmpty()) {
                 log.warn("No relevant rates found for average calculation: {}", rule.getOutputSymbol());
                 return Optional.empty();
             }
-            
-            // Calculate average using utility
+
             BaseRateDto averageRate = RateCalculationUtils.calculateAverage(rule, relevantRates);
             
             if (averageRate != null) {
-                // ✅ ENSURE: Output symbol matches rule configuration exactly
-                averageRate.setSymbol(rule.getOutputSymbol()); // Force correct symbol
-                
-                // ✅ VALIDATE: Ensure symbol format consistency
+                averageRate.setSymbol(rule.getOutputSymbol()); 
+
                 String normalizedSymbol = com.toyota.mainapp.util.SymbolUtils.normalizeSymbol(averageRate.getSymbol());
                 if (!rule.getOutputSymbol().equals(normalizedSymbol) && 
                     !rule.getOutputSymbol().equals(averageRate.getSymbol())) {
@@ -66,17 +59,13 @@ public class AverageCalculationStrategy implements CalculationStrategy {
         }
     }
 
-    /**
-     * ✅ Filter input rates to only include rates relevant to this rule
-     */
     private Map<String, BaseRateDto> filterRatesForRule(CalculationRuleDto rule, Map<String, BaseRateDto> inputRates) {
         Map<String, BaseRateDto> filtered = new HashMap<>();
         
         if (rule.getRawSources() == null || rule.getRawSources().isEmpty()) {
             return filtered;
         }
-        
-        // Include rates that match any of the rule's raw sources
+
         for (Map.Entry<String, BaseRateDto> entry : inputRates.entrySet()) {
             BaseRateDto rate = entry.getValue();
             if (rate != null && rate.getSymbol() != null) {
@@ -103,12 +92,12 @@ public class AverageCalculationStrategy implements CalculationStrategy {
 
     @Override
     public String getStrategyName() {
-        return "averageCalculationStrategy"; // ✅ Match @Component bean name for factory registration
+        return "averageCalculationStrategy"; 
     }
 
     @Override
     public String getStrategyType() {
-        return "AVG"; // ✅ This must match CalculationRuleType.AVG.getCode()
+        return "AVG"; 
     }
     
     @Override

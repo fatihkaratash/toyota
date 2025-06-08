@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * ✅ CONSOLIDATED: Single source of truth for calculation rules
+ Single source of truth for calculation rules
  * Used by: ApplicationProperties, CalculationStrategyFactory, Pipeline Stages
  */
 @Data
@@ -19,72 +19,38 @@ import java.util.Map;
 @AllArgsConstructor
 public class CalculationRuleDto {
     
-    private String outputSymbol;        // ✅ USED: Target symbol (USDTRY_AVG, EURTRY_CROSS)
-    private String description;         // ✅ USED: Human readable description
+    private String outputSymbol;
+    private String description;
+    private String type;               //  Rule type (AVG, CROSS) -
+    private String strategyType;       
+    private String implementation;     
     
-    // ✅ ENUM INTEGRATION: Type safety with enum support
-    private String type;               // ✅ USED: Rule type (AVG, CROSS) - for stage filtering
-    private String strategyType;       // ✅ USED: Strategy bean name for factory lookup
+    private List<String> inputSymbols; 
+    private Map<String, Object> inputParameters; // 
     
-    // ✅ GROOVY SUPPORT: Implementation path for script strategies
-    private String implementation;     // ✅ USED: Script path for GroovyScriptCalculationStrategy
-    
-    private List<String> inputSymbols; // ✅ USED: Required input symbols
-    private Map<String, Object> inputParameters; // ✅ USED: Strategy-specific parameters (Object for flexibility)
-    
-    /**
-     * ✅ ENUM INTEGRATION: Get rule type as enum
-     */
+
     public CalculationRuleType getTypeEnum() {
         return CalculationRuleType.fromString(this.type);
     }
-    
-    /**
-     * ✅ ENUM INTEGRATION: Set rule type from enum
-     */
+
     public void setTypeEnum(CalculationRuleType typeEnum) {
         this.type = typeEnum != null ? typeEnum.getCode() : null;
     }
-    
-    /**
-     * ✅ VALIDATION: Check if rule type is valid
-     */
+
     public boolean isValidType() {
         return CalculationRuleType.isValidType(this.type);
     }
-    
-    /**
-     * ✅ GROOVY DETECTION: Check if this uses Groovy script strategy
-     */
+
     public boolean isGroovyStrategy() {
         return implementation != null && 
                (implementation.endsWith(".groovy") || implementation.contains("groovy"));
     }
-    
-    /**
-     * ✅ JAVA DETECTION: Check if this uses Java strategy
-     */
+
     public boolean isJavaStrategy() {
         return strategyType != null && 
                (strategyType.contains("Strategy") || strategyType.contains("CalculationStrategy"));
     }
-    
-    /**
-     * ✅ BACKWARD COMPATIBILITY: Keep existing getters
-     */
-    public String getType() {
-        return type;
-    }
-    
-    public String getStrategyType() {
-        return strategyType;
-    }
 
-    /**
-     * ✅ NEW: Get raw data sources for immediate pipeline
-     * ✅ ACTIVELY USED: Raw rate collection in AverageCalculationStage
-     * Usage: getRawSources() for input collection
-     */
     public List<String> getRawSources() {
         if (inputSymbols == null) {
             return new ArrayList<>();
@@ -106,11 +72,6 @@ public class CalculationRuleDto {
         return new ArrayList<>();
     }
 
-    /**
-     * ✅ NEW: Get calculated rate dependencies for cross rates
-     * ✅ ACTIVELY USED: Dependency collection in CrossRateCalculationStage
-     * Usage: getRequiredCalculatedRates() for dependency resolution
-     */
     public List<String> getRequiredCalculatedRates() {
         if (inputSymbols == null) {
             return new ArrayList<>();
@@ -132,11 +93,6 @@ public class CalculationRuleDto {
         return new ArrayList<>();
     }
 
-    /**
-     * ✅ NEW: Check if rule requires specific symbol as input
-     * ✅ ACTIVELY USED: Rule filtering in immediate pipeline stages
-     * Usage: requiresSymbol() for affected rules detection
-     */
     public boolean requiresSymbol(String symbol) {
         if (symbol == null || inputSymbols == null) {
             return false;
@@ -161,14 +117,9 @@ public class CalculationRuleDto {
         return false;
     }
 
-    /**
-     * ✅ NEW: Get weight for input symbol (for weighted averages)
-     * ✅ ACTIVELY USED: Weighted calculation in AverageCalculationStrategy
-     * Usage: getWeightForSymbol() in calculation logic
-     */
     public Double getWeightForSymbol(String symbol) {
         if (inputParameters == null || symbol == null) {
-            return 1.0; // Default equal weight
+            return 1.0; 
         }
         
         // Check for weights map in parameters
@@ -181,6 +132,6 @@ public class CalculationRuleDto {
             }
         }
         
-        return 1.0; // Default equal weight
+        return 1.0;
     }
 }

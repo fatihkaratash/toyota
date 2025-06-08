@@ -20,7 +20,6 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * ✅ SIMPLIFIED: Cross rate calculation stage with consistent key handling
  * Stage 3: Calculate cross rates from ExecutionContext snapshot data with fallback to cache
  */
 @Component
@@ -42,8 +41,6 @@ public class CrossRateCalculationStage implements CalculationStage {
 
             String pipelineId = context.getPipelineId();
             log.debug("✅ Stage 3 [{}]: Processing CROSS rules", pipelineId);
-
-            // ✅ SIMPLIFIED: Get all CROSS type rules
             List<CalculationRuleDto> crossRules = findCrossRules();
 
             if (crossRules.isEmpty()) {
@@ -59,10 +56,8 @@ public class CrossRateCalculationStage implements CalculationStage {
                 try {
                     log.debug("Processing CROSS rule: {}", rule.getOutputSymbol());
 
-                    // ✅ SIMPLIFIED: Get required inputs from snapshot with cache fallback
                     Map<String, BaseRateDto> inputRates = getInputsForCrossRate(rule, context);
 
-                    // ✅ SIMPLIFIED: All required inputs available? Calculate. Otherwise skip.
                     if (hasAllRequiredInputs(rule, inputRates)) {
 
                         CalculationStrategy strategy = calculationStrategyFactory.getStrategyForRule(rule);
@@ -77,7 +72,6 @@ public class CrossRateCalculationStage implements CalculationStage {
                                 rateCacheService.cacheCalculatedRate(crossRate);
                                 kafkaPublishingService.publishCalculatedRate(crossRate);
                                 context.addRateToSnapshot(crossRate);
-                                context.addCalculatedRate(crossRate); // Legacy support
 
                                 processedCount++;
                                 log.debug("✅ CROSS calculated [{}]: {}", pipelineId, crossRate.getSymbol());
@@ -115,18 +109,12 @@ public class CrossRateCalculationStage implements CalculationStage {
         }
     }
 
-    /**
-     * ✅ SIMPLIFIED: Get all CROSS type rules from configuration
-     */
     private List<CalculationRuleDto> findCrossRules() {
         return applicationProperties.getCalculationRules().stream()
                 .filter(rule -> CalculationRuleType.CROSS.equals(rule.getTypeEnum()))
                 .toList();
     }
 
-    /**
-     * ✅ SIMPLIFIED: Get inputs for cross rate with snapshot priority and cache fallback
-     */
     private Map<String, BaseRateDto> getInputsForCrossRate(CalculationRuleDto rule, ExecutionContext context) {
         Map<String, BaseRateDto> inputs = new HashMap<>();
         List<String> requiredRates = rule.getRequiredCalculatedRates();
@@ -141,7 +129,7 @@ public class CrossRateCalculationStage implements CalculationStage {
         for (BaseRateDto rate : context.getSnapshotRates()) {
             String key = SymbolUtils.generateSnapshotKey(rate);
             snapshotMap.put(key, rate);
-            snapshotMap.put(rate.getSymbol(), rate); // Also add direct symbol access
+            snapshotMap.put(rate.getSymbol(), rate);
         }
         
         log.debug("Snapshot contains {} rates", snapshotMap.size());
@@ -176,10 +164,7 @@ public class CrossRateCalculationStage implements CalculationStage {
 
         return inputs;
     }
-    
-    /**
-     * ✅ NEW: Find rate in snapshot using standardized key approach
-     */
+
     private BaseRateDto findRateInSnapshot(String symbol, Map<String, BaseRateDto> snapshotMap) {
         // Try standard formats (in priority order)
         String calcKey = "CALC_" + symbol;
@@ -200,9 +185,6 @@ public class CrossRateCalculationStage implements CalculationStage {
         return null;
     }
 
-    /**
-     * ✅ SIMPLIFIED: Input validation with clear logging
-     */
     private boolean hasAllRequiredInputs(CalculationRuleDto rule, Map<String, BaseRateDto> availableInputs) {
         List<String> requiredInputs = rule.getRequiredCalculatedRates();
 

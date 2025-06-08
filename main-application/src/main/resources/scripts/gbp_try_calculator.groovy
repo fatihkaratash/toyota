@@ -1,52 +1,24 @@
-import com.toyota.mainapp.dto.model.BaseRateDto  // ✅ CORRECT PATH
-import com.toyota.mainapp.dto.model.RateType      // ✅ CORRECT PATH  
-import com.toyota.mainapp.dto.model.InputRateInfo // ✅ CORRECT PATH
+import com.toyota.mainapp.dto.model.BaseRateDto
+import com.toyota.mainapp.dto.model.RateType
+import com.toyota.mainapp.dto.model.InputRateInfo
 
 import java.math.BigDecimal
 import java.math.RoundingMode
 
-// ✅ SCRIPT PARAMETERS FROM CONFIG - Default values if not provided  
 def gbpUsdAvgKey = gbpUsdAvgKey ?: "GBPUSD_AVG"
 def usdTryAvgSourceKey = usdTryAvgSourceKey ?: "USDTRY_AVG"
 def defaultScale = defaultScale ?: "5"
-
-// Log all input variables at the start of the script
-log.info("GBP/TRY çapraz kur hesaplaması başlatılıyor: {}", outputSymbol)
-log.info("İşlem parametreleri: gbpUsdAvgKey={}, usdTryAvgSourceKey={}, defaultScale={}",
-    gbpUsdAvgKey, usdTryAvgSourceKey, defaultScale)
-
-// Log all available input rates for debugging
-if (inputRates) {
-    log.info("Kullanılabilir giriş kurları ({}): {}", inputRates.size(),
-        inputRates.keySet().join(", "))
-} else {
-    log.warn("GBP/TRY için inputRates null veya boş!")
-}
 
 def scale = defaultScale.toInteger()
 def roundingMode = RoundingMode.HALF_UP
 def calculationInputs = []
 
-// Get USD/TRY average rate from inputRates map
+// Get USD/TRY rate
 def usdTryAvgRate = inputRates.get(usdTryAvgSourceKey)
-log.debug("İlk bakışta USD/TRY kuru için {} anahtarı ile sonuç: {}", 
-    usdTryAvgSourceKey, usdTryAvgRate != null ? "BULUNDU" : "BULUNAMADI")
-
-if (!usdTryAvgRate) {
-    log.error("GBP/TRY hesaplaması için gerekli USD/TRY kuru eksik: {} (inputRates üzerinden alınamadı)", 
-        usdTryAvgSourceKey)
-    log.debug("Kullanılabilir anahtarlar: {}", inputRates.keySet().join(", "))
+if (!usdTryAvgRate || usdTryAvgRate.bid == null || usdTryAvgRate.ask == null) {
+    log.error("Missing USD/TRY rate for GBP/TRY calculation")
     return null
 }
-
-if (usdTryAvgRate.bid == null || usdTryAvgRate.ask == null) {
-    log.error("USD/TRY_AVG kuru ({}) için bid/ask değerleri null. {} hesaplanamıyor.", 
-        usdTryAvgSourceKey, outputSymbol)
-    return null
-}
-
-log.info("USD/TRY Kuru BULUNDU: bid={}, ask={}, timestamp={}", 
-    usdTryAvgRate.bid, usdTryAvgRate.ask, usdTryAvgRate.timestamp)
 
 calculationInputs.add(
     InputRateInfo.builder()
@@ -59,26 +31,12 @@ calculationInputs.add(
         .build()
 )
 
-// Get GBP/USD average rate from inputRates map
+// Get GBP/USD rate
 def gbpUsdAvgRate = inputRates.get(gbpUsdAvgKey)
-log.debug("İlk bakışta GBP/USD kuru için {} anahtarı ile sonuç: {}", 
-    gbpUsdAvgKey, gbpUsdAvgRate != null ? "BULUNDU" : "BULUNAMADI")
-
-if (!gbpUsdAvgRate) {
-    log.error("GBP/TRY hesaplaması için gerekli GBP/USD kuru eksik: {} (inputRates üzerinden alınamadı)", 
-        gbpUsdAvgKey)
-    log.debug("Kullanılabilir anahtarlar: {}", inputRates.keySet().join(", "))
+if (!gbpUsdAvgRate || gbpUsdAvgRate.bid == null || gbpUsdAvgRate.ask == null) {
+    log.error("Missing GBP/USD rate for GBP/TRY calculation")
     return null
 }
-
-if (gbpUsdAvgRate.bid == null || gbpUsdAvgRate.ask == null) {
-    log.error("GBP/USD_AVG kuru ({}) için bid/ask değerleri null. {} hesaplanamıyor.", 
-        gbpUsdAvgKey, outputSymbol)
-    return null
-}
-
-log.info("GBP/USD Kuru BULUNDU: bid={}, ask={}, timestamp={}", 
-    gbpUsdAvgRate.bid, gbpUsdAvgRate.ask, gbpUsdAvgRate.timestamp)
 
 calculationInputs.add(
     InputRateInfo.builder()
@@ -91,18 +49,14 @@ calculationInputs.add(
         .build()
 )
 
-// Calculate GBP/TRY cross rate: (GBP/USD_AVG) * (USD/TRY_AVG)
-// Convert to BigDecimal if needed - ensure proper numeric calculation
-def calculatedBid = null  // ✅ FIX: calculatedBid instead of calculateBid
-def calculatedAsk = null  // ✅ FIX: calculatedAsk instead of calculateAsk
+// Calculate GBP/TRY cross rate
+def calculatedBid = null
+def calculatedAsk = null
 
-// Ensure we're working with BigDecimal for all calculations
 if (gbpUsdAvgRate.bid instanceof BigDecimal && usdTryAvgRate.bid instanceof BigDecimal) {
-    // Direct calculation with BigDecimal
     calculatedBid = gbpUsdAvgRate.bid.multiply(usdTryAvgRate.bid).setScale(scale, roundingMode)
     calculatedAsk = gbpUsdAvgRate.ask.multiply(usdTryAvgRate.ask).setScale(scale, roundingMode)
 } else {
-    // Convert to BigDecimal if needed (defensive)
     BigDecimal gbpUsdBid = new BigDecimal(gbpUsdAvgRate.bid.toString())
     BigDecimal gbpUsdAsk = new BigDecimal(gbpUsdAvgRate.ask.toString())
     BigDecimal usdTryBid = new BigDecimal(usdTryAvgRate.bid.toString())
@@ -112,23 +66,11 @@ if (gbpUsdAvgRate.bid instanceof BigDecimal && usdTryAvgRate.bid instanceof BigD
     calculatedAsk = gbpUsdAsk.multiply(usdTryAsk).setScale(scale, roundingMode)
 }
 
-// Verify calculation with log message
-log.info("GBP/TRY Calculation: {}*{}={} and {}*{}={}", 
-    gbpUsdAvgRate.bid, usdTryAvgRate.bid, calculatedBid,
-    gbpUsdAvgRate.ask, usdTryAvgRate.ask, calculatedAsk)
-    
-def currentTimestamp = System.currentTimeMillis()
-
-log.info("Hesaplanan GBP/TRY ({}): Bid={}, Ask={}", outputSymbol, calculatedBid, calculatedAsk)
-
-// Make sure we're always using the expected format
-String finalOutputSymbol = outputSymbol ?: "GBP/TRY"
-
 return [
-    symbol: finalOutputSymbol,
+    symbol: outputSymbol ?: "GBP/TRY",
     bid: calculatedBid,
     ask: calculatedAsk,
-    rateTimestamp: currentTimestamp,
+    rateTimestamp: System.currentTimeMillis(),
     rateType: RateType.CALCULATED.toString(),
     providerName: "GbpTryScriptCalculator",
     calculationInputs: calculationInputs,

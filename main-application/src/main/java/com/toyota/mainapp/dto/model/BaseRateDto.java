@@ -30,7 +30,7 @@ public class BaseRateDto {
     private Long validatedAt;
     private String calculationType;
 
-    @lombok.Builder.Default // Keep @Builder.Default if SuperBuilder doesn't initialize it
+    @lombok.Builder.Default 
     private List<InputRateInfo> calculationInputs = new ArrayList<>();
     
     private String calculatedByStrategy;
