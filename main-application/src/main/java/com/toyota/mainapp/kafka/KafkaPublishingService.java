@@ -12,6 +12,8 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Supports immediate snapshot pipeline with proper interface implementation
@@ -73,7 +75,7 @@ public class KafkaPublishingService implements SequentialPublisher {
                     pipelineId, rateStrings.size(), e.getMessage());
         }
     }
-
+  
     @Override
     public void publishRate(BaseRateDto rate) {
         if (rate == null) return;

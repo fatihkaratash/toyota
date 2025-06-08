@@ -20,7 +20,7 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: validate # Changed from create to validate
+      ddl-auto: update # Changed from create to validate
     show-sql: false
     properties:
       hibernate:
@@ -53,6 +53,10 @@ app:
        group-id: toyota-consumer-group
       topic:
         simple-rates: financial-simple-rates
+  batch:
+    processing:
+      max-poll-records: 500
+      fetch-max-wait: 500
         
   
 # Management and Metrics Configuration

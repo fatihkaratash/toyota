@@ -29,7 +29,7 @@ public class RateCacheService {
     @Value("${app.cache.calculated-rate.ttl-seconds:10}")
     private int calculatedRateTtlSeconds;
 
-    @Value("${app.cache.key-prefix:toyota_rates}")
+    @Value("${app.cache.key-prefix:}")
     private String keyPrefix;
 
     public void cacheRawRate(BaseRateDto rate) {
@@ -38,12 +38,22 @@ public class RateCacheService {
         }
 
         String key = buildRawRateKey(rate.getSymbol(), rate.getProviderName());
-        
-        try {
-            rawRateRedisTemplate.opsForValue().set(key, rate, rawRateTtlSeconds, TimeUnit.SECONDS);
-        } catch (Exception e) {
-            log.error("Failed to cache raw rate: key={}", key, e);
+       try {
+        // Mevcut değeri kontrol et
+        BaseRateDto existingRate = rawRateRedisTemplate.opsForValue().get(key);
+        if (existingRate != null && 
+            Objects.equals(existingRate.getBid(), rate.getBid()) && 
+            Objects.equals(existingRate.getAsk(), rate.getAsk())) {
+            // Sadece TTL'i yenile, değeri tekrar yazma
+            rawRateRedisTemplate.expire(key, rawRateTtlSeconds, TimeUnit.SECONDS);
+            return;
         }
+        
+        // Değer farklı veya mevcut değilse, yeni değeri yaz
+        rawRateRedisTemplate.opsForValue().set(key, rate, rawRateTtlSeconds, TimeUnit.SECONDS);
+    } catch (Exception e) {
+        log.error("Failed to cache raw rate: key={}", key, e);
+    }
     }
 
     public void cacheCalculatedRate(BaseRateDto rate) {
@@ -153,4 +163,7 @@ public class RateCacheService {
             "keyPrefix", keyPrefix
         );
     }
+
+    
+
 }

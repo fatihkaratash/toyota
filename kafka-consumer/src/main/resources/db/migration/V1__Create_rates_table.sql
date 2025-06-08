@@ -6,6 +6,7 @@ CREATE TABLE rates (
     ask NUMERIC(19, 8),
     rate_updatetime TIMESTAMP,
     db_updatetime TIMESTAMP,
+    pipeline_id VARCHAR(255),
     CONSTRAINT uq_rate_name_updatetime UNIQUE (rate_name, rate_updatetime)
 );
 

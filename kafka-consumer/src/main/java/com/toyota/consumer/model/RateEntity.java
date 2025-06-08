@@ -39,4 +39,26 @@ public class RateEntity {
     
     @Column(name = "db_updatetime")
     private LocalDateTime dbUpdatetime;    // When it was stored in DB
+
+    @Column(name = "pipeline_id")
+    private String pipelineId;
+
+    @Column(name = "rate_category")
+    private String rateCategory; // RAW, AVERAGE, CROSS, OTHER
+
+    public String getPipelineId() {
+        return pipelineId;
+    }
+    
+    public void setPipelineId(String pipelineId) {
+        this.pipelineId = pipelineId;
+    }
+    
+    public String getRateCategory() {
+        return rateCategory;
+    }
+    
+    public void setRateCategory(String rateCategory) {
+        this.rateCategory = rateCategory;
+    }
 }
