@@ -1,5 +1,6 @@
 package com.toyota.mainapp.calculator.pipeline;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 
@@ -11,6 +12,7 @@ import java.time.Instant;
  */
 @Data
 @Builder
+@AllArgsConstructor
 public class StageResult {
     
     private final String stageName;
@@ -29,25 +31,10 @@ public class StageResult {
     }
     
     public static StageResult success(String stageName, int itemsProcessed, String message) {
-        return StageResult.builder()
-                .stageName(stageName)
-                .success(true)
-                .message(message)
-                .itemsProcessed(itemsProcessed)
-                .startTime(Instant.now())
-                .endTime(Instant.now())
-                .build();
+        return new StageResult(stageName, true, message, null, Instant.now(), Instant.now(), itemsProcessed);
     }
     
     public static StageResult failure(String stageName, String message, Throwable error) {
-        return StageResult.builder()
-                .stageName(stageName)
-                .success(false)
-                .message(message)
-                .error(error)
-                .startTime(Instant.now())
-                .endTime(Instant.now())
-                .itemsProcessed(0)
-                .build();
+        return new StageResult(stageName, false, message, error, Instant.now(), Instant.now(), 0);
     }
 }

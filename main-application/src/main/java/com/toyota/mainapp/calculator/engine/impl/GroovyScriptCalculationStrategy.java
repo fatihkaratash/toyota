@@ -102,39 +102,71 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
     }
 
     /**
-     * ✅ ENHANCED: Smart input adaptation based on rule requirements
+     * ✅ ENHANCED: Comprehensive input adaptation for cross-rate scripts
      */
     private Map<String, BaseRateDto> adaptInputRatesForScript(Map<String, BaseRateDto> inputRates, CalculationRuleDto rule) {
         Map<String, BaseRateDto> adaptedRates = new HashMap<>();
 
+        log.info("🔄 Adapting {} input rates for script: {}", inputRates.size(), rule.getOutputSymbol());
+
         for (Map.Entry<String, BaseRateDto> entry : inputRates.entrySet()) {
             BaseRateDto rate = entry.getValue();
+            String originalKey = entry.getKey();
             String symbol = rate.getSymbol();
             String normalizedSymbol = SymbolUtils.normalizeSymbol(symbol);
 
+            log.debug("Processing rate: originalKey={}, symbol={}, normalized={}", 
+                    originalKey, symbol, normalizedSymbol);
+
             if (SymbolUtils.isValidSymbol(normalizedSymbol)) {
-                // ✅ CORE: Add multiple key formats for maximum script compatibility
-                adaptedRates.put(normalizedSymbol, rate);
-                adaptedRates.put(normalizedSymbol + "_AVG", rate);
-                adaptedRates.put(SymbolUtils.addSlash(normalizedSymbol), rate);
-                adaptedRates.put(SymbolUtils.addSlash(normalizedSymbol) + "_AVG", rate);
+                // ✅ COMPREHENSIVE: Add all possible key formats that scripts might expect
                 
-                // ✅ RULE-SPECIFIC: Add keys that match inputSymbols from config
-                if (rule.getInputSymbols() != null) {
-                    for (String inputSymbol : rule.getInputSymbols()) {
-                        if (SymbolUtils.symbolsEquivalent(inputSymbol, normalizedSymbol)) {
-                            adaptedRates.put(inputSymbol, rate);
+                // Basic formats
+                adaptedRates.put(normalizedSymbol, rate);                    // "USDTRY"
+                adaptedRates.put(normalizedSymbol + "_AVG", rate);           // "USDTRY_AVG"
+                adaptedRates.put(SymbolUtils.addSlash(normalizedSymbol), rate); // "USD/TRY"
+                adaptedRates.put(SymbolUtils.addSlash(normalizedSymbol) + "_AVG", rate); // "USD/TRY_AVG"
+                
+                // ✅ CRITICAL: Add the original input key (this is what cross-rate scripts expect)
+                adaptedRates.put(originalKey, rate);                         // "USDTRY_AVG" from config
+                
+                // ✅ CONFIG-SPECIFIC: Match inputParameters from rule configuration
+                if (rule.getInputParameters() != null) {
+                    for (Map.Entry<String, Object> param : rule.getInputParameters().entrySet()) {
+                        String paramKey = param.getKey();
+                        String paramValue = param.getValue() != null ? param.getValue().toString() : "";
+                        
+                        // If parameter value matches this symbol, add it with parameter key
+                        if (paramValue.equals(originalKey) || paramValue.equals(normalizedSymbol) || 
+                            paramValue.equals(normalizedSymbol + "_AVG")) {
+                            adaptedRates.put(paramValue, rate);
+                            log.debug("✅ Added parameter-based key: {} -> {}", paramValue, symbol);
                         }
                     }
                 }
                 
-                log.debug("Adapted rate '{}' with keys: {}, {}, {}", 
-                        symbol, normalizedSymbol, normalizedSymbol + "_AVG", SymbolUtils.addSlash(normalizedSymbol));
+                // ✅ RULE-SPECIFIC: Add keys that match requiredCalculatedRates from config
+                if (rule.getRequiredCalculatedRates() != null) {
+                    for (String requiredRate : rule.getRequiredCalculatedRates()) {
+                        if (SymbolUtils.symbolsEquivalent(requiredRate, normalizedSymbol) ||
+                            requiredRate.equals(originalKey)) {
+                            adaptedRates.put(requiredRate, rate);
+                            log.debug("✅ Added required-rate key: {} -> {}", requiredRate, symbol);
+                        }
+                    }
+                }
+                
+                log.debug("✅ Adapted rate '{}' with multiple key formats", symbol);
+            } else {
+                log.warn("❌ Invalid symbol format, skipping: {}", symbol);
             }
         }
 
-        log.info("Adapted {} input rates to {} key variants for script: {}", 
+        log.info("✅ Input adaptation complete: {} rates adapted to {} key variants for script: {}", 
                 inputRates.size(), adaptedRates.size(), rule.getOutputSymbol());
+        
+        // ✅ DEBUG: Log all adapted keys for troubleshooting
+        log.debug("Adapted keys for script {}: {}", rule.getOutputSymbol(), adaptedRates.keySet());
 
         return adaptedRates;
     }
@@ -176,7 +208,7 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
         result.setRateType(com.toyota.mainapp.dto.model.RateType.CALCULATED);
 
         // ✅ ENHANCED: Better calculation type determination
-        String calculationType = SymbolUtils.determineCalculationType(rule.getOutputSymbol(), rule.getStrategyType());
+        String calculationType = rule.getStrategyType(); // Use rule's strategyType directly
         
         // Set calculation type if field exists (defensive programming)
         try {
@@ -201,7 +233,7 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
             throw new IllegalArgumentException("Invalid bid/ask types in script result for " + rule.getOutputSymbol());
         }
 
-        // ✅ CORE: Handle timestamp
+        // ✅ ENHANCED: Handle timestamp with multiple field names
         Object timestampObj = resultMap.get("rateTimestamp");
         if (timestampObj == null) {
             timestampObj = resultMap.get("timestamp");
@@ -211,20 +243,21 @@ public class GroovyScriptCalculationStrategy implements CalculationStrategy {
             result.setTimestamp(((Number) timestampObj).longValue());
         } else {
             result.setTimestamp(System.currentTimeMillis());
+            log.debug("Using current timestamp for {}", rule.getOutputSymbol());
         }
 
         // ✅ ARCHITECTURE: Consistent provider naming
         result.setProviderName("CALCULATED");
 
-        log.debug("✅ Script result mapped: symbol={}, type={}, bid={}, ask={}", 
-                result.getSymbol(), calculationType, result.getBid(), result.getAsk());
+        log.debug("✅ Script result mapped: symbol={}, bid={}, ask={}, timestamp={}", 
+                result.getSymbol(), result.getBid(), result.getAsk(), result.getTimestamp());
         
         return result;
     }
 
     @Override
     public String getStrategyName() {
-        return "groovyScriptCalculationStrategy";
+        return "groovyScriptCalculationStrategy"; // ✅ Match config strategyType exactly
     }
 
     @Override

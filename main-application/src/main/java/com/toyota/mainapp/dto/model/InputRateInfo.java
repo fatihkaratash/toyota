@@ -48,10 +48,15 @@ public class InputRateInfo {
     private Long timestamp;
     
     /**
-     * ✅ FACTORY: Create from BaseRateDto for easy conversion
+     * ✅ ENHANCED FACTORY: Create from BaseRateDto with validation
      */
     public static InputRateInfo fromBaseRateDto(BaseRateDto rate) {
         if (rate == null) {
+            return null;
+        }
+        
+        // ✅ ADD: Basic validation
+        if (rate.getBid() == null || rate.getAsk() == null) {
             return null;
         }
         

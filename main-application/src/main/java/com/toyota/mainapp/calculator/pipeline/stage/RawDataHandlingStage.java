@@ -1,7 +1,7 @@
 package com.toyota.mainapp.calculator.pipeline.stage;
 
-import com.toyota.mainapp.cache.RateCacheService;
 import com.toyota.mainapp.calculator.pipeline.ExecutionContext;
+import com.toyota.mainapp.cache.RateCacheService;
 import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.kafka.KafkaPublishingService;
 import lombok.RequiredArgsConstructor;
@@ -9,12 +9,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * ✅ STAGE 1: Raw Data Handling
- * Cache raw rate and publish to individual JSON topic
+ * ✅ ENHANCED: Raw data handling stage with comprehensive snapshot collection
+ * Stage 1: Process triggering raw rate and add to snapshot
+ * ✅ ACTIVELY USED: First stage in immediate pipeline processing
  */
 @Component
-@Slf4j
 @RequiredArgsConstructor
+@Slf4j
 public class RawDataHandlingStage implements CalculationStage {
 
     private final RateCacheService rateCacheService;
@@ -22,28 +23,54 @@ public class RawDataHandlingStage implements CalculationStage {
 
     @Override
     public void execute(ExecutionContext context) {
+        String stageName = "RawDataHandling";
+        
         try {
+            context.recordStageStart(stageName);
+            
             BaseRateDto triggeringRate = context.getTriggeringRate();
-            String pipelineId = context.getPipelineId();
-            
-            log.debug("Stage 1 [{}]: Processing raw rate for symbol: {}", 
-                    pipelineId, triggeringRate.getSymbol());
+            if (triggeringRate == null) {
+                String error = "Triggering rate is null";
+                context.addStageError(stageName, error);
+                return;
+            }
 
-            // 1. Cache raw rate (already done in MainCoordinator, but ensure consistency)
+            log.debug("✅ Stage 1 [{}]: Processing raw rate: {}", 
+                    context.getPipelineId(), triggeringRate.getSymbol());
+
+            // ✅ CLEAN: Simple cache operation
             rateCacheService.cacheRawRate(triggeringRate);
-            
-            // 2. Publish to individual JSON topic  
-            kafkaPublishingService.publishRawRate(triggeringRate);
-            
-            // 3. Add to context for next stages
-            context.addRawRate(triggeringRate.getSymbol(), triggeringRate);
-            
-            log.info("Stage 1 [{}]: Raw rate processed successfully: {}", 
-                    pipelineId, triggeringRate.getSymbol());
+            log.debug("Raw rate cached: {}", triggeringRate.getSymbol());
 
+            // Publish to individual raw rate topic
+            kafkaPublishingService.publishRawRate(triggeringRate);
+            log.debug("Raw rate published to individual topic: {}", triggeringRate.getSymbol());
+
+            // ✅ CRITICAL: Add triggering rate to snapshot for immediate publishing
+            context.addRateToSnapshot(triggeringRate);
+            log.debug("✅ Triggering rate added to snapshot [{}]: {}", 
+                    context.getPipelineId(), triggeringRate.getSymbol());
+
+            // Legacy support
+            context.addRawRate(triggeringRate.getSymbol(), triggeringRate);
+            context.addStageResult("Raw data processed: " + triggeringRate.getSymbol());
+
+            context.recordStageEnd(stageName);
+            
+            log.info("✅ Stage 1 [{}]: Raw data handling completed successfully", 
+                    context.getPipelineId());
+            
         } catch (Exception e) {
-            log.error("❌ Stage 1 failed for pipeline: {}", context.getPipelineId(), e);
-            // Don't throw exception - handle gracefully and continue pipeline
+            context.addStageError(stageName, e.getMessage());
+            context.recordStageEnd(stageName);
+            
+            log.error("❌ Stage 1 [{}]: Raw data handling failed", 
+                    context.getPipelineId(), e);
         }
+    }
+
+    @Override
+    public String getStageName() {
+        return "RawDataHandling";
     }
 }

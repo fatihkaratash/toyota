@@ -1,10 +1,9 @@
 package com.toyota.mainapp.calculator.pipeline;
 
 /**
- * ✅ STAGE EXECUTION EXCEPTION
- * Thrown when a pipeline stage fails
+ * ✅ STAGE EXCEPTION: Custom exception for stage execution failures (if needed for compatibility)
  */
-public class StageExecutionException extends Exception {
+public class StageExecutionException extends RuntimeException {
     
     public StageExecutionException(String message) {
         super(message);

@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import com.toyota.mainapp.dto.model.BaseRateDto;
 
 /**
  * Symbol işlemleri için utility sınıfı
@@ -264,5 +265,41 @@ public final class SymbolUtils {
             "normalizeCacheSize", NORMALIZE_CACHE.size(),
             "variantsCacheSize", VARIANTS_CACHE.size()
         );
+    }
+
+    /**
+     * ✅ NEW: Generate snapshot key for ExecutionContext rate collection
+     * ✅ ACTIVELY USED: Snapshot key generation in ExecutionContext
+     * Usage: generateSnapshotKey() for consistent rate identification in snapshots
+     */
+    public static String generateSnapshotKey(BaseRateDto rate) {
+        if (rate == null) return "";
+        
+        String symbol = normalizeSymbol(rate.getSymbol());
+        
+        // For RAW rates: Include provider name
+        if (rate.getRateType() != null && "RAW".equals(rate.getRateType().toString())) {
+            String provider = rate.getProviderName() != null ? rate.getProviderName() : "UNKNOWN";
+            return String.format("RAW_%s_%s", provider, symbol);
+        }
+        
+        // For calculated rates: Use symbol only
+        return String.format("CALC_%s", symbol);
+    }
+
+    /**
+     * ✅ NEW: Generate unique pipeline ID for message grouping
+     * ✅ ACTIVELY USED: Pipeline ID generation in RealTimeBatchProcessor
+     * Usage: generatePipelineId() for Kafka message key grouping
+     */
+    public static String generatePipelineId(BaseRateDto triggeringRate) {
+        if (triggeringRate == null) return "PIPE_UNKNOWN_" + System.currentTimeMillis();
+        
+        String provider = triggeringRate.getProviderName() != null ? 
+                          triggeringRate.getProviderName() : "UNKNOWN";
+        String symbol = normalizeSymbol(triggeringRate.getSymbol());
+        
+        return String.format("PIPE_%s_%s_%d", 
+                provider, symbol, System.currentTimeMillis());
     }
 }

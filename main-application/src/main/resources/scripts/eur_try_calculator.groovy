@@ -26,51 +26,27 @@ def scale = defaultScale.toInteger()
 def roundingMode = RoundingMode.HALF_UP
 def calculationInputs = []
 
-// ✅ SMART INPUT RESOLUTION: Try multiple key formats
-def usdTryAvgRate = null
-def eurUsdAvgRate = null
-
-// Find USD/TRY input with multiple key formats
-def usdTryKeys = [
-    usdTryAvgSourceKey,
-    "USDTRY_AVG", 
-    "USD/TRY_AVG",
-    "USDTRY",
-    "USD/TRY"
-]
-
-for (String key : usdTryKeys) {
-    if (inputRates.containsKey(key)) {
-        usdTryAvgRate = inputRates.get(key)
-        log.info("✅ USD/TRY input found with key: {}", key)
-        break
-    }
-}
+// Get USD/TRY average rate from inputRates map
+def usdTryAvgRate = inputRates.get(usdTryAvgSourceKey)
+log.debug("İlk bakışta USD/TRY kuru için {} anahtarı ile sonuç: {}", 
+    usdTryAvgSourceKey, usdTryAvgRate != null ? "BULUNDU" : "BULUNAMADI")
 
 if (!usdTryAvgRate) {
-    log.error("❌ USD/TRY input not found. Available keys: {}", inputRates.keySet().join(", "))
+    log.error("EUR/TRY hesaplaması için gerekli USD/TRY kuru eksik: {} (inputRates üzerinden alınamadı)", 
+        usdTryAvgSourceKey)
+    log.debug("Kullanılabilir anahtarlar: {}", inputRates.keySet().join(", "))
     return null
 }
 
-// Find EUR/USD input with multiple key formats
-def eurUsdKeys = [
-    eurUsdAvgKey,
-    "EURUSD_AVG",
-    "EUR/USD_AVG", 
-    "EURUSD",
-    "EUR/USD"
-]
-
-for (String key : eurUsdKeys) {
-    if (inputRates.containsKey(key)) {
-        eurUsdAvgRate = inputRates.get(key)
-        log.info("✅ EUR/USD input found with key: {}", key)
-        break
-    }
-}
+// Get EUR/USD average rate from inputRates map
+def eurUsdAvgRate = inputRates.get(eurUsdAvgKey)
+log.debug("İlk bakışta EUR/USD kuru için {} anahtarı ile sonuç: {}", 
+    eurUsdAvgKey, eurUsdAvgRate != null ? "BULUNDU" : "BULUNAMADI")
 
 if (!eurUsdAvgRate) {
-    log.error("❌ EUR/USD input not found. Available keys: {}", inputRates.keySet().join(", "))
+    log.error("EUR/TRY hesaplaması için gerekli EUR/USD kuru eksik: {} (inputRates üzerinden alınamadı)", 
+        eurUsdAvgKey)
+    log.debug("Kullanılabilir anahtarlar: {}", inputRates.keySet().join(", "))
     return null
 }
 

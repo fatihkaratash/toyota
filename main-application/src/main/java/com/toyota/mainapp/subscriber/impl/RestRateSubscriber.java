@@ -373,11 +373,11 @@ public class RestRateSubscriber implements PlatformSubscriber {
                                 log.info("[{}] REST kurları alındı (authenticated) - Sembol: {}, Bid: {}, Ask: {}",
                                         providerName, rate.getSymbol(), rate.getBid(), rate.getAsk());
 
-                                // Critical point: onRateAvailable call
-                                log.debug("[{}] Calling onRateAvailable with ProviderRateDto for symbol: {}",
+                                // Critical point: onRateAvailable call for immediate pipeline
+                                log.debug("[{}] Triggering immediate pipeline for symbol: {}", 
                                         providerName, rate.getSymbol());
                                 callback.onRateAvailable(providerName, rate);
-                                log.debug("[{}] onRateAvailable callback completed for symbol: {}",
+                                log.debug("[{}] Immediate pipeline triggered successfully for symbol: {}",
                                         providerName, rate.getSymbol());
                             } catch (Exception e) {
                                 log.error("[{}] JSON ayrıştırma hatası: {} - JSON: {}",

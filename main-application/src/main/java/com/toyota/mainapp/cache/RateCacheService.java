@@ -13,8 +13,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
- * ✅ MODERNIZED: Type-safe Redis cache service with specialized templates
- * Optimized for BaseRateDto operations and pipeline performance
+ * ✅ OPTIMIZED: Redis cache service with safe batch operations
+ * Removed KEYS command usage and improved consistency in key formats
  */
 @Service
 @RequiredArgsConstructor
@@ -37,7 +37,7 @@ public class RateCacheService {
     private String keyPrefix;
 
     /**
-     * ✅ TYPE-SAFE: Cache raw rate with specialized template
+     * ✅ CORE: Cache raw rate
      */
     public void cacheRawRate(BaseRateDto rate) {
         if (rate == null || rate.getSymbol() == null || rate.getProviderName() == null) {
@@ -56,7 +56,7 @@ public class RateCacheService {
     }
 
     /**
-     * ✅ TYPE-SAFE: Cache calculated rate with specialized template
+     * ✅ CORE: Cache calculated rate
      */
     public void cacheCalculatedRate(BaseRateDto rate) {
         if (rate == null || rate.getSymbol() == null) {
@@ -75,129 +75,129 @@ public class RateCacheService {
     }
 
     /**
-     * ✅ BATCH OPERATION: Get multiple raw rates efficiently with MGET
+     * ✅ IMPROVED: Get raw rates for symbol from specific providers using MGET
      */
-    public Map<String, BaseRateDto> getRawRatesBatch(String symbol, List<String> providerNames) {
+    public Map<String, BaseRateDto> getRawRatesForSymbol(String symbol, List<String> providerNames) {
         if (symbol == null || providerNames == null || providerNames.isEmpty()) {
             return Collections.emptyMap();
         }
 
-        List<String> keys = providerNames.stream()
-                .map(provider -> buildRawRateKey(symbol, provider))
-                .collect(Collectors.toList());
-
         try {
+            // Generate keys for the specific symbol and providers
+            List<String> keys = providerNames.stream()
+                    .map(provider -> buildRawRateKey(symbol, provider))
+                    .collect(Collectors.toList());
+
+            // Use MGET for efficient batch retrieval
             List<BaseRateDto> rates = rawRateRedisTemplate.opsForValue().multiGet(keys);
             Map<String, BaseRateDto> result = new HashMap<>();
 
-            for (int i = 0; i < keys.size() && i < rates.size(); i++) {
-                BaseRateDto rate = rates.get(i);
-                if (rate != null) {
-                    result.put(providerNames.get(i), rate);
+            if (rates != null) {
+                for (int i = 0; i < rates.size(); i++) {
+                    BaseRateDto rate = rates.get(i);
+                    if (rate != null && i < providerNames.size()) {
+                        result.put(providerNames.get(i), rate);
+                    }
                 }
             }
 
-            log.debug("✅ Batch raw rates retrieved: symbol={}, found={}/{}", 
+            log.debug("✅ Raw rates retrieved: symbol={}, found={}/{}", 
                     symbol, result.size(), providerNames.size());
             return result;
 
         } catch (Exception e) {
-            log.error("❌ Failed to get raw rates batch: symbol={}, providers={}", symbol, providerNames, e);
+            log.error("❌ Failed to get raw rates: symbol={}", symbol, e);
             return Collections.emptyMap();
         }
     }
 
     /**
-     * ✅ BATCH OPERATION: Get multiple calculated rates efficiently
+     * ✅ IMPROVED: Get calculated rates in batch using MGET
      */
-    public Map<String, BaseRateDto> getCalculatedRatesBatch(List<String> symbols) {
+    public Map<String, BaseRateDto> getCalculatedRates(List<String> symbols) {
         if (symbols == null || symbols.isEmpty()) {
             return Collections.emptyMap();
         }
 
-        List<String> keys = symbols.stream()
-                .map(this::buildCalculatedRateKey)
-                .collect(Collectors.toList());
-
         try {
+            // Generate standard keys for all symbols
+            List<String> keys = symbols.stream()
+                    .map(this::buildCalculatedRateKey)
+                    .collect(Collectors.toList());
+
+            // Use MGET for efficient batch retrieval
             List<BaseRateDto> rates = calculatedRateRedisTemplate.opsForValue().multiGet(keys);
             Map<String, BaseRateDto> result = new HashMap<>();
 
-            for (int i = 0; i < keys.size() && i < rates.size(); i++) {
-                BaseRateDto rate = rates.get(i);
-                if (rate != null) {
-                    result.put(symbols.get(i), rate);
+            if (rates != null) {
+                for (int i = 0; i < symbols.size() && i < rates.size(); i++) {
+                    BaseRateDto rate = rates.get(i);
+                    if (rate != null) {
+                        result.put(symbols.get(i), rate);
+                    }
                 }
             }
 
-            log.debug("✅ Batch calculated rates retrieved: found={}/{}", result.size(), symbols.size());
+            log.debug("✅ Calculated rates batch retrieved: found={}/{}", result.size(), symbols.size());
             return result;
 
         } catch (Exception e) {
-            log.error("❌ Failed to get calculated rates batch: symbols={}", symbols, e);
+            log.error("❌ Failed to get calculated rates in batch", e);
             return Collections.emptyMap();
         }
     }
 
     /**
-     * ✅ SINGLE OPERATIONS: Backward compatibility
+     * ✅ SIMPLIFIED: Get latest calculated rate with standardized key
      */
-    public BaseRateDto getRawRate(String symbol, String providerName) {
-        String key = buildRawRateKey(symbol, providerName);
+    public BaseRateDto getLatestCalculatedRate(String symbol) {
+        if (symbol == null) {
+            return null;
+        }
+
         try {
-            BaseRateDto rate = rawRateRedisTemplate.opsForValue().get(key);
-            log.debug("Raw rate retrieved: key={}, found={}", key, rate != null);
-            return rate;
+            String key = buildCalculatedRateKey(symbol);
+            BaseRateDto rate = calculatedRateRedisTemplate.opsForValue().get(key);
+            
+            if (rate != null) {
+                log.debug("✅ Retrieved calculated rate: {}", symbol);
+                return rate;
+            } else {
+                log.debug("Calculated rate not found: {}", symbol);
+                return null;
+            }
         } catch (Exception e) {
-            log.error("❌ Failed to get raw rate: key={}", key, e);
+            log.error("❌ Error retrieving calculated rate: {}", symbol, e);
             return null;
         }
     }
 
+    /**
+     * ✅ ALIAS: Get calculated rate (same as getLatestCalculatedRate for consistency)
+     */
     public BaseRateDto getCalculatedRate(String symbol) {
-        String key = buildCalculatedRateKey(symbol);
-        try {
-            BaseRateDto rate = calculatedRateRedisTemplate.opsForValue().get(key);
-            log.debug("Calculated rate retrieved: key={}, found={}", key, rate != null);
-            return rate;
-        } catch (Exception e) {
-            log.error("❌ Failed to get calculated rate: key={}", key, e);
-            return null;
-        }
+        return getLatestCalculatedRate(symbol);
     }
 
     /**
      * ✅ KEY BUILDERS: Consistent key generation
      */
     private String buildRawRateKey(String symbol, String providerName) {
-        return String.format("%s:raw_rate:%s:%s", keyPrefix, symbol, providerName);
+        return String.format("%s:raw:%s:%s", keyPrefix, symbol, providerName);
     }
 
     private String buildCalculatedRateKey(String symbol) {
-        return String.format("%s:calc_rate:%s", keyPrefix, symbol);
+        return String.format("%s:calc:%s", keyPrefix, symbol);
     }
 
     /**
-     * ✅ UTILITY: Check rate freshness
-     */
-    public boolean isRateFresh(String symbol, String providerName, long maxAgeMs) {
-        BaseRateDto rate = getRawRate(symbol, providerName);
-        if (rate == null || rate.getTimestamp() == null) {
-            return false;
-        }
-        
-        long age = System.currentTimeMillis() - rate.getTimestamp();
-        return age <= maxAgeMs;
-    }
-
-    /**
-     * ✅ MONITORING: Get cache statistics
+     * ✅ MONITORING: Simple cache statistics
      */
     public Map<String, Object> getCacheStats() {
-        Map<String, Object> stats = new HashMap<>();
-        stats.put("rawRateTtlSeconds", rawRateTtlSeconds);
-        stats.put("calculatedRateTtlSeconds", calculatedRateTtlSeconds);
-        stats.put("keyPrefix", keyPrefix);
-        return stats;
+        return Map.of(
+            "rawRateTtlSeconds", rawRateTtlSeconds,
+            "calculatedRateTtlSeconds", calculatedRateTtlSeconds,
+            "keyPrefix", keyPrefix
+        );
     }
 }

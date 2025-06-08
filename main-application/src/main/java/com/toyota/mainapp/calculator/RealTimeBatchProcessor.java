@@ -4,6 +4,7 @@ import com.toyota.mainapp.calculator.pipeline.ExecutionContext;
 import com.toyota.mainapp.calculator.pipeline.stage.*;
 import com.toyota.mainapp.config.ApplicationProperties;
 import com.toyota.mainapp.dto.model.BaseRateDto;
+import com.toyota.mainapp.util.SymbolUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -12,95 +13,90 @@ import org.springframework.stereotype.Service;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * ✅ REAL-TIME PIPELINE: Each rate triggers parallel async processing
- * 🎯 GOAL: <50ms latency, >1000 rates/sec throughput
+ * ✅ SIMPLIFIED: Real-time pipeline processor
+ * Simple sequential stage execution with snapshot-based data flow
  */
 @Service
 @Slf4j  
 @RequiredArgsConstructor
 public class RealTimeBatchProcessor {
 
-    // Stage instances - stateless and thread-safe
+    // ✅ SIMPLIFIED: Direct stage injection - no complex factory needed
     private final RawDataHandlingStage rawDataHandlingStage;
     private final AverageCalculationStage averageCalculationStage;
     private final CrossRateCalculationStage crossRateCalculationStage;
     private final SimpleBatchAssemblyStage simpleBatchAssemblyStage;
-
-    // ✅ FIXED: Use ApplicationProperties instead of ApplicationConfiguration
+    
     private final ApplicationProperties applicationProperties;
 
     /**
-     * ✅ FIXED: Single unified async method - no overload conflict
+     * ✅ SIMPLIFIED: Single async entry point for rate processing
      */
     @Async("pipelineTaskExecutor")
     public CompletableFuture<Void> processNewRate(BaseRateDto rawRate) {
         long startTime = System.currentTimeMillis();
-        
-        // ✅ CONFIG CHECK: Ensure configuration is ready
-        if (!applicationProperties.isConfigurationReady()) {
-            log.warn("Pipeline [{}]: Configuration not ready, skipping processing", 
-                    generatePipelineId(rawRate));
-            return CompletableFuture.completedFuture(null);
-        }
+        String pipelineId = SymbolUtils.generatePipelineId(rawRate);
         
         try {
-            // Create isolated execution context for this pipeline run
+            // ✅ SIMPLIFIED: Quick config validation
+            if (!applicationProperties.isConfigurationReady()) {
+                log.warn("Pipeline [{}]: Configuration not ready, skipping", pipelineId);
+                return CompletableFuture.completedFuture(null);
+            }
+            
+            // ✅ SIMPLIFIED: Create execution context with automatic snapshot initialization
             ExecutionContext context = ExecutionContext.builder()
                     .triggeringRate(rawRate)
                     .startTime(startTime)
-                    .pipelineId(generatePipelineId(rawRate))
+                    .pipelineId(pipelineId)
                     .build();
 
-            log.debug("Pipeline started: {} for symbol: {}", 
-                    context.getPipelineId(), rawRate.getSymbol());
+            log.debug("Pipeline [{}]: Started for {}", pipelineId, rawRate.getSymbol());
 
-            // Sequential stage execution within this async context
-            executeStages(context);
+            // ✅ SIMPLIFIED: Sequential stage execution
+            runPipelineStages(context);
 
             long duration = System.currentTimeMillis() - startTime;
-            log.info("✅ Pipeline completed: {} in {}ms", context.getPipelineId(), duration);
+            log.info("✅ Pipeline [{}]: Completed in {}ms with {} snapshot rates", 
+                    pipelineId, duration, context.getSnapshotRates().size());
 
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
-            log.error("❌ Pipeline failed for {}: {} ({}ms)", 
-                    rawRate.getSymbol(), e.getMessage(), duration, e);
+            log.error("❌ Pipeline [{}]: Failed after {}ms - {}", pipelineId, duration, e.getMessage(), e);
         }
 
         return CompletableFuture.completedFuture(null);
     }
 
     /**
-     * Execute all stages sequentially within this pipeline instance
+     * ✅ ENHANCED: Execute all stages with detailed snapshot tracking
      */
-    private void executeStages(ExecutionContext context) {
-        try {
-            // Stage 1: Raw Data Handling
-            rawDataHandlingStage.execute(context);
-            log.debug("Stage 1 completed: {}", context.getPipelineId());
+    private void runPipelineStages(ExecutionContext context) {
+        // Stage 1: Process raw rate (add triggering rate to snapshot)
+        rawDataHandlingStage.execute(context);
+        log.info("Pipeline [{}]: Stage 1 completed - {} rates in snapshot", 
+                context.getPipelineId(), context.getSnapshotRates().size());
 
-            // Stage 2: Average Calculation  
-            averageCalculationStage.execute(context);
-            log.debug("Stage 2 completed: {}", context.getPipelineId());
+        // Stage 2: Calculate averages (collect inputs from cache, add to snapshot)
+        averageCalculationStage.execute(context);
+        log.info("Pipeline [{}]: Stage 2 completed - {} rates in snapshot", 
+                context.getPipelineId(), context.getSnapshotRates().size());
+        
+        // ✅ DEBUG: Log snapshot contents before cross-rate stage
+        log.debug("📋 Snapshot before CROSS stage [{}]: {}", 
+                context.getPipelineId(), 
+                context.getSnapshotRates().stream()
+                    .map(rate -> rate.getSymbol() + "(" + rate.getRateType() + ")")
+                    .toList());
 
-            // Stage 3: Cross Rate Calculation
-            crossRateCalculationStage.execute(context);
-            log.debug("Stage 3 completed: {}", context.getPipelineId());
+        // Stage 3: Calculate cross rates (use snapshot data only)
+        crossRateCalculationStage.execute(context);
+        log.info("Pipeline [{}]: Stage 3 completed - {} rates in snapshot", 
+                context.getPipelineId(), context.getSnapshotRates().size());
 
-            // Stage 4: String Batch Assembly (FINAL)
-            simpleBatchAssemblyStage.execute(context);
-            log.debug("Stage 4 completed: {}", context.getPipelineId());
-            
-        } catch (Exception e) {
-            log.error("❌ Stage execution failed for pipeline: {}", context.getPipelineId(), e);
-            // Don't rethrow - pipeline should handle gracefully
-        }
-    }
-
-    /**
-     * ✅ FIXED: Single generatePipelineId method with rate parameter
-     */
-    private String generatePipelineId(BaseRateDto rate) {
-        return String.format("PIPE_%s_%s_%d", 
-                rate.getSymbol(), rate.getProviderName(), System.currentTimeMillis());
+        // Stage 4: Publish complete snapshot
+        simpleBatchAssemblyStage.execute(context);
+        log.info("Pipeline [{}]: Stage 4 completed - snapshot published", 
+                context.getPipelineId());
     }
 }

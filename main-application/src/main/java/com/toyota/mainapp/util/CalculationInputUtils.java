@@ -1,9 +1,9 @@
 package com.toyota.mainapp.util;
 
 import com.toyota.mainapp.cache.RateCacheService;
-import com.toyota.mainapp.calculator.pipeline.ExecutionContext;
 import com.toyota.mainapp.dto.config.CalculationRuleDto;
 import com.toyota.mainapp.dto.model.BaseRateDto;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -12,21 +12,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * ✅ UTILITY: Calculation input collection for pipeline stages
- * Standardized input gathering for average and cross rate calculations
+ * ✅ COMPLETE: Input collection utilities for calculation stages
  */
 @Component
+@RequiredArgsConstructor
 @Slf4j
 public class CalculationInputUtils {
 
-    /**
-     * ✅ COLLECT INPUT RATES: For average calculations (raw rates only)
-     */
-    public Map<String, BaseRateDto> collectInputRates(
-            CalculationRuleDto rule,
-            ExecutionContext context,
-            RateCacheService rateCacheService) {
+    private final RateCacheService rateCacheService;
 
+    /**
+     * ✅ CLEAN: Collect RAW inputs using simplified cache interface
+     */
+    public Map<String, BaseRateDto> collectRawInputs(CalculationRuleDto rule) {
         Map<String, BaseRateDto> inputRates = new HashMap<>();
 
         if (rule.getInputSymbols() == null || rule.getInputSymbols().isEmpty()) {
@@ -39,7 +37,7 @@ public class CalculationInputUtils {
             // Get all providers for this symbol from cache
             List<String> providers = List.of("TCPProvider2", "RESTProvider1"); // Could be config-driven
 
-            Map<String, BaseRateDto> symbolRates = rateCacheService.getRawRatesBatch(inputSymbol, providers);
+ Map<String, BaseRateDto> symbolRates = rateCacheService.getRawRatesForSymbol(inputSymbol, providers);
 
             // Add rates with provider-specific keys
             symbolRates.forEach((provider, rate) -> {
@@ -60,59 +58,94 @@ public class CalculationInputUtils {
     }
 
     /**
-     * ✅ COLLECT INPUT RATES FOR CROSS: Mix of raw and calculated rates
+     * ✅ CLEAN: Collect calculated inputs using simplified cache interface
      */
-    public Map<String, BaseRateDto> collectInputRatesForCross(
-            CalculationRuleDto rule,
-            ExecutionContext context,
-            RateCacheService rateCacheService) {
+    public Map<String, BaseRateDto> collectCalculatedInputs(CalculationRuleDto rule) {
+        Map<String, BaseRateDto> inputs = new HashMap<>();
 
-        Map<String, BaseRateDto> inputRates = new HashMap<>();
-
-        if (rule.getInputSymbols() == null || rule.getInputSymbols().isEmpty()) {
-            log.warn("No input symbols defined for cross rule: {}", rule.getOutputSymbol());
-            return inputRates;
+        if (rule.getRequiredCalculatedRates() == null || rule.getRequiredCalculatedRates().isEmpty()) {
+            return inputs;
         }
 
-        for (String inputSymbol : rule.getInputSymbols()) {
-            // ✅ STRATEGY: Try calculated rate first, then raw rate
+        // ✅ ENHANCED: Try multiple key patterns for calculated rates
+        for (String symbol : rule.getRequiredCalculatedRates()) {
             BaseRateDto rate = null;
-
-            // Check if it's a calculated rate (ends with _AVG or _CROSS)
-            if (inputSymbol.endsWith("_AVG") || inputSymbol.endsWith("_CROSS")) {
-                rate = rateCacheService.getCalculatedRate(inputSymbol);
-                log.debug("Looking for calculated rate: {}, found: {}", inputSymbol, rate != null);
-            }
-
-            // If not found as calculated, try as raw rate
-            if (rate == null) {
-                // Try to get from execution context first (recently calculated)
-                rate = context.getCalculatedRates().stream()
-                        .filter(r -> inputSymbol.equals(r.getSymbol()))
-                        .findFirst()
-                        .orElse(null);
-
-                if (rate == null) {
-                    // Get from cache as raw rate
-                    List<String> providers = List.of("TCPProvider2", "RESTProvider1");
-                    Map<String, BaseRateDto> symbolRates = rateCacheService.getRawRatesBatch(inputSymbol, providers);
-                    if (!symbolRates.isEmpty()) {
-                        rate = symbolRates.values().iterator().next();
-                    }
+            
+            // Try different key patterns to find the calculated rate
+            String[] possibleSymbols = {
+                symbol,                    // "CALC_EURUSD_AVG"
+                symbol + "_AVG",          // "EURUSD" -> "EURUSD_AVG"
+                "CALC_" + symbol,         // "EURUSD_AVG" -> "CALC_EURUSD_AVG"
+                symbol.replace("CALC_", "")  // "CALC_EURUSD_AVG" -> "EURUSD_AVG"
+            };
+            
+            for (String trySymbol : possibleSymbols) {
+                rate = rateCacheService.getCalculatedRate(trySymbol);
+                if (rate != null) {
+                    inputs.put(symbol, rate);
+                    log.debug("✅ Found calculated rate '{}' with key: {}", symbol, trySymbol);
+                    break;
                 }
             }
+            
+            if (rate == null) {
+                log.debug("❌ Missing calculated rate: {}", symbol);
+            }
+        }
+        
+        log.debug("Collected {} calculated rates", inputs.size());
+        return inputs;
+    }
 
-            if (rate != null) {
-                inputRates.put(inputSymbol, rate);
-                log.debug("Collected input rate for cross calculation: {} = {} bid, {} ask",
-                        inputSymbol, rate.getBid(), rate.getAsk());
-            } else {
-                log.warn("Could not find required input rate: {} for cross rule: {}",
-                        inputSymbol, rule.getOutputSymbol());
+    /**
+     * ✅ Collect ALL inputs (both raw and calculated) for comprehensive calculations
+     */
+    public Map<String, BaseRateDto> collectAllInputs(CalculationRuleDto rule) {
+        Map<String, BaseRateDto> allInputs = new HashMap<>();
+
+        // Collect raw inputs
+        Map<String, BaseRateDto> rawInputs = collectRawInputs(rule);
+        allInputs.putAll(rawInputs);
+
+        // Collect calculated inputs
+        Map<String, BaseRateDto> calculatedInputs = collectCalculatedInputs(rule);
+        allInputs.putAll(calculatedInputs);
+
+        log.debug("Collected total {} inputs for rule: {} (raw: {}, calculated: {})",
+                allInputs.size(), rule.getOutputSymbol(), rawInputs.size(), calculatedInputs.size());
+
+        return allInputs;
+    }
+
+    /**
+     * ✅ Validate if all required inputs are available
+     */
+    public boolean hasAllRequiredInputs(CalculationRuleDto rule, Map<String, BaseRateDto> availableInputs) {
+        // Check raw sources
+        List<String> rawSources = rule.getRawSources();
+        if (rawSources != null && !rawSources.isEmpty()) {
+            for (String symbol : rawSources) {
+                // For raw sources, we need at least one provider rate for the symbol
+                boolean hasSymbol = availableInputs.values().stream()
+                        .anyMatch(rate -> rate.getSymbol().equals(symbol));
+                if (!hasSymbol) {
+                    log.debug("Missing raw input for symbol: {}", symbol);
+                    return false;
+                }
             }
         }
 
-        log.debug("Collected {} input rates for cross rule: {}", inputRates.size(), rule.getOutputSymbol());
-        return inputRates;
+        // Check calculated dependencies
+        List<String> calculatedSources = rule.getRequiredCalculatedRates();
+        if (calculatedSources != null && !calculatedSources.isEmpty()) {
+            for (String symbol : calculatedSources) {
+                if (!availableInputs.containsKey(symbol)) {
+                    log.debug("Missing calculated input for symbol: {}", symbol);
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 }

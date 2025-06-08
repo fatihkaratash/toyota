@@ -28,10 +28,10 @@ public interface CalculationStrategy {
     
     /**
      * ✅ STRATEGY TYPE: Category for rule filtering  
-     * @return Strategy type (AVG, CROSS, etc.)
+     * @return Strategy type (AVG, CROSS, etc.) - must match CalculationRuleType enum codes
      */
     default String getStrategyType() {
-        return "GENERIC";
+        return "CUSTOM"; // Default to CUSTOM instead of GENERIC
     }
     
     /**
@@ -40,7 +40,17 @@ public interface CalculationStrategy {
      * @return true if strategy can process this rule
      */
     default boolean canHandle(CalculationRuleDto rule) {
-        return rule != null && rule.getStrategyType() != null;
+        if (rule == null) return false;
+        
+        // Check if strategy type matches rule type
+        String ruleType = rule.getType();
+        if (ruleType != null && ruleType.equals(getStrategyType())) {
+            return true;
+        }
+        
+        // Check if strategy name matches rule strategyType
+        String ruleStrategyType = rule.getStrategyType();
+        return ruleStrategyType != null && ruleStrategyType.equals(getStrategyName());
     }
 }
 

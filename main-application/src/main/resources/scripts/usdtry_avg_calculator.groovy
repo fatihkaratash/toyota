@@ -48,7 +48,7 @@ return [
     symbol: "USDTRY",
     bid: avgBid,
     ask: avgAsk,
-    timestamp: System.currentTimeMillis(),
+    rateTimestamp: System.currentTimeMillis(),
     rateType: RateType.CALCULATED.toString(),
     providerName: "AvgCalculator"
 ]

@@ -131,7 +131,7 @@ public class DynamicSubscriberLoader {
 
     /**
      * Abone örneği oluştur
-     * ✅ ENHANCED: Better error handling and logging
+     * ✅ ENHANCED: Better error handling and validation for immediate pipeline requirements
      */
     private PlatformSubscriber createSubscriberInstance(SubscriberConfigDto config, PlatformCallback callback) 
             throws ReflectiveOperationException, SubscriberInitializationException {
@@ -140,33 +140,32 @@ public class DynamicSubscriberLoader {
             throw new IllegalArgumentException("Implementation class not specified: " + config.getName());
         }
         
+        // Validate required dependencies for immediate pipeline
+        if (this.objectMapper == null) {
+            throw new SubscriberInitializationException("ObjectMapper is null, required for immediate pipeline");
+        }
+        if (this.subscriberTaskExecutor == null) {
+            throw new SubscriberInitializationException("TaskExecutor is null, required for immediate pipeline");
+        }
+        
         // RestRateSubscriber için özel işlem
         if (config.getImplementationClass().contains("RestRateSubscriber")) {
-            log.debug("✅ Creating RestRateSubscriber with specialized dependencies: {}", config.getName());
-
-            if (this.objectMapper == null) {
-                log.error("❌ ObjectMapper is null in DynamicSubscriberLoader");
-                throw new SubscriberInitializationException("ObjectMapper is null, cannot create " + config.getName());
-            }
-            if (this.subscriberTaskExecutor == null) {
-                log.error("❌ subscriberTaskExecutor is null in DynamicSubscriberLoader");
-                throw new SubscriberInitializationException("TaskExecutor is null, cannot create " + config.getName());
-            }
+            log.debug("✅ Creating RestRateSubscriber for immediate pipeline: {}", config.getName());
 
             RestRateSubscriber subscriber = new RestRateSubscriber(webClientBuilder, this.objectMapper, this.subscriberTaskExecutor);
             subscriber.init(config, callback);
-            log.info("✅ RestRateSubscriber created successfully: {}", config.getName());
+            log.info("✅ RestRateSubscriber created for immediate pipeline: {}", config.getName());
             return subscriber;
         }
         
         // TcpRateSubscriber için özel işlem
         if (config.getImplementationClass().contains("TcpRateSubscriber")) {
-            log.debug("✅ Creating TcpRateSubscriber: {}", config.getName());
+            log.debug("✅ Creating TcpRateSubscriber for immediate pipeline: {}", config.getName());
             
             com.toyota.mainapp.subscriber.impl.TcpRateSubscriber subscriber = 
                 new com.toyota.mainapp.subscriber.impl.TcpRateSubscriber();
             subscriber.init(config, callback);
-            log.info("✅ TcpRateSubscriber created successfully: {}", config.getName());
+            log.info("✅ TcpRateSubscriber created for immediate pipeline: {}", config.getName());
             return subscriber;
         }
         

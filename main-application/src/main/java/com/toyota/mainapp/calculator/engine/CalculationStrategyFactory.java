@@ -54,32 +54,37 @@ public class CalculationStrategyFactory {
     
     /**
      * ✅ PRIMARY LOOKUP: Get strategy for rule (used by pipeline stages)
+     * Simplified single-path lookup with clear precedence
      */
     public CalculationStrategy getStrategyForRule(CalculationRuleDto rule) {
-        if (rule == null || rule.getStrategyType() == null) {
-            log.warn("Invalid rule or missing strategy type");
+        if (rule == null) {
+            log.warn("Cannot get strategy for null rule");
             return null;
         }
         
-        // Primary lookup by exact strategy name
-        CalculationStrategy strategy = strategiesByName.get(rule.getStrategyType());
-        
-        if (strategy != null) {
-            // Validate strategy can handle this rule
-            if (strategy.canHandle(rule)) {
-                log.debug("✅ Strategy found: {} for rule: {}", 
+        // 1. PRIMARY: Try exact strategy name match first
+        if (rule.getStrategyType() != null) {
+            CalculationStrategy strategy = strategiesByName.get(rule.getStrategyType());
+            if (strategy != null && strategy.canHandle(rule)) {
+                log.debug("✅ Strategy found by name: {} for rule: {}", 
                         strategy.getStrategyName(), rule.getOutputSymbol());
                 return strategy;
-            } else {
-                log.warn("❌ Strategy {} cannot handle rule: {}", 
-                        strategy.getStrategyName(), rule.getOutputSymbol());
-                return null;
             }
         }
         
-        // Fallback: Search by strategy type
-        log.debug("Strategy '{}' not found by name, trying type lookup", rule.getStrategyType());
-        return getStrategyByType(rule.getType());
+        // 2. FALLBACK: Try by rule type (AVG, CROSS)
+        if (rule.getType() != null) {
+            CalculationStrategy strategy = strategiesByType.get(rule.getType());
+            if (strategy != null && strategy.canHandle(rule)) {
+                log.debug("✅ Strategy found by type: {} -> {} for rule: {}", 
+                        rule.getType(), strategy.getStrategyName(), rule.getOutputSymbol());
+                return strategy;
+            }
+        }
+        
+        log.warn("❌ No suitable strategy found for rule: {} (strategyType: {}, type: {})", 
+                rule.getOutputSymbol(), rule.getStrategyType(), rule.getType());
+        return null;
     }
     
     /**
@@ -107,7 +112,7 @@ public class CalculationStrategyFactory {
      */
     public boolean isStrategyAvailable(CalculationRuleDto rule) {
         CalculationStrategy strategy = getStrategyForRule(rule);
-        return strategy != null && strategy.canHandle(rule);
+        return strategy != null;
     }
     
     /**

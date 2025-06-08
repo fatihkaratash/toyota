@@ -36,9 +36,10 @@
     {
       "outputSymbol": "EURTRY_CROSS",
       "type": "CROSS",
-      "strategyType": "groovyScriptCalculationStrategy", 
+      "strategyType": "groovyScriptCalculationStrategy",
       "implementation": "scripts/eur_try_calculator.groovy",
       "inputSymbols": ["EURUSD_AVG", "USDTRY_AVG"],
+      "requiredCalculatedRates": ["EURUSD_AVG", "USDTRY_AVG"],
       "inputParameters": {
         "eurUsdAvgKey": "EURUSD_AVG",
         "usdTryAvgSourceKey": "USDTRY_AVG",
@@ -47,10 +48,11 @@
     },
     {
       "outputSymbol": "GBPTRY_CROSS",
-      "type": "CROSS", 
+      "type": "CROSS",
       "strategyType": "groovyScriptCalculationStrategy",
-      "implementation": "scripts/gbp_try_calculator.groovy", 
+      "implementation": "scripts/gbp_try_calculator.groovy",
       "inputSymbols": ["GBPUSD_AVG", "USDTRY_AVG"],
+      "requiredCalculatedRates": ["GBPUSD_AVG", "USDTRY_AVG"],
       "inputParameters": {
         "gbpUsdAvgKey": "GBPUSD_AVG",
         "usdTryAvgSourceKey": "USDTRY_AVG",

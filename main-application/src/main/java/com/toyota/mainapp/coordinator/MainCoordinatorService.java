@@ -116,14 +116,14 @@ public class MainCoordinatorService implements PlatformCallback {
     }
 
     /**
-     * ✅ REAL-TIME PIPELINE: Optimized data flow with dedicated executor
+     * ✅ ENHANCED: Immediate real-time pipeline with comprehensive snapshot collection
      */
     @Override
     public void onRateAvailable(String providerName, ProviderRateDto providerRate) {
         log.info("📊 Raw data received from {}: Symbol={}, Bid={}, Ask={}", 
                 providerName, providerRate.getSymbol(), providerRate.getBid(), providerRate.getAsk());
         
-        // ✅ ASYNC PROCESSING: Use dedicated pipeline executor
+        // ✅ IMMEDIATE PROCESSING: Use dedicated pipeline executor for instant response
         pipelineTaskExecutor.execute(() -> {
             try {
                 // Set provider name if missing
@@ -138,7 +138,7 @@ public class MainCoordinatorService implements PlatformCallback {
                 // 2. Symbol normalization and validation
                 String normalizedSymbol = SymbolUtils.normalizeSymbol(baseRate.getSymbol());
                 if (!SymbolUtils.isValidSymbol(normalizedSymbol)) {
-                    log.warn("❌ Invalid symbol format, skipping: '{}'", baseRate.getSymbol());
+                    log.warn("❌ Invalid symbol format, skipping immediate pipeline: '{}'", baseRate.getSymbol());
                     return;
                 }
                 baseRate.setSymbol(normalizedSymbol);
@@ -156,15 +156,15 @@ public class MainCoordinatorService implements PlatformCallback {
                 // 5. Publish to individual raw rate topic
                 kafkaPublishingService.publishRawRate(baseRate);
 
-                // 6. ✅ TRIGGER REAL-TIME PIPELINE: Each rate triggers complete processing
+                // 6. ✅ TRIGGER IMMEDIATE PIPELINE: Each rate triggers complete snapshot processing
                 realTimeBatchProcessor.processNewRate(baseRate);
-                log.debug("🚀 Real-time pipeline triggered for: {}", normalizedSymbol);
+                log.debug("🚀 Immediate pipeline triggered for snapshot generation: {}", normalizedSymbol);
 
             } catch (AggregatedRateValidationException e) {
                 log.warn("⚠️ Rate validation failed from {}: Symbol={}, Errors={}", 
                         providerName, providerRate.getSymbol(), e.getErrors());
             } catch (Exception e) {
-                log.error("❌ Error processing rate from {}: Symbol={}", 
+                log.error("❌ Error in immediate pipeline from {}: Symbol={}", 
                         providerName, providerRate.getSymbol(), e);
             }
         });
