@@ -11,6 +11,17 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.*;
 
+/**
+ * Toyota Financial Data Platform - TCP Rate Publisher Service
+ * 
+ * Core service for publishing financial rate data to TCP clients with
+ * real-time fluctuation simulation. Manages client subscriptions, rate
+ * broadcasting, and configurable update intervals for the TCP provider.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 public class RatePublisher {
     private static final LoggingHelper log = new LoggingHelper(RatePublisher.class);
 

@@ -8,6 +8,17 @@ import java.util.Date;
 import java.util.Objects;
 import java.util.TimeZone;
 
+/**
+ * Toyota Financial Data Platform - TCP Rate Data Model
+ *
+ * Data model representing financial rate information for TCP transmission.
+ * Supports JSON serialization and provides utility methods for rate
+ * manipulation within the TCP rate provider service.
+ *
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 public class Rate {
     @JsonProperty("pairName")
     private String pairName;

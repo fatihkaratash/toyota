@@ -14,6 +14,17 @@ import java.net.SocketException;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Toyota Financial Data Platform - TCP Client Handler
+ * 
+ * Handles individual TCP client connections with authentication, subscription
+ * management, and real-time rate streaming. Implements rate update listener
+ * interface for efficient client-specific rate distribution.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 public class ClientHandler implements Runnable, RateUpdateListener {
     private static final LoggingHelper log = new LoggingHelper(ClientHandler.class);
     private static final String AUTH_PREFIX = "AUTH|";

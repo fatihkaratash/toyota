@@ -14,6 +14,17 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
+/**
+ * Toyota Financial Data Platform - TCP Configuration Reader
+ * 
+ * Configuration management for TCP rate provider with properties loading,
+ * initial rate data loading, and security credential management. Supports
+ * both classpath and filesystem configuration sources.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 public class ConfigurationReader {
     private static final LoggingHelper log = new LoggingHelper(ConfigurationReader.class);
     private static final String PROPERTIES_FILE = "tcp-provider.properties";

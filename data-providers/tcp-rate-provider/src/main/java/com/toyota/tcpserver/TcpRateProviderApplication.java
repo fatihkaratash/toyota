@@ -5,6 +5,17 @@ import com.toyota.tcpserver.logging.LoggingHelper;
 import com.toyota.tcpserver.network.TcpServer;
 import org.apache.logging.log4j.LogManager;
 
+/**
+ * Toyota Financial Data Platform - TCP Rate Provider Application
+ * 
+ * Main application entry point for the TCP-based financial rate data provider.
+ * Provides authenticated TCP socket connections for real-time rate streaming
+ * with subscription-based rate distribution across the Toyota platform.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 public class TcpRateProviderApplication {
     private static final LoggingHelper log = new LoggingHelper(TcpRateProviderApplication.class);
 

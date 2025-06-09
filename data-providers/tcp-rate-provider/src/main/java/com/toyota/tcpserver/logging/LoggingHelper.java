@@ -5,7 +5,15 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.ThreadContext;
 
 /**
- * LoggingHelper - Standart formatta loglar üreten yardımcı sınıf.
+ * Toyota Financial Data Platform - TCP Logging Helper Utility
+ * 
+ * Centralized logging utility providing structured log message formatting
+ * with operation types, platform identifiers, and rate information for
+ * comprehensive monitoring of the TCP rate provider service.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 public class LoggingHelper {
     

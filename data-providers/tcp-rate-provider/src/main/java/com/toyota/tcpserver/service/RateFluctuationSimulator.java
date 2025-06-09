@@ -5,6 +5,17 @@ import com.toyota.tcpserver.model.Rate;
 import com.toyota.tcpserver.logging.LoggingHelper;
 import java.util.Random;
 
+/**
+ * Toyota Financial Data Platform - Rate Fluctuation Simulator
+ * 
+ * Simulates realistic financial rate fluctuations with configurable volatility
+ * and spread parameters. Provides market-like rate movements for testing and
+ * demonstration purposes within the TCP rate provider service.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 public class RateFluctuationSimulator {
     private static final LoggingHelper log = new LoggingHelper(RateFluctuationSimulator.class);
     private final Random random = new Random();

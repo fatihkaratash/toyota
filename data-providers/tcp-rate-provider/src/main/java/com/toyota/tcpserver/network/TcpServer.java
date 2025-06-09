@@ -12,6 +12,17 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Toyota Financial Data Platform - TCP Server
+ * 
+ * Multi-threaded TCP server for financial rate data distribution with
+ * authentication support. Manages client connections, rate publishing,
+ * and graceful shutdown for the TCP rate provider service.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 public class TcpServer {
     private static final LoggingHelper log = new LoggingHelper(TcpServer.class);
 
