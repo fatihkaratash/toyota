@@ -106,3 +106,20 @@ docker exec -it postgres psql -U postgres -d toyota_rates
 SELECT COUNT(*) FROM rates;
 SELECT * FROM rates ORDER BY rate_updatetime DESC LIMIT 10;
 SELECT rate_name, COUNT(*) FROM rates GROUP BY rate_name;
+
+
+# Kafka topic'lerini canlı takip etmek için
+docker exec -it kafka kafka-console-consumer --bootstrap-server localhost:29092 --topic financial-simple-rates --from-beginning
+
+# OpenSearch index'lerini kontrol etmek için
+curl "http://localhost:9200/financial-simple-rates/_search?pretty"
+
+# Pipeline ID'lerini içeren mesajları filtrelemek için
+curl -X GET "http://localhost:9200/financial-*/_search?pretty" -H 'Content-Type: application/json' -d'
+{
+  "query": {
+    "exists": {
+      "field": "pipeline_execution_id"
+    }
+  }
+}'

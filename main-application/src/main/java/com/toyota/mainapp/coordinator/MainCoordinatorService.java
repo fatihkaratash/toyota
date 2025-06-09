@@ -3,6 +3,7 @@ package com.toyota.mainapp.coordinator;
 import com.toyota.mainapp.cache.RateCacheService;
 import com.toyota.mainapp.calculator.RealTimeBatchProcessor;
 import com.toyota.mainapp.coordinator.callback.PlatformCallback;
+import com.toyota.mainapp.dto.config.SubscriberConfigDto;
 import com.toyota.mainapp.dto.model.BaseRateDto;
 import com.toyota.mainapp.dto.model.ProviderRateDto;
 import com.toyota.mainapp.exception.AggregatedRateValidationException;
@@ -10,6 +11,8 @@ import com.toyota.mainapp.kafka.KafkaPublishingService;
 import com.toyota.mainapp.mapper.RateMapper;
 import com.toyota.mainapp.subscriber.api.PlatformSubscriber;
 import com.toyota.mainapp.subscriber.dynamic.DynamicSubscriberLoader;
+import com.toyota.mainapp.subscriber.impl.RestRateSubscriber;
+import com.toyota.mainapp.subscriber.impl.TcpRateSubscriber;
 import com.toyota.mainapp.util.SymbolUtils;
 import com.toyota.mainapp.validation.RateValidatorService;
 import jakarta.annotation.PostConstruct;
@@ -21,14 +24,11 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import com.toyota.mainapp.config.ApplicationProperties;
 
-/**
-Real-time pipeline coordinator with ApplicationProperties integration
- * Clean separation: data acquisition → validation → real-time batch processing
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -48,74 +48,50 @@ public class MainCoordinatorService implements PlatformCallback {
 
     private final Map<String, PlatformSubscriber> activeSubscribers = new ConcurrentHashMap<>();
 
-    /**
-     * Servisi başlat ve aboneleri yükle
-     */
     @PostConstruct
     public void initializeAndStartSubscribers() {
         log.info("MainCoordinatorService initializing...");
         
-        // Check environment for startup delay
         int startupDelaySeconds = getEnvInt("STARTUP_DELAY_SECONDS", 10);
-        
         try {
-            log.info("Waiting for {} seconds to allow Kafka to initialize...", startupDelaySeconds);
             Thread.sleep(startupDelaySeconds * 1000L);
-            log.info("Proceeding with subscriber initialization.");
         } catch (InterruptedException e) {
-            log.warn("Kafka startup delay interrupted.", e);
             Thread.currentThread().interrupt();
         }
 
-        String configPathToUse = appProperties.getSubscribersConfigPath();
-        log.info("Aboneler yükleniyor: {}", configPathToUse);
-        
         try {
-            Collection<PlatformSubscriber> subscribers = dynamicSubscriberLoader.loadSubscribers(configPathToUse, this);
+            Collection<PlatformSubscriber> subscribers = dynamicSubscriberLoader.loadSubscribers(
+                appProperties.getSubscribersConfigPath(), this);
             
             if (subscribers.isEmpty()) {
-                log.warn("Hiç abone yüklenemedi");
+                log.warn("No subscribers loaded");
                 return;
             }
 
-            log.info("{} abone başarıyla yüklendi", subscribers.size());
+            log.info("Loaded {} subscribers", subscribers.size());
             
-            // Her aboneyi kendi iş parçacığında başlat
             subscribers.forEach(subscriber -> {
-                String providerName = subscriber.getProviderName();
-                activeSubscribers.put(providerName, subscriber);
-                
+                activeSubscribers.put(subscriber.getProviderName(), subscriber);
                 subscriberTaskExecutor.execute(() -> startSubscriber(subscriber));
             });
             
         } catch (Exception e) {
-            log.error("Aboneler yüklenirken hata oluştu", e);
+            log.error("Error loading subscribers", e);
         }
     }
     
-    /**
-     * Bir aboneyi başlat
-     */
     private void startSubscriber(PlatformSubscriber subscriber) {
         String providerName = subscriber.getProviderName();
         try {
-            log.info("Abone bağlanıyor: {}", providerName);
             subscriber.connect();
-            
             if (subscriber.isConnected()) {
-                log.info("Abone ana döngüsü başlatılıyor: {}", providerName);
                 subscriber.startMainLoop();
             }
         } catch (Exception e) {
-            log.error("Abone çalışması sırasında hata: {}", providerName, e);
-            onProviderConnectionStatus(providerName, false, "Bağlantı veya çalışma hatası: " + e.getMessage());
-            onProviderError(providerName, "Bağlantı veya çalışma başarısız oldu", e);
+            log.error("Subscriber startup error: {}", providerName, e);
         }
     }
 
-    /**
-     Immediate real-time pipeline with comprehensive snapshot collection
-     */
     @Override
     public void onRateAvailable(String providerName, ProviderRateDto providerRate) {
         pipelineTaskExecutor.execute(() -> {
@@ -125,13 +101,11 @@ public class MainCoordinatorService implements PlatformCallback {
                 }
 
                 BaseRateDto baseRate = rateMapper.toBaseRateDto(providerRate);
-
                 String normalizedSymbol = SymbolUtils.normalizeSymbol(baseRate.getSymbol());
-                if (!SymbolUtils.isValidSymbol(normalizedSymbol)) {
-                    return;
-                }
+                
+                if (!SymbolUtils.isValidSymbol(normalizedSymbol)) return;
+                
                 baseRate.setSymbol(normalizedSymbol);
-
                 rateValidatorService.validate(baseRate);
                 baseRate.setValidatedAt(System.currentTimeMillis());
 
@@ -142,7 +116,7 @@ public class MainCoordinatorService implements PlatformCallback {
             } catch (AggregatedRateValidationException e) {
                 log.warn("Rate validation failed from {}: {}", providerName, e.getErrors());
             } catch (Exception e) {
-                log.error("Error in pipeline from {}: {}", providerName, e.getMessage());
+                log.error("Pipeline error from {}: {}", providerName, e.getMessage());
             }
         });
     }
@@ -154,17 +128,12 @@ public class MainCoordinatorService implements PlatformCallback {
 
     @Override
     public void onProviderConnectionStatus(String providerName, boolean isConnected, String statusMessage) {
-        if (isConnected) {
-            log.info("Provider connected {}", providerName);
-        } else {
-            log.warn("Provider disconnected {}", providerName);
-        }
+        log.info("Provider {} {}", providerName, isConnected ? "connected" : "disconnected");
     }
 
     @Override
     public void onRateStatus(String providerName, BaseRateDto statusRate) {
         kafkaPublishingService.publishRate(statusRate);
-        
         if (statusRate.getStatus() == BaseRateDto.RateStatusEnum.ERROR) {
             log.warn("Error status from provider {}: {}", providerName, statusRate.getSymbol());
         }
@@ -176,30 +145,138 @@ public class MainCoordinatorService implements PlatformCallback {
     }
 
     public void stopSubscriber(String providerName) {
-        log.info("Abone durduruluyor: {}", providerName);
-        
-        PlatformSubscriber subscriber = activeSubscribers.get(providerName);
+        PlatformSubscriber subscriber = activeSubscribers.remove(providerName);
         if (subscriber != null) {
             try {
                 subscriber.stopMainLoop();
                 subscriber.disconnect();
-                activeSubscribers.remove(providerName);
-                log.info("Abone başarıyla durduruldu: {}", providerName);
             } catch (Exception e) {
-                log.error("Abone durdurulurken hata oluştu: {}", providerName, e);
+                log.error("Error stopping subscriber: {}", providerName, e);
             }
-        } else {
-            log.warn("Durdurulamadı, abone bulunamadı: {}", providerName);
         }
     }
 
     @PreDestroy
     public void shutdownCoordinator() {
-        log.info("Koordinatör ve tüm aboneler kapatılıyor");
-        activeSubscribers.keySet()
-            .forEach(this::stopSubscriber);
-            
-        log.info("Koordinatör kapatma işlemi tamamlandı");
+        log.info("Shutting down coordinator");
+        activeSubscribers.keySet().forEach(this::stopSubscriber);
+    }
+
+    public Map<String, Object> getActiveSubscribersStatus() {
+        Map<String, Object> status = new HashMap<>();
+        Map<String, Object> subscribers = new HashMap<>();
+        
+        activeSubscribers.forEach((name, subscriber) -> {
+            Map<String, Object> subscriberInfo = new HashMap<>();
+            subscriberInfo.put("connected", subscriber.isConnected());
+            subscriberInfo.put("type", subscriber.getClass().getSimpleName());
+            subscribers.put(name, subscriberInfo);
+        });
+        
+        status.put("activeCount", activeSubscribers.size());
+        status.put("subscribers", subscribers);
+        status.put("timestamp", System.currentTimeMillis());
+        
+        return status;
+    }
+
+    public void restartSubscriber(String providerName) {
+        stopSubscriber(providerName);
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        reloadSubscribersConfiguration();
+    }
+
+    public Map<String, Object> getSystemHealthStatus() {
+        Map<String, Object> health = new HashMap<>();
+        
+        int totalSubscribers = activeSubscribers.size();
+        long connectedCount = activeSubscribers.values().stream()
+            .mapToLong(subscriber -> subscriber.isConnected() ? 1 : 0)
+            .sum();
+        
+        health.put("totalSubscribers", totalSubscribers);
+        health.put("connectedSubscribers", connectedCount);
+        health.put("healthScore", totalSubscribers > 0 ? (connectedCount * 100.0 / totalSubscribers) : 0);
+        health.put("status", connectedCount == totalSubscribers ? "HEALTHY" : "DEGRADED");
+        health.put("timestamp", System.currentTimeMillis());
+        
+        return health;
+    }
+
+    public void reloadSubscribersConfiguration() {
+        activeSubscribers.keySet().forEach(this::stopSubscriber);
+        try {
+            Thread.sleep(3000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        initializeAndStartSubscribers();
+    }
+
+    public boolean addSymbolSubscription(String providerName, String symbol) {
+        PlatformSubscriber subscriber = activeSubscribers.get(providerName);
+        if (subscriber == null) return false;
+        
+        if (subscriber instanceof TcpRateSubscriber) {
+            return ((TcpRateSubscriber) subscriber).addSymbolSubscription(symbol.toUpperCase());
+        } else if (subscriber instanceof RestRateSubscriber) {
+            return ((RestRateSubscriber) subscriber).addSymbolToPolling(symbol.toUpperCase());
+        }
+        
+        return false;
+    }
+
+    public boolean removeSymbolSubscription(String providerName, String symbol) {
+        PlatformSubscriber subscriber = activeSubscribers.get(providerName);
+        if (subscriber == null) return false;
+        
+        if (subscriber instanceof TcpRateSubscriber) {
+            return ((TcpRateSubscriber) subscriber).removeSymbolSubscription(symbol.toUpperCase());
+        } else if (subscriber instanceof RestRateSubscriber) {
+            return ((RestRateSubscriber) subscriber).removeSymbolFromPolling(symbol.toUpperCase());
+        }
+        
+        return false;
+    }
+
+    public Map<String, Object> getProviderSubscriptions(String providerName) {
+        Map<String, Object> result = new HashMap<>();
+        PlatformSubscriber subscriber = activeSubscribers.get(providerName);
+        
+        if (subscriber == null) {
+            result.put("error", "Provider not found");
+            return result;
+        }
+        
+        result.put("providerName", providerName);
+        result.put("type", subscriber.getClass().getSimpleName());
+        result.put("connected", subscriber.isConnected());
+        
+        if (subscriber instanceof TcpRateSubscriber) {
+            result.put("activeSubscriptions", ((TcpRateSubscriber) subscriber).getActiveSubscriptions());
+            result.put("protocol", "TCP");
+        } else if (subscriber instanceof RestRateSubscriber) {
+            result.put("pollingSymbols", ((RestRateSubscriber) subscriber).getPollingSymbols());
+            result.put("protocol", "REST");
+        }
+        
+        return result;
+    }
+
+    public void addNewProvider(SubscriberConfigDto config) throws Exception {
+        if (activeSubscribers.containsKey(config.getName())) {
+            throw new IllegalArgumentException("Provider already exists: " + config.getName());
+        }
+        
+        PlatformSubscriber subscriber = dynamicSubscriberLoader.createSubscriberInstance(config, this);
+        activeSubscribers.put(config.getName(), subscriber);
+        subscriberTaskExecutor.execute(() -> startSubscriber(subscriber));
+        
+        log.info("New provider added: {}", config.getName());
     }
 
     private int getEnvInt(String envName, int defaultValue) {
@@ -208,7 +285,7 @@ public class MainCoordinatorService implements PlatformCallback {
             try {
                 return Integer.parseInt(envValue.trim());
             } catch (NumberFormatException e) {
-                log.warn("Invalid integer value for {}: {}, using default: {}", envName, envValue, defaultValue);
+                // Fall through to default
             }
         }
         return defaultValue;

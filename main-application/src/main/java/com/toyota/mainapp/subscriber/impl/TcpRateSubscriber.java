@@ -9,7 +9,10 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.*;
 import java.net.Socket;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
@@ -18,123 +21,74 @@ public class TcpRateSubscriber implements PlatformSubscriber {
     private PlatformCallback callback;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicBoolean connected = new AtomicBoolean(false);
-    private final AtomicBoolean authenticated = new AtomicBoolean(false);
 
     private Socket socket;
     private BufferedReader reader;
     private PrintWriter writer;
 
-    private String host = "tcp-rate-provider";
-    private int port = 8081;
-    private int timeout = 30000;
-    private int retries = 10;
-    private String[] symbols = new String[0];
-
-    // Authentication and retry configuration from environment
+    private String host;
+    private int port;
+    private int timeout;
+    private int retries;
+    private String[] symbols;
     private String username;
     private String password;
-    private int authTimeoutSeconds;
-    private int connectionTimeoutSeconds;
-    private int maxRetryAttempts;
-    private int initialRetryDelayMs;
-    private double retryBackoffMultiplier;
 
-    private static final String AUTH_SUCCESS_RESPONSE = "OK|Authenticated";
-    private static final String AUTH_FAILED_PREFIX = "ERROR|";
+    private final Set<String> dynamicSubscriptions = ConcurrentHashMap.newKeySet();
 
     @Override
     public void init(SubscriberConfigDto config, PlatformCallback callback) {
         this.providerName = config.getName();
         this.callback = callback;
 
-        // Load timeout and retry configurations from environment
-        this.authTimeoutSeconds = getEnvInt("AUTH_TIMEOUT_SECONDS", 5);
-        this.connectionTimeoutSeconds = getEnvInt("CONNECTION_TIMEOUT_SECONDS", 3);
-        this.maxRetryAttempts = getEnvInt("MAX_RETRY_ATTEMPTS", 3);
-        this.initialRetryDelayMs = getEnvInt("INITIAL_RETRY_DELAY_MS", 100);
-        this.retryBackoffMultiplier = getEnvDouble("RETRY_BACKOFF_MULTIPLIER", 2.0);
+        // Load config
+        Map<String, Object> connConfig = config.getConnectionConfig();
+        this.host = SubscriberUtils.getConfigValue(connConfig, "host", "tcp-rate-provider");
+        this.port = SubscriberUtils.getConfigValue(connConfig, "port", 8081);
+        this.timeout = getEnvInt("CONNECTION_TIMEOUT_SECONDS", 3) * 1000;
+        this.retries = getEnvInt("MAX_RETRY_ATTEMPTS", 3);
+        this.symbols = SubscriberUtils.getSymbols(connConfig, this.providerName);
+        this.username = SubscriberUtils.getConfigValue(connConfig, "username", System.getenv("CLIENT_TCP_USERNAME"));
+        this.password = SubscriberUtils.getConfigValue(connConfig, "password", System.getenv("CLIENT_TCP_PASSWORD"));
 
-        if (config.getConnectionConfig() != null) {
-            Map<String, Object> connConfig = config.getConnectionConfig();
-            this.host = SubscriberUtils.getConfigValue(connConfig, "host", "tcp-rate-provider");
-            this.port = SubscriberUtils.getConfigValue(connConfig, "port", 8081);
-            this.timeout = this.connectionTimeoutSeconds * 1000; // Convert to ms
-            this.retries = this.maxRetryAttempts;
-            this.symbols = SubscriberUtils.getSymbols(connConfig, this.providerName);
-
-            // Get authentication credentials
-            this.username = SubscriberUtils.getConfigValue(connConfig, "username",
-                    System.getenv("CLIENT_TCP_USERNAME"));
-            this.password = SubscriberUtils.getConfigValue(connConfig, "password",
-                    System.getenv("CLIENT_TCP_PASSWORD"));
-            if (this.username == null || this.username.isEmpty()) {
-                String errorMsg = String.format(
-                        "[%s] TCP username ZORUNLU! Config 'username' veya CLIENT_TCP_USERNAME environment variable tanımlanmalı",
-                        providerName);
-                log.error(errorMsg);
-                throw new IllegalArgumentException(errorMsg);
-            }
-            if (this.password == null || this.password.isEmpty()) {
-                String errorMsg = String.format(
-                        "[%s] TCP password ZORUNLU! Config 'password' veya CLIENT_TCP_PASSWORD environment variable tanımlanmalı",
-                        providerName);
-                log.error(errorMsg);
-                throw new IllegalArgumentException(errorMsg);
-            }
-
+        if (username == null || username.isEmpty() || password == null || password.isEmpty()) {
+            throw new IllegalArgumentException("TCP username and password required");
         }
 
-        log.debug("[{}] TCP Subscriber initialized with config: host={}, port={}, timeout={}, retries={}, symbols={}",
-                providerName, host, port, timeout, retries, Arrays.toString(symbols));
-        log.info("[{}] TCP authentication config - Username: '{}', Password configured: {}",
-                providerName, username, password != null && !password.isEmpty() && !"defaultpass".equals(password));
-        log.info("TCP abone başlatıldı: {}", providerName);
+        log.info("[{}] TCP Subscriber initialized - host: {}, port: {}, symbols: {}", 
+                providerName, host, port, symbols.length);
     }
 
     @Override
     public void connect() {
         int attempt = 0;
-        Exception lastError = null;
-        long currentDelay = initialRetryDelayMs;
+        long delay = 100;
 
         while (attempt < retries && !connected.get()) {
             try {
                 attempt++;
-
                 socket = new Socket();
                 socket.connect(new java.net.InetSocketAddress(host, port), timeout);
-                socket.setSoTimeout(authTimeoutSeconds * 1000); // Auth timeout
+                socket.setSoTimeout(5000);
                 reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 writer = new PrintWriter(socket.getOutputStream(), true);
 
                 connected.set(true);
-                log.info("[{}] TCP bağlantısı başarıyla kuruldu: {}:{}", providerName, host, port);
-
-                // Perform authentication with timeout
+                
                 if (performAuthentication()) {
-                    authenticated.set(true);
-                    callback.onProviderConnectionStatus(providerName, true,
-                            "TCP bağlantısı ve authentication başarılı");
+                    callback.onProviderConnectionStatus(providerName, true, "TCP connected and authenticated");
                     return;
                 } else {
-                    log.error("[{}] TCP authentication başarısız, bağlantı kapatılıyor", providerName);
                     closeResources();
                     connected.set(false);
-                    authenticated.set(false);
                 }
 
             } catch (IOException e) {
-                lastError = e;
-                log.warn("[{}] TCP bağlantı hatası deneme {}/{}: {}:{} - {}",
-                        providerName, attempt, retries, host, port, e.getMessage());
-                
                 if (attempt < retries) {
                     try {
-                        log.debug("[{}] Exponential backoff: {}ms bekleniyor", providerName, currentDelay);
-                        Thread.sleep(currentDelay);
-                        currentDelay = (long)(currentDelay * retryBackoffMultiplier);
+                        Thread.sleep(delay);
+                        delay *= 2;
                     } catch (InterruptedException ie) {
-                        log.warn("[{}] TCP bağlantı denemesi bekleme kesintiye uğradı", providerName);
                         Thread.currentThread().interrupt();
                         break;
                     }
@@ -142,137 +96,93 @@ public class TcpRateSubscriber implements PlatformSubscriber {
             }
         }
 
-        log.error("[{}] TCP bağlantısı {} denemeden sonra kurulamadı: {}:{}", providerName, retries, host, port,
-                (lastError != null ? lastError.getMessage() : "Bilinmeyen hata"), lastError);
-        callback.onProviderConnectionStatus(providerName, false,
-                "TCP bağlantısı kurulamadı: " + (lastError != null ? lastError.getMessage() : "Bilinmeyen hata"));
+        log.error("[{}] TCP connection failed after {} attempts", providerName, retries);
+        callback.onProviderConnectionStatus(providerName, false, "TCP connection failed");
     }
 
     private boolean performAuthentication() throws IOException {
-        log.debug("[{}] TCP authentication süreci başlatılıyor - Username: '{}', Password configured: {}",
-                providerName, username, password != null && !password.isEmpty());
-
-        // Send authentication message
-        String authMessage = "AUTH|" + username + "|" + password;
-        log.info("[{}] TCP authentication mesajı gönderiliyor: '{}'", providerName, authMessage);
-
-        writer.println(authMessage);
+        writer.println("AUTH|" + username + "|" + password);
         writer.flush();
 
-        // Read authentication response
         String response = reader.readLine();
-        log.info("[{}] TCP Provider authentication yanıtı: '{}'", providerName, response);
-
-        if (AUTH_SUCCESS_RESPONSE.equals(response)) {
-            log.info("[{}] TCP Provider authentication başarılı - Kullanıcı: '{}'", providerName, username);
-            return true;
-        } else if (response != null && response.startsWith(AUTH_FAILED_PREFIX)) {
-            log.warn("[{}] TCP Provider authentication başarısız: '{}'", providerName, response);
-        } else {
-            log.warn("[{}] TCP Provider authentication - beklenmedik yanıt: '{}'", providerName, response);
+        boolean success = "OK|Authenticated".equals(response);
+        
+        if (!success) {
+            log.error("[{}] TCP authentication failed: {}", providerName, response);
         }
-
-        return false;
+        
+        return success;
     }
 
     @Override
     public void disconnect() {
-        log.info("[{}] TCP bağlantısı kapatılıyor...", providerName);
+        running.set(false);
         closeResources();
         connected.set(false);
-        authenticated.set(false);
-        callback.onProviderConnectionStatus(providerName, false, "TCP bağlantısı kapatıldı");
-        log.info("[{}] TCP bağlantısı kapatıldı.", providerName);
+        callback.onProviderConnectionStatus(providerName, false, "TCP disconnected");
     }
 
     @Override
     public void startMainLoop() {
-        if (!connected.get() || !authenticated.get()) {
-            log.warn("[{}] TCP ana döngüsü başlatılamadı, bağlantı yok veya authenticated değil.", providerName);
-            return;
-        }
-        if (running.get()) {
-            log.warn("[{}] TCP ana döngüsü zaten çalışıyor.", providerName);
+        if (!connected.get()) {
+            log.warn("[{}] Cannot start main loop - not connected", providerName);
             return;
         }
 
-        running.set(true);
-        log.info("[{}] TCP ana döngüsü başlatılıyor.", providerName);
+        if (running.compareAndSet(false, true)) {
+            // Subscribe to configured symbols
+            for (String symbol : symbols) {
+                writer.println("subscribe|" + symbol.toUpperCase());
+                writer.flush();
+            }
 
-        // Subscribe using proper format - only after authentication
-        for (String symbol : symbols) {
-            String uppercaseSymbol = symbol.toUpperCase();
-            writer.println("subscribe|" + uppercaseSymbol);
-            writer.flush();
-            log.info("[{}] Sent SUBSCRIBE command for symbol: {}", providerName, uppercaseSymbol);
-        }
-
-        Thread thread = new Thread(() -> {
-            log.info("[{}] TCP ana dinleme thread'i başlatıldı.", providerName);
-            while (running.get()) {
-                try {
-                    if (!connected.get() || !authenticated.get()) {
-                        log.warn("[{}] TCP bağlantısı yok veya authenticated değil, yeniden bağlanmaya çalışılıyor...",
-                                providerName);
-                        reconnect();
-                        continue;
-                    }
-
-                    String line = reader.readLine();
-
-                    if (line == null) {
-                        handleConnectionLost("Bağlantı kapatıldı (sunucu null gönderdi)");
-                        continue;
-                    }
-
-                    // ✅ OPTIMIZED: Process immediately for real-time pipeline
-                    processLine(line);
-                    
-                } catch (IOException e) {
-                    if (running.get()) {
-                        log.error("[{}] TCP okuma hatası: {}", providerName, e.getMessage(), e);
-                        handleConnectionLost("Okuma hatası: " + e.getMessage());
-                    }
-                } catch (Exception e) {
-                    if (running.get()) {
-                        log.error("[{}] TCP işleme sırasında beklenmedik hata: {}", providerName, e.getMessage(), e);
-                        callback.onProviderError(providerName, "TCP veri işleme hatası", e);
-                    }
-                }
-
-                // ✅ OPTIMIZED: Reduced sleep time for real-time processing
-                if (!connected.get() && running.get()) {
+            Thread thread = new Thread(() -> {
+                while (running.get()) {
                     try {
-                        Thread.sleep(500); // Reduced from 1000ms
-                    } catch (InterruptedException ie) {
-                        log.warn("[{}] Yeniden bağlanma beklemesi kesintiye uğradı", providerName, ie);
-                        Thread.currentThread().interrupt();
-                        break;
+                        if (!connected.get()) {
+                            reconnect();
+                            continue;
+                        }
+
+                        String line = reader.readLine();
+                        if (line == null) {
+                            handleConnectionLost();
+                            continue;
+                        }
+
+                        processLine(line);
+                        
+                    } catch (IOException e) {
+                        if (running.get()) {
+                            log.error("[{}] TCP read error: {}", providerName, e.getMessage());
+                            handleConnectionLost();
+                        }
+                    } catch (Exception e) {
+                        log.error("[{}] Processing error: {}", providerName, e.getMessage());
+                        callback.onProviderError(providerName, "TCP processing error", e);
+                    }
+
+                    if (!connected.get() && running.get()) {
+                        try {
+                            Thread.sleep(1000);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
                     }
                 }
-            }
+                closeResources();
+            });
 
-            log.info("[{}] TCP ana dinleme thread'i sonlandırılıyor.", providerName);
-            closeResources();
-            connected.set(false);
-            authenticated.set(false);
-            if (callback != null) {
-                callback.onProviderConnectionStatus(providerName, false, "TCP bağlantısı kapatıldı (döngü sonu)");
-            }
-        });
-
-        thread.setName("TCP-" + providerName);
-        thread.setDaemon(true);
-        thread.start();
+            thread.setName("TCP-" + providerName);
+            thread.setDaemon(true);
+            thread.start();
+        }
     }
 
     private void reconnect() {
-        if (!running.get()) {
-            log.debug("[{}] Yeniden bağlanma atlandı, ana döngü çalışmıyor.", providerName);
-            return;
-        }
+        if (!running.get()) return;
 
-        log.info("[{}] TCP yeniden bağlanılıyor...", providerName);
         closeResources();
 
         try {
@@ -283,64 +193,47 @@ public class TcpRateSubscriber implements PlatformSubscriber {
 
             connected.set(true);
 
-            // Re-authenticate after reconnection
             if (performAuthentication()) {
-                authenticated.set(true);
-                log.info("[{}] TCP bağlantısı ve authentication başarıyla yeniden kuruldu: {}:{}", providerName, host,
-                        port);
-                callback.onProviderConnectionStatus(providerName, true,
-                        "TCP bağlantısı ve authentication yeniden kuruldu");
+                callback.onProviderConnectionStatus(providerName, true, "TCP reconnected");
 
-                // Re-subscribe to symbols
+                // Re-subscribe to all symbols
                 for (String symbol : symbols) {
-                    String uppercaseSymbol = symbol.toUpperCase();
-                    log.debug("[{}] Sending RE-SUBSCRIBE command for symbol: {} after reconnect", providerName,
-                            uppercaseSymbol);
-                    writer.println("subscribe|" + uppercaseSymbol);
+                    writer.println("subscribe|" + symbol.toUpperCase());
                     writer.flush();
-                    log.info("[{}] Sent RE-SUBSCRIBE command for symbol: {} after reconnect", providerName,
-                            uppercaseSymbol);
+                }
+                for (String symbol : dynamicSubscriptions) {
+                    writer.println("subscribe|" + symbol);
+                    writer.flush();
                 }
             } else {
-                log.error("[{}] TCP yeniden authentication başarısız", providerName);
                 connected.set(false);
-                authenticated.set(false);
             }
         } catch (IOException e) {
-            log.error("[{}] TCP yeniden bağlanma hatası: {}:{} - {}", providerName, host, port, e.getMessage(), e);
+            log.error("[{}] Reconnection failed: {}", providerName, e.getMessage());
             connected.set(false);
-            authenticated.set(false);
-
             try {
-                log.debug("[{}] Yeniden bağlanma hatası sonrası 3 saniye bekleniyor...", providerName);
                 Thread.sleep(3000);
             } catch (InterruptedException ie) {
-                log.warn("[{}] Yeniden bağlanma hatası beklemesi kesintiye uğradı", providerName, ie);
                 Thread.currentThread().interrupt();
             }
         }
     }
 
-    private void handleConnectionLost(String reason) {
-        log.warn("[{}] TCP bağlantısı koptu: {}", providerName, reason);
+    private void handleConnectionLost() {
         connected.set(false);
-        authenticated.set(false);
-        callback.onProviderConnectionStatus(providerName, false, "TCP bağlantısı koptu: " + reason);
+        callback.onProviderConnectionStatus(providerName, false, "TCP connection lost");
         closeResources();
-        log.debug("[{}] handleConnectionLost tamamlandı.", providerName);
     }
 
     @Override
     public void stopMainLoop() {
-        log.info("[{}] TCP ana döngüsü durduruluyor...", providerName);
         running.set(false);
         closeResources();
-        log.info("[{}] TCP ana döngüsü durduruldu.", providerName);
     }
 
     @Override
     public boolean isConnected() {
-        return connected.get() && authenticated.get();
+        return connected.get();
     }
 
     @Override
@@ -350,19 +243,13 @@ public class TcpRateSubscriber implements PlatformSubscriber {
 
     private void processLine(String line) {
         try {
-            // Format from TCP server:
-            // PAIR_NAME|22:number:BID_VALUE|25:number:ASK_VALUE|5:timestamp:TIMESTAMP_VALUE
             String[] parts = line.split("\\|");
-            if (parts.length < 3) {
-                log.warn("[{}] TCP geçersiz format: {}", providerName, line);
-                return;
-            }
+            if (parts.length < 3) return;
 
             String symbol = parts[0].trim();
             double bid = 0.0;
             double ask = 0.0;
 
-            // Parse bid and ask from specialized fields
             for (int i = 1; i < parts.length; i++) {
                 String part = parts[i];
                 if (part.contains("22:number:")) {
@@ -372,8 +259,6 @@ public class TcpRateSubscriber implements PlatformSubscriber {
                 }
             }
 
-            log.debug("[{}] TCP veri alındı: {} (bid={}, ask={})", providerName, symbol, bid, ask);
-
             ProviderRateDto rate = new ProviderRateDto();
             rate.setSymbol(symbol);
             rate.setBid(String.valueOf(bid));
@@ -381,35 +266,58 @@ public class TcpRateSubscriber implements PlatformSubscriber {
             rate.setProviderName(providerName);
             rate.setTimestamp(System.currentTimeMillis());
 
-            log.debug("[{}] Parsed ProviderRateDto: {}", providerName, rate);
             callback.onRateAvailable(providerName, rate);
-        } catch (NumberFormatException e) {
-            log.warn("[{}] TCP satırı işlenirken sayı formatı hatası: {} - Satır: {}", providerName, e.getMessage(),
-                    line, e);
         } catch (Exception e) {
-            log.warn("[{}] TCP satırı işlenemedi: {} - Satır: {}", providerName, e.getMessage(), line, e);
+            log.warn("[{}] Failed to process line: {}", providerName, e.getMessage());
         }
     }
 
     private void closeResources() {
-        log.debug("[{}] TCP kaynakları kapatılıyor...", providerName);
+        try {
+            if (writer != null) writer.close();
+            if (reader != null) reader.close();
+            if (socket != null && !socket.isClosed()) socket.close();
+        } catch (IOException e) {
+            log.error("[{}] Error closing resources: {}", providerName, e.getMessage());
+        }
+    }
+
+    public boolean addSymbolSubscription(String symbol) {
+        if (!isConnected()) return false;
+        
+        String upperSymbol = symbol.toUpperCase();
+        if (dynamicSubscriptions.contains(upperSymbol)) return true;
+        
+        try {
+            writer.println("subscribe|" + upperSymbol);
+            writer.flush();
+            dynamicSubscriptions.add(upperSymbol);
+            return true;
+        } catch (Exception e) {
+            log.error("[{}] Failed to subscribe to {}: {}", providerName, upperSymbol, e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean removeSymbolSubscription(String symbol) {
+        String upperSymbol = symbol.toUpperCase();
         try {
             if (writer != null) {
-                writer.close();
-                log.debug("[{}] PrintWriter kapatıldı.", providerName);
+                writer.println("unsubscribe|" + upperSymbol);
+                writer.flush();
             }
-            if (reader != null) {
-                reader.close();
-                log.debug("[{}] BufferedReader kapatıldı.", providerName);
-            }
-            if (socket != null && !socket.isClosed()) {
-                socket.close();
-                log.debug("[{}] Socket kapatıldı.", providerName);
-            }
-        } catch (IOException e) {
-            log.error("[{}] TCP kaynakları kapatılırken hata: {}", providerName, e.getMessage(), e);
+            dynamicSubscriptions.remove(upperSymbol);
+            return true;
+        } catch (Exception e) {
+            log.error("[{}] Failed to unsubscribe from {}: {}", providerName, upperSymbol, e.getMessage());
+            return false;
         }
-        log.debug("[{}] TCP kaynakları kapatıldı.", providerName);
+    }
+
+    public Set<String> getActiveSubscriptions() {
+        Set<String> allSubscriptions = new HashSet<>(Arrays.asList(symbols));
+        allSubscriptions.addAll(dynamicSubscriptions);
+        return allSubscriptions;
     }
 
     private int getEnvInt(String envName, int defaultValue) {
@@ -418,19 +326,7 @@ public class TcpRateSubscriber implements PlatformSubscriber {
             try {
                 return Integer.parseInt(envValue.trim());
             } catch (NumberFormatException e) {
-                log.warn("Invalid integer value for {}: {}, using default: {}", envName, envValue, defaultValue);
-            }
-        }
-        return defaultValue;
-    }
-
-    private double getEnvDouble(String envName, double defaultValue) {
-        String envValue = System.getenv(envName);
-        if (envValue != null && !envValue.trim().isEmpty()) {
-            try {
-                return Double.parseDouble(envValue.trim());
-            } catch (NumberFormatException e) {
-                log.warn("Invalid double value for {}: {}, using default: {}", envName, envValue, defaultValue);
+                // Fall through to default
             }
         }
         return defaultValue;

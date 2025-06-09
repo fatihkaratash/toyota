@@ -49,8 +49,6 @@ public class DynamicSubscriberLoader {
         this.resourceLoader = resourceLoader;
         this.webClientBuilder = webClientBuilder;
         this.subscriberTaskExecutor = subscriberTaskExecutor;
-        
-        log.info("✅ DynamicSubscriberLoader initialized with updated dependencies");
     }
 
     /**
@@ -65,31 +63,25 @@ public class DynamicSubscriberLoader {
             List<SubscriberConfigDto> configs = readConfiguration(configPath);
             
             if (configs.isEmpty()) {
-                log.warn("Yapılandırma dosyasında abone bulunamadı: {}", configPath);
+                log.warn("No subscribers found in config: {}", configPath);
                 return subscribers;
             }
             
-            log.info("{} abone konfigürasyonu okundu", configs.size());
-            
             for (SubscriberConfigDto config : configs) {
-                if (!config.isEnabled()) {
-                    log.info("Devre dışı abone atlanıyor: {}", config.getName());
-                    continue;
-                }
+                if (!config.isEnabled()) continue;
                 
                 try {
                     PlatformSubscriber subscriber = createSubscriberInstance(config, callback);
                     subscribers.add(subscriber);
-                    log.info("Abone başarıyla oluşturuldu: {}", config.getName());
                 } catch (Exception e) {
-                    log.error("Abone oluşturulamadı: {} - Hata: {}", config.getName(), e.getMessage(), e);
+                    log.error("Failed to create subscriber: {} - {}", config.getName(), e.getMessage());
                 }
             }
             
-            log.info("Toplam {} abone yüklendi", subscribers.size());
+            log.info("Loaded {} subscribers", subscribers.size());
             
         } catch (Exception e) {
-            log.error("Aboneler yüklenirken hata oluştu: {} - Hata: {}", configPath, e.getMessage(), e);
+            log.error("Error loading subscribers from {}: {}", configPath, e.getMessage());
         }
         
         return subscribers;
@@ -102,29 +94,19 @@ public class DynamicSubscriberLoader {
         Resource resource = resourceLoader.getResource(configPath);
         
         if (!resource.exists()) {
-            log.error("Yapılandırma dosyası bulunamadı: {}", configPath);
+            log.error("Configuration file not found: {}", configPath);
             return Collections.emptyList();
         }
         
         try (InputStream inputStream = resource.getInputStream()) {
-            // Create a copy of ObjectMapper with default typing disabled
             ObjectMapper localMapper = objectMapper.copy();
             localMapper.deactivateDefaultTyping();
             
             String jsonContent = new String(inputStream.readAllBytes());
+            return localMapper.readValue(jsonContent, new TypeReference<List<SubscriberConfigDto>>() {});
             
-            try {
-                List<SubscriberConfigDto> configs = localMapper.readValue(jsonContent, 
-                    new TypeReference<List<SubscriberConfigDto>>() {});
-                    
-                log.debug("Yapılandırma başarıyla okundu, {} abone yapılandırması bulundu", configs.size());
-                return configs;
-            } catch (Exception e) {
-                log.error("JSON okuma hatası: {}", e.getMessage(), e);
-                throw e;
-            }
         } catch (IOException e) {
-            log.error("Yapılandırma dosyası okunamadı: {}", configPath, e);
+            log.error("Failed to read configuration file: {}", configPath);
             throw e;
         }
     }
@@ -133,36 +115,29 @@ public class DynamicSubscriberLoader {
      * Abone örneği oluştur
      * ✅ ENHANCED: Better error handling and validation for immediate pipeline requirements
      */
-    private PlatformSubscriber createSubscriberInstance(SubscriberConfigDto config, PlatformCallback callback) 
+    public PlatformSubscriber createSubscriberInstance(SubscriberConfigDto config, PlatformCallback callback) 
             throws ReflectiveOperationException, SubscriberInitializationException {
         
-        if (config.getImplementationClass() == null || config.getImplementationClass().isEmpty()) {
+        String implementationClass = config.getImplementationClass();
+        if (implementationClass == null || implementationClass.isEmpty()) {
             throw new IllegalArgumentException("Implementation class not specified: " + config.getName());
         }
         
-        if (config.getImplementationClass().contains("RestRateSubscriber")) {
-            RestRateSubscriber subscriber = new RestRateSubscriber(webClientBuilder, this.objectMapper, this.subscriberTaskExecutor);
-            subscriber.init(config, callback);
-            return subscriber;
+        PlatformSubscriber subscriber;
+        
+        if (implementationClass.contains("RestRateSubscriber")) {
+            subscriber = new RestRateSubscriber(webClientBuilder, objectMapper, subscriberTaskExecutor);
+        } else if (implementationClass.contains("TcpRateSubscriber")) {
+            subscriber = new com.toyota.mainapp.subscriber.impl.TcpRateSubscriber();
+        } else {
+            Class<?> subscriberClass = Class.forName(implementationClass);
+            if (!PlatformSubscriber.class.isAssignableFrom(subscriberClass)) {
+                throw new IllegalArgumentException("Class must implement PlatformSubscriber: " + subscriberClass.getName());
+            }
+            subscriber = (PlatformSubscriber) subscriberClass.getDeclaredConstructor().newInstance();
         }
         
-        if (config.getImplementationClass().contains("TcpRateSubscriber")) {
-            com.toyota.mainapp.subscriber.impl.TcpRateSubscriber subscriber = 
-                new com.toyota.mainapp.subscriber.impl.TcpRateSubscriber();
-            subscriber.init(config, callback);
-            return subscriber;
-        }
-        
-        Class<?> subscriberClass = Class.forName(config.getImplementationClass());
-        
-        if (!PlatformSubscriber.class.isAssignableFrom(subscriberClass)) {
-            throw new IllegalArgumentException(
-                "Sınıf PlatformSubscriber arayüzünü uygulamalıdır: " + subscriberClass.getName());
-        }
-        
-        PlatformSubscriber subscriber = (PlatformSubscriber) subscriberClass.getDeclaredConstructor().newInstance();
         subscriber.init(config, callback);
-        
         return subscriber;
     }
 }
