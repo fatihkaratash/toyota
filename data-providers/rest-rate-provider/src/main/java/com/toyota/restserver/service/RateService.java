@@ -5,6 +5,17 @@ import com.toyota.restserver.logging.LoggingHelper;
 import com.toyota.restserver.model.Rate;
 import org.springframework.stereotype.Service;
 
+/**
+ * Toyota Financial Data Platform - Rate Service
+ * 
+ * Core business service for retrieving and processing financial rate data.
+ * Combines configuration-based base rates with dynamic simulation to provide
+ * realistic rate data for the Toyota financial data platform.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Service
 public class RateService {
 

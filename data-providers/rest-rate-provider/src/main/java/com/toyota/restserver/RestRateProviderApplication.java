@@ -5,6 +5,17 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Toyota Financial Data Platform - REST Rate Provider Application
+ * 
+ * Main application entry point for the REST-based financial rate data provider.
+ * Provides authenticated HTTP endpoints for real-time rate data retrieval
+ * with dynamic rate simulation capabilities for the Toyota platform.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @SpringBootApplication
 public class RestRateProviderApplication {
 

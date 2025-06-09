@@ -11,8 +11,15 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
 /**
- * Spring Boot konfigurasyon sinifi.
- * Uygulama genelinde kullanilacak bean'leri tanimlar.
+ * Toyota Financial Data Platform - Application Configuration
+ * 
+ * Spring Boot configuration for REST rate provider application beans.
+ * Defines RestTemplate, ObjectMapper, and thread pool executor beans
+ * for HTTP communication and asynchronous processing.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 @Configuration
 public class AppConfig {

@@ -17,6 +17,17 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+/**
+ * Toyota Financial Data Platform - Rate Configuration Loader
+ * 
+ * Component responsible for loading initial rate configurations from JSON files.
+ * Provides thread-safe access to base rate data and supports dynamic rate
+ * initialization for the Toyota financial data platform.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Component
 public class RateConfigLoader {
 

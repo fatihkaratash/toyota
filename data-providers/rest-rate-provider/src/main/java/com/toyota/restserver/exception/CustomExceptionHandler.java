@@ -12,6 +12,17 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Toyota Financial Data Platform - Custom Exception Handler
+ * 
+ * Global exception handler for REST rate provider endpoints.
+ * Provides standardized error responses and comprehensive logging
+ * for all exceptions within the Toyota financial data platform.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @ControllerAdvice
 public class CustomExceptionHandler extends ResponseEntityExceptionHandler {
 

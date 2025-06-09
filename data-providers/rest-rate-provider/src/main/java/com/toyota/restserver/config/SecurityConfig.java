@@ -18,6 +18,17 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Toyota Financial Data Platform - Security Configuration
+ * 
+ * Spring Security configuration for REST rate provider authentication.
+ * Implements Basic Authentication with configurable credentials and
+ * stateless session management for the Toyota financial data platform.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {

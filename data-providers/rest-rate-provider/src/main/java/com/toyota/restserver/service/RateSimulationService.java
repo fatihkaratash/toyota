@@ -7,6 +7,17 @@ import org.springframework.stereotype.Service;
 
 import java.util.Random;
 
+/**
+ * Toyota Financial Data Platform - Rate Simulation Service
+ * 
+ * Service for simulating realistic financial rate fluctuations with configurable
+ * volatility and spread parameters. Provides dynamic rate movements while
+ * maintaining market-realistic bid/ask relationships for testing purposes.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Service
 public class RateSimulationService {
 

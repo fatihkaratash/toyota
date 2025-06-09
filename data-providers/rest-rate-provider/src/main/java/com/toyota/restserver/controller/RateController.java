@@ -11,6 +11,17 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Toyota Financial Data Platform - Rate REST Controller
+ * 
+ * REST API controller providing authenticated endpoints for financial rate
+ * data retrieval. Supports real-time rate access with comprehensive logging
+ * and security integration for the Toyota financial data platform.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @RestController
 @RequestMapping("/api/rates")
 public class RateController {

@@ -6,6 +6,17 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * Toyota Financial Data Platform - Jackson Configuration
+ * 
+ * JSON serialization configuration for REST rate provider endpoints.
+ * Configures ObjectMapper with proper date handling and module registration
+ * for consistent JSON processing across the Toyota platform.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Configuration
 public class JacksonConfig {
     
