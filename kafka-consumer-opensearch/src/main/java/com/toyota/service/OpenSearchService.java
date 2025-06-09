@@ -20,6 +20,17 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Toyota Financial Data Platform - OpenSearch Indexing Service
+ * 
+ * Kafka listener service that indexes financial rate data into OpenSearch.
+ * Handles multiple data formats (pipe-delimited and JSON), processes different
+ * rate types, and provides comprehensive indexing for analytics and monitoring.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Service
 @Slf4j
 @RequiredArgsConstructor

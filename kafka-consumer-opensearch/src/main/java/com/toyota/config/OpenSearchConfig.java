@@ -7,6 +7,17 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * Toyota Financial Data Platform - OpenSearch Configuration
+ * 
+ * Configures OpenSearch client connection for financial rate data indexing.
+ * Provides high-level REST client configuration for reliable connectivity
+ * to the OpenSearch cluster within the Toyota platform infrastructure.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Configuration
 public class OpenSearchConfig {
 

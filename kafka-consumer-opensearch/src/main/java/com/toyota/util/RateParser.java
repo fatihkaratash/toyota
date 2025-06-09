@@ -11,9 +11,15 @@ import java.time.format.DateTimeParseException;
 import java.util.Optional;
 
 /**
- * Utility class to parse rate messages from Kafka
- * Format: SYMBOL|BID|ASK|TIMESTAMP
- * Example: PF1_USDTRY|33.60|35.90|2024-12-16T16:07:15.504
+ * Toyota Financial Data Platform - Rate Parser Utility for OpenSearch
+ * 
+ * Parses pipe-delimited rate messages from Kafka into RateEntity objects
+ * for OpenSearch indexing. Handles multiple timestamp formats, decimal parsing,
+ * and data validation for reliable financial data indexing.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 @Component
 @Slf4j

@@ -13,6 +13,18 @@ import org.springframework.kafka.listener.ContainerProperties;
 
 import java.util.HashMap;
 import java.util.Map;
+
+/**
+ * Toyota Financial Data Platform - Kafka Consumer Configuration for OpenSearch
+ * 
+ * Configures Kafka consumer factories and listener containers for OpenSearch
+ * indexing operations. Optimizes batch processing and error handling for
+ * reliable message consumption and indexing performance.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Configuration
 @EnableKafka
 public class KafkaConsumerConfig {
