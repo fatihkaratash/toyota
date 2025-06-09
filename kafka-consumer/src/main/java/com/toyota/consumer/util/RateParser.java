@@ -8,6 +8,17 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Optional; 
 
+/**
+ * Toyota Financial Data Platform - Rate Parser Utility
+ * 
+ * Parses pipe-delimited rate messages from Kafka into RateEntity objects.
+ * Handles timestamp conversion, decimal parsing, and data validation
+ * for reliable rate data persistence within the Toyota platform.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Component
 @Slf4j
 public class RateParser {

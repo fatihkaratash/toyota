@@ -13,6 +13,17 @@ import org.springframework.stereotype.Component;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Toyota Financial Data Platform - Simple Rate Listener
+ * 
+ * Kafka message listener for financial rate data consumption.
+ * Processes batched rate messages grouped by pipeline ID with
+ * intelligent parsing, categorization, and bulk persistence.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Component
 @Slf4j
 @RequiredArgsConstructor

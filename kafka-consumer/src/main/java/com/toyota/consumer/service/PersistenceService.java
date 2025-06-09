@@ -11,6 +11,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Toyota Financial Data Platform - Persistence Service
+ * 
+ * Manages database persistence operations for financial rate data.
+ * Provides transactional safety, duplicate detection, and bulk operations
+ * for efficient storage of real-time rate information.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Service
 @Slf4j
 @RequiredArgsConstructor

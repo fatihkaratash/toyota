@@ -14,6 +14,17 @@ import org.springframework.kafka.listener.ContainerProperties;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Toyota Financial Data Platform - Kafka Consumer Configuration
+ * 
+ * Configures Kafka consumer factories and listener containers for
+ * financial rate data consumption. Optimizes batch processing and
+ * acknowledgment handling for reliable message processing.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Configuration
 @EnableKafka
 public class KafkaConsumerConfig {

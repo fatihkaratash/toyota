@@ -9,6 +9,17 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * Toyota Financial Data Platform - Rate Entity
+ * 
+ * JPA entity representing financial rate data in the database.
+ * Stores bid/ask prices, timestamps, pipeline metadata, and rate
+ * categorization for comprehensive financial data analytics.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Entity
 @Table(name = "rates",
        uniqueConstraints = {
