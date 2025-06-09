@@ -72,15 +72,15 @@ services:
     networks:
       - toyota-network
 
-  opensearch: # YENİ EKLENDİ
+  opensearch:
     image: opensearchproject/opensearch:2.11.0
     container_name: opensearch
     hostname: opensearch
     environment:
       - discovery.type=single-node
       - bootstrap.memory_lock=true
-      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m" # Başlangıç için, ihtiyaca göre artırın
-      - plugins.security.disabled=${DISABLE_OPENSEARCH_SECURITY:-true}
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - DISABLE_SECURITY_PLUGIN=true
     ulimits:
       memlock:
         soft: -1
@@ -95,8 +95,9 @@ services:
       - "9600:9600"
     networks:
       - toyota-network
+    restart: unless-stopped
 
-  opensearch-dashboards: # YENİ EKLENDİ
+  opensearch-dashboards:
     image: opensearchproject/opensearch-dashboards:2.11.0
     container_name: opensearch-dashboards
     hostname: opensearch-dashboards
@@ -104,11 +105,59 @@ services:
       - "5601:5601"
     environment:
       OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
-      DISABLE_SECURITY_DASHBOARDS_PLUGIN: ${DISABLE_OPENSEARCH_SECURITY:-true}
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: true
+      SERVER_HOST: "0.0.0.0"
+      OPENSEARCH_DASHBOARDS_BACKGROUND_PROCESSING_ENABLED: "true"  
+      
     depends_on:
       - opensearch
     networks:
       - toyota-network
+    restart: unless-stopped
+  kafka-consumer-opensearch:
+    build:
+      context: ./kafka-consumer-opensearch
+      dockerfile: Dockerfile
+    container_name: kafka-consumer-opensearch
+    hostname: kafka-consumer-opensearch
+    restart: unless-stopped
+    depends_on:
+      - kafka
+      - opensearch
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVER_PORT: 8086
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_ELASTICSEARCH_URIS: http://opensearch:9200
+      APP_OPENSEARCH_INDEX_NAME_SIMPLE_RATES: financial-simple-rates
+      APP_OPENSEARCH_INDEX_NAME_RAW_RATES: financial-raw-rates
+      APP_OPENSEARCH_INDEX_NAME_CALCULATED_RATES: financial-calculated-rates
+      APP_OPENSEARCH_INDEX_NAME_PIPELINE_TRACKING: financial-pipeline-tracking
+      APP_KAFKA_TOPIC_SIMPLE_RATES: financial-simple-rates
+      APP_KAFKA_TOPIC_RAW_RATES: financial-raw-rates
+      APP_KAFKA_TOPIC_CALCULATED_RATES: financial-calculated-rates
+      APP_KAFKA_TOPIC_PIPELINE_TRACKING: financial-pipeline-tracking
+      APP_KAFKA_CONSUMER_GROUP_ID: opensearch-consumer-group
+    volumes:
+      - ./logs/kafka-consumer-opensearch:/app/logs
+    networks:
+      - toyota-network
+
+  filebeat:
+    image: elastic/filebeat:8.11.0
+    container_name: filebeat
+    user: root
+    volumes:
+      - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - ./logs:/logs:ro
+    environment:
+      - ELASTICSEARCH_HOSTS=http://opensearch:9200
+    depends_on:
+      - opensearch
+    networks:
+      - toyota-network
+    command: filebeat -e -strict.perms=false
+    restart: unless-stopped
   # --- Uygulama Servisleri ---
   rest-rate-provider:
     build:

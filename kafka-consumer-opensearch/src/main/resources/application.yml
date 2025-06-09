@@ -1,28 +1,26 @@
-# Application settings
 spring:
   application:
     name: kafka-consumer-opensearch
   
   # Kafka consumer configuration
   kafka:
-    bootstrap-servers: kafka:29092
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
     consumer:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       auto-offset-reset: earliest
       enable-auto-commit: false
+      max-poll-records: 500
 
   # OpenSearch Configuration
   elasticsearch:
-    uris: ${OPENSEARCH_URIS:http://opensearch:9200}
+    uris: ${SPRING_ELASTICSEARCH_URIS:http://opensearch:9200}
     username: ${OPENSEARCH_USERNAME:}
     password: ${OPENSEARCH_PASSWORD:}
-    connection-timeout: 5s
-    socket-timeout: 5s
 
-# Server Configuration
+# Server Configuration (Optional - if you want health endpoints)
 server:
-  port: 8086
+  port: ${SERVER_PORT:8086}
 
 # Logging Configuration
 logging:
@@ -32,15 +30,21 @@ logging:
     org.springframework.data.elasticsearch: INFO
     org.springframework.kafka: INFO
 
-# Application specific Kafka configuration
+# Application specific configuration
 app:
-  kafka:
-    consumer:
-      group-id: opensearch-consumer-group
-    topic:
-      simple-rates: financial-simple-rates
-      json-rates: financial-rates-json
-  
-  # OpenSearch index adı
   opensearch:
-    index-name: financial_rates_logs
+    index-name:
+      simple-rates: ${APP_OPENSEARCH_INDEX_NAME_SIMPLE_RATES:financial-simple-rates}
+      raw-rates: ${APP_OPENSEARCH_INDEX_NAME_RAW_RATES:financial-raw-rates}
+      calculated-rates: ${APP_OPENSEARCH_INDEX_NAME_CALCULATED_RATES:financial-calculated-rates}
+      pipeline-tracking: ${APP_OPENSEARCH_INDEX_NAME_PIPELINE_TRACKING:financial-pipeline-tracking}
+      
+  kafka:
+    topic:
+      simple-rates: ${APP_KAFKA_TOPIC_SIMPLE_RATES:financial-simple-rates}
+      raw-rates: ${APP_KAFKA_TOPIC_RAW_RATES:financial-raw-rates}
+      calculated-rates: ${APP_KAFKA_TOPIC_CALCULATED_RATES:financial-calculated-rates}
+      pipeline-tracking: ${APP_KAFKA_TOPIC_PIPELINE_TRACKING:financial-pipeline-tracking}
+      
+    consumer:
+      group-id: ${APP_KAFKA_CONSUMER_GROUP_ID:opensearch-consumer-group}

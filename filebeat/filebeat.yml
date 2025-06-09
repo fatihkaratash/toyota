@@ -1,36 +1,138 @@
 filebeat.inputs:
+  # Ana uygulama logları
   - type: log
     enabled: true
     paths:
       - /logs/main-application/*.log
+    fields:
+      service: main-application
+      application: financial-rates-system
+      log_type: application
+    fields_under_root: true
+    multiline.pattern: '^\d{4}-\d{2}-\d{2}'
+    multiline.negate: true
+    multiline.match: after
+    include_lines: ['ERROR', 'WARN', 'INFO']
+    processors:
+      - add_fields:
+          target: ''
+          fields:
+            environment: docker
+            system: toyota-rates
+
+  # TCP Provider logları
+  - type: log
+    enabled: true
+    paths:
       - /logs/tcp-provider/*.log
+    fields:
+      service: tcp-rate-provider
+      application: financial-rates-system
+      log_type: provider
+      provider_type: tcp
+    fields_under_root: true
+    multiline.pattern: '^\d{4}-\d{2}-\d{2}'
+    multiline.negate: true
+    multiline.match: after
+
+  # REST Provider logları
+  - type: log
+    enabled: true
+    paths:
       - /logs/rest-provider/*.log
+    fields:
+      service: rest-rate-provider
+      application: financial-rates-system
+      log_type: provider
+      provider_type: rest
+    fields_under_root: true
+    multiline.pattern: '^\d{4}-\d{2}-\d{2}'
+    multiline.negate: true
+    multiline.match: after
+
+  # Kafka Consumer logları
+  - type: log
+    enabled: true
+    paths:
       - /logs/kafka-consumer/*.log
+    fields:
+      service: kafka-consumer
+      application: financial-rates-system
+      log_type: consumer
+    fields_under_root: true
+    multiline.pattern: '^\d{4}-\d{2}-\d{2}'
+    multiline.negate: true
+    multiline.match: after
+
+  # OpenSearch Consumer logları
+  - type: log
+    enabled: true
+    paths:
       - /logs/kafka-consumer-opensearch/*.log
     fields:
-      application: financial-simple-rates
+      service: kafka-consumer-opensearch
+      application: financial-rates-system
+      log_type: consumer
     fields_under_root: true
-    multiline:
-      pattern: '^\d{4}-\d{2}-\d{2}'
-      negate: true
-      match: after
+    multiline.pattern: '^\d{4}-\d{2}-\d{2}'
+    multiline.negate: true
+    multiline.match: after
 
-processors:
-  - add_host_metadata: ~
-  - add_docker_metadata: ~
 
-setup.template.name: "financial-simple-rates-logs"
-setup.template.pattern: "financial-simple-rates-logs-*"
-setup.ilm.enabled: false
-setup.template.enabled: true
+# OpenSearch output konfigürasyonu
 output.elasticsearch:
-
   hosts: ["opensearch:9200"]
   protocol: "http"
   username: ""
   password: ""
-  index: "financial-simple-rates-logs-%{+yyyy.MM.dd}"
-  setup.template.enabled: false
-  setup.ilm.enabled: false
+  index: "financial-logs-%{[service]}-%{+yyyy.MM.dd}"
+  template.enabled: true
+  template.pattern: "financial-logs-*"
+  template.settings:
+    index:
+      number_of_shards: 1
+      number_of_replicas: 0
+      refresh_interval: "5s"
+  template.mappings:
+    properties:
+      "@timestamp":
+        type: date
+      message:
+        type: text
+        analyzer: standard
+      service:
+        type: keyword
+      application:
+        type: keyword
+      log_type:
+        type: keyword
+      provider_type:
+        type: keyword
+      log_level:
+        type: keyword
+      pipeline_execution_id:
+        type: keyword
+      rate_name:
+        type: keyword
+      provider_name:
+        type: keyword
+      host:
+        properties:
+          name:
+            type: keyword
 
+# Logging konfigürasyonu
 logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/filebeat
+  name: filebeat
+  keepfiles: 7
+  permissions: 0644
+
+# Monitoring
+monitoring.enabled: false
+
+# Setup
+setup.template.enabled: true
+setup.ilm.enabled: false

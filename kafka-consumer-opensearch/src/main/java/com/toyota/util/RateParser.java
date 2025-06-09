@@ -1,34 +1,30 @@
-package main.java.com.toyota.util;
+package com.toyota.util;
 
-import com.toyota.consumer.model.RateEntity; // Updated import
+import com.toyota.model.RateEntity;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Optional; // Added import
+import java.time.format.DateTimeParseException;
+import java.util.Optional;
 
 /**
  * Utility class to parse rate messages from Kafka
- * Format: {PROVIDER}_{SYMBOL}|{BID}|{ASK}|{TIMESTAMP}
- * Example: TCPProvider2_USDTRY|38.61|38.79|2023-09-15T14:32:45.123
+ * Format: SYMBOL|BID|ASK|TIMESTAMP
+ * Example: PF1_USDTRY|33.60|35.90|2024-12-16T16:07:15.504
  */
 @Component
 @Slf4j
 public class RateParser {
 
-    private static final String DELIMITER = "\\|";
-    // PROVIDER_SYMBOL_DELIMITER is no longer needed for the new parsing logic directly to rateName
-    
     /**
-     * Parses a string message into a RateEntity object
-     *  * Parse pipe-delimited message to RateEntity
+     * Parses a pipe-delimited message to RateEntity
      * Format: SYMBOL|BID|ASK|TIMESTAMP
-     * Example: PF1_USDTRY|33.60|35.90|2024-12-16T16:07:15.504
      * 
      * @param message the message to parse
-     * @return an Optional containing the parsed RateEntity, or an empty Optional if parsing failed
+     * @return an Optional containing the parsed RateEntity, or empty if parsing failed
      */
     public Optional<RateEntity> parseToEntity(String message) {
         if (message == null || message.trim().isEmpty()) {
@@ -44,12 +40,14 @@ public class RateParser {
             }
 
             String rateName = parts[0];
-            BigDecimal bid = new BigDecimal(parts[1]);
-            BigDecimal ask = new BigDecimal(parts[2]);
-            LocalDateTime timestamp = LocalDateTime.parse(
-                parts[3].substring(0, parts[3].length() - 4), // Remove milliseconds
-                DateTimeFormatter.ISO_LOCAL_DATE_TIME
-            );
+            BigDecimal bid = parseDecimal(parts[1]);
+            BigDecimal ask = parseDecimal(parts[2]);
+            LocalDateTime timestamp = parseTimestamp(parts[3]);
+
+            if (bid == null || ask == null || timestamp == null) {
+                log.warn("Failed to parse required fields from message: {}", message);
+                return Optional.empty();
+            }
 
             return Optional.of(RateEntity.builder()
                 .rateName(rateName)
@@ -64,7 +62,7 @@ public class RateParser {
         }
     }
     
-   /* private BigDecimal parseDecimal(String value) {
+    private BigDecimal parseDecimal(String value) {
         if (value == null || value.isBlank()) {
             return null;
         }
@@ -81,10 +79,15 @@ public class RateParser {
             return null;
         }
         try {
-            return LocalDateTime.parse(value.trim(), DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+            // Try with milliseconds first
+            if (value.contains(".")) {
+                return LocalDateTime.parse(value.trim(), DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS"));
+            } else {
+                return LocalDateTime.parse(value.trim(), DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+            }
         } catch (DateTimeParseException e) {
             log.warn("Failed to parse timestamp value: {}", value);
             return null;
         }
-    }*/
+    }
 }

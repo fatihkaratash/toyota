@@ -1,4 +1,4 @@
-package main.java.com.toyota.config;
+package com.toyota.config;
 
 import org.apache.http.HttpHost;
 import org.opensearch.client.RestClient;
