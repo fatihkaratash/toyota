@@ -92,7 +92,155 @@ graph TB
 5. **Storage**: PostgreSQL (persistence) + OpenSearch (analytics)
 6. **Monitoring**: Kibana dashboards for real-time insights
 
+graph TB
+    subgraph "Data Sources"
+        REST[REST Provider<br/>:8080]
+        TCP[TCP Provider<br/>:8081]
+    end
+    
+    subgraph "Main Application :8082"
+        subgraph "Subscriber Layer"
+            RSUB[RestRateSubscriber]
+            TSUB[TcpRateSubscriber]
+        end
+        
+        subgraph "Coordination Layer"
+            COORD[MainCoordinatorService<br/>PlatformCallback]
+        end
+        
+        subgraph "Validation & Mapping"
+            VALID[RateValidatorService]
+            MAPPER[RateMapper]
+        end
+        
+        subgraph "Cache Layer"
+            CACHE[RateCacheService<br/>Redis Integration]
+        end
+        
+        subgraph "Pipeline Processing"
+            PIPELINE[RealTimeBatchProcessor]
+            
+            subgraph "4-Stage Pipeline"
+                S1[Stage 1: RawDataHandling]
+                S2[Stage 2: AverageCalculation]
+                S3[Stage 3: CrossRateCalculation]
+                S4[Stage 4: SimpleBatchAssembly]
+            end
+            
+            CTX[ExecutionContext<br/>Pipeline State]
+        end
+        
+        subgraph "Publishing Layer"
+            KAFKA_PUB[KafkaPublishingService]
+        end
+    end
+    
+    subgraph "Message Broker"
+        subgraph "Kafka Topics"
+            RAW_TOPIC[financial-raw-rates]
+            CALC_TOPIC[financial-calculated-rates]
+            SIMPLE_TOPIC[financial-simple-rates]
+        end
+    end
+    
+    subgraph "Storage & Analytics"
+        PG[(PostgreSQL<br/>toyota_rates)]
+        OS[(OpenSearch<br/>Indexes)]
+        KC[Kafka Consumer<br/>→ DB Persistence]
+    end
+    
+    subgraph "External Cache"
+        REDIS[(Redis Cache<br/>:6379)]
+    end
+
+    %% Data Flow Connections
+    REST -->|HTTP Polling| RSUB
+    TCP -->|TCP Streaming| TSUB
+    
+    RSUB --> COORD
+    TSUB --> COORD
+    
+    COORD -->|onRateAvailable| VALID
+    VALID --> MAPPER
+    MAPPER --> CACHE
+    CACHE --> PIPELINE
+    
+    %% Pipeline Internal Flow
+    PIPELINE --> CTX
+    CTX --> S1
+    S1 --> S2
+    S2 --> S3
+    S3 --> S4
+    S4 --> KAFKA_PUB
+    
+    %% Cache Integration
+    PIPELINE <--> REDIS
+    CACHE <--> REDIS
+    
+    %% Kafka Publishing
+    KAFKA_PUB --> RAW_TOPIC
+    KAFKA_PUB --> CALC_TOPIC
+    KAFKA_PUB --> SIMPLE_TOPIC
+    
+    %% Data Persistence
+    RAW_TOPIC --> KC
+    CALC_TOPIC --> KC
+    SIMPLE_TOPIC --> KC
+    KC --> PG
+    
+    %% OpenSearch Integration
+    RAW_TOPIC --> OS
+    CALC_TOPIC --> OS
+    SIMPLE_TOPIC --> OS
+
+    %% Styling
+    classDef provider fill:#e1f5fe
+    classDef coordinator fill:#f3e5f5
+    classDef pipeline fill:#fff3e0
+    classDef storage fill:#e8f5e8
+    classDef kafka fill:#fff8e1
+    
+    class REST,TCP provider
+    class COORD,RSUB,TSUB coordinator
+    class PIPELINE,S1,S2,S3,S4,CTX pipeline
+    class PG,OS,REDIS storage
+    class RAW_TOPIC,CALC_TOPIC,SIMPLE_TOPIC,KAFKA_PUB kafka
 ---
+
+sequenceDiagram
+    participant REST as REST Provider
+    participant RSUB as RestRateSubscriber
+    participant COORD as MainCoordinatorService
+    participant VALID as RateValidatorService
+    participant CACHE as RateCacheService
+    participant PIPELINE as RealTimeBatchProcessor
+    participant KAFKA as KafkaPublishingService
+    participant REDIS as Redis Cache
+    
+    REST->>RSUB: HTTP Response (JSON)
+    RSUB->>COORD: onRateAvailable(providerName, rate)
+    
+    COORD->>VALID: validateRate(rate)
+    VALID-->>COORD: ValidationResult
+    
+    COORD->>CACHE: cacheRawRate(rate)
+    CACHE->>REDIS: Store with TTL
+    
+    COORD->>PIPELINE: processNewRate(baseRateDto)
+    
+    Note over PIPELINE: Pipeline Execution Starts
+    PIPELINE->>PIPELINE: Stage 1: Raw Data Handling
+    PIPELINE->>REDIS: Fetch related rates
+    PIPELINE->>PIPELINE: Stage 2: Average Calculation
+    PIPELINE->>PIPELINE: Stage 3: Cross Rate Calculation
+    PIPELINE->>PIPELINE: Stage 4: Batch Assembly
+    
+    PIPELINE->>KAFKA: publishToTopics(rawRates, calculatedRates, simpleRates)
+    KAFKA->>KAFKA: financial-raw-rates
+    KAFKA->>KAFKA: financial-calculated-rates
+    KAFKA->>KAFKA: financial-simple-rates
+    
+    Note over PIPELINE: Pipeline Complete with ExecutionContext stats
 
 ## 🚀 Quick Start
 
