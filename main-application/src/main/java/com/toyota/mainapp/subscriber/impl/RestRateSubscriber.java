@@ -17,13 +17,16 @@ import reactor.core.publisher.Mono;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
+import java.time.Duration; // Added for timeout
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.Base64;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeoutException; // Added for timeout exception
 
 /**
  * REST API üzerinden kur verisi alan abone
@@ -39,7 +42,7 @@ public class RestRateSubscriber implements PlatformSubscriber {
     private WebClient webClient;
     private Retry retry;
     private CircuitBreaker circuitBreaker;
-    private WebClient.Builder webClientBuilder;
+    private WebClient.Builder webClientBuilder; // Ensure this is injected
     private final ObjectMapper objectMapper;
     private final TaskExecutor subscriberTaskExecutor;
 
@@ -56,10 +59,10 @@ public class RestRateSubscriber implements PlatformSubscriber {
     // Default constructor
     public RestRateSubscriber() {
         log.warn(
-                "RestRateSubscriber created with default constructor. Dependencies (WebClient.Builder, ObjectMapper, TaskExecutor) must be set via setters or this instance may not function correctly.");
-        this.webClientBuilder = null;
+                "RestRateSubscriber created with default constructor. Dependencies (WebClient.Builder, ObjectMapper, TaskExecutor) must be set via setters or this instance may not function correctly. WebClientBuilder is likely NULL.");
+        this.webClientBuilder = null; // Explicitly null
         this.objectMapper = new ObjectMapper(); // Fallback
-        this.subscriberTaskExecutor = null;
+        this.subscriberTaskExecutor = null; // Explicitly null
     }
 
     // Constructor with WebClient.Builder, ObjectMapper, and TaskExecutor
@@ -68,7 +71,11 @@ public class RestRateSubscriber implements PlatformSubscriber {
         this.webClientBuilder = webClientBuilder;
         this.objectMapper = objectMapper; // Injected ObjectMapper
         this.subscriberTaskExecutor = subscriberTaskExecutor; // Injected TaskExecutor
-        log.debug("RestRateSubscriber created with WebClientBuilder, ObjectMapper, and TaskExecutor");
+        if (this.webClientBuilder == null) {
+            log.error("CRITICAL: RestRateSubscriber injected with a NULL WebClient.Builder. This subscriber will not work.");
+        } else {
+            log.debug("RestRateSubscriber created with WebClientBuilder, ObjectMapper, and TaskExecutor");
+        }
     }
 
     @Override
@@ -76,22 +83,46 @@ public class RestRateSubscriber implements PlatformSubscriber {
         this.providerName = config.getName();
         this.callback = callback;
 
+        log.info("[{}] Initializing REST Subscriber. Provider Name: {}", providerName, this.providerName);
+
         // Load configurations from environment
         this.readTimeoutSeconds = getEnvInt("READ_TIMEOUT_SECONDS", 8);
         this.maxRetryAttempts = getEnvInt("MAX_RETRY_ATTEMPTS", 3);
         long restIntervalFromEnv = getEnvLong("REST_PROVIDER_INTERVAL_MS", 1500L);
 
+        log.debug("[{}] Environment Config: readTimeoutSeconds={}, maxRetryAttempts={}, restIntervalFromEnv={}",
+                providerName, this.readTimeoutSeconds, this.maxRetryAttempts, restIntervalFromEnv);
+
         if (config.getConnectionConfig() != null) {
             Map<String, Object> connConfig = config.getConnectionConfig();
             this.baseUrl = SubscriberUtils.getConfigValue(connConfig, "baseUrl", "http://localhost:8080/api");
-            this.pollIntervalMs = SubscriberUtils.getConfigValue(connConfig, "pollIntervalMs", restIntervalFromEnv);
+
+            // Safely get pollIntervalMs, handling potential Integer to Long cast issue
+            Object pollIntervalRaw = connConfig.get("pollIntervalMs");
+            if (pollIntervalRaw instanceof Number) {
+                this.pollIntervalMs = ((Number) pollIntervalRaw).longValue();
+            } else if (pollIntervalRaw != null) {
+                try {
+                    // Attempt to parse if it's a String representation of a number
+                    this.pollIntervalMs = Long.parseLong(String.valueOf(pollIntervalRaw));
+                } catch (NumberFormatException e) {
+                    log.warn("[{}] 'pollIntervalMs' in config ('{}') is not a valid number. Using default from environment: {}", 
+                             providerName, pollIntervalRaw, restIntervalFromEnv);
+                    this.pollIntervalMs = restIntervalFromEnv;
+                }
+            } else {
+                // If "pollIntervalMs" is not in connConfig or is null, use the environment-derived default
+                this.pollIntervalMs = restIntervalFromEnv;
+            }
             this.symbols = SubscriberUtils.getSymbols(connConfig, this.providerName);
 
-            // Get authentication credentials from config first, then environment variables
             this.username = SubscriberUtils.getConfigValue(connConfig, "username",
                     System.getenv("CLIENT_REST_USERNAME"));
             this.password = SubscriberUtils.getConfigValue(connConfig, "password",
                     System.getenv("CLIENT_REST_PASSWORD"));
+
+            log.info("[{}] Connection Config Loaded: baseUrl='{}', pollIntervalMs={}, numSymbols={}, usernameConfigured='{}'",
+                    providerName, this.baseUrl, this.pollIntervalMs, this.symbols.length, this.username != null && !this.username.isEmpty());
 
             if (this.username == null || this.username.isEmpty()) {
                 String errorMsg = String.format(
@@ -107,28 +138,38 @@ public class RestRateSubscriber implements PlatformSubscriber {
                 log.error(errorMsg);
                 throw new IllegalArgumentException(errorMsg);
             }
+        } else {
+            log.warn("[{}] ConnectionConfig is NULL. Using default/environment values.", providerName);
         }
 
-        // Initialize WebClient with authentication
-        if (webClientBuilder != null && baseUrl != null && !baseUrl.isEmpty()) {
-            this.webClient = webClientBuilder
-                    .baseUrl(baseUrl)
-                    .filter(basicAuthenticationFilter())
-                    .filter(logRequest())
-                    .build();
-            log.info("[{}] WebClient initialized with baseUrl: {} and authentication", providerName, baseUrl);
-            log.info("[{}] REST authentication config - Username: '{}', Password configured: {}",
-                    providerName, username, password != null && !password.isEmpty() && !"defaultpass".equals(password));
+        if (this.webClientBuilder == null) {
+            log.error("[{}] CRITICAL: WebClientBuilder is NULL at init. WebClient cannot be created. Ensure it's properly injected.", providerName);
+        } else if (baseUrl != null && !baseUrl.isEmpty()) {
+            try {
+                this.webClient = webClientBuilder
+                        .baseUrl(baseUrl)
+                        .filter(basicAuthenticationFilter())
+                        .filter(logRequest())
+                        .build();
+                log.info("[{}] WebClient initialized successfully with baseUrl: {} and authentication filters.", providerName, baseUrl);
+                log.info("[{}] REST authentication config - Username: '{}', Password configured: {}",
+                        providerName, username, password != null && !password.isEmpty() && !"defaultpass".equals(password));
+            } catch (Exception e) {
+                log.error("[{}] CRITICAL: Failed to build WebClient in init. BaseUrl: {}. Error: {}", providerName, baseUrl, e.getMessage(), e);
+                this.webClient = null; // Ensure webClient is null if creation fails
+            }
         } else {
-            log.warn("[{}] WebClientBuilder is null or baseUrl is empty. WebClient cannot be initialized.",
+            log.warn("[{}] WebClientBuilder is available but baseUrl is null or empty. WebClient cannot be initialized yet.",
                     providerName);
         }
 
-        // Log detailed information about symbols
         log.info("[{}] Loaded symbols count: {}, symbols: {}",
                 providerName, symbols.length, Arrays.toString(symbols));
+        if (symbols.length == 0) {
+            log.warn("[{}] No symbols configured for this provider. It will not fetch any rates.", providerName);
+        }
 
-        log.debug("[{}] REST Subscriber initialized with config: baseUrl={}, pollIntervalMs={}, readTimeout={}s, maxRetries={}, symbols={}",
+        log.debug("[{}] Final REST Subscriber effective config: baseUrl={}, pollIntervalMs={}, readTimeoutSeconds={}s, maxRetryAttempts={}, symbols={}",
                 providerName, baseUrl, pollIntervalMs, readTimeoutSeconds, maxRetryAttempts, Arrays.toString(symbols));
         log.info("REST abone başlatıldı: {}", providerName);
     }
@@ -233,8 +274,14 @@ public class RestRateSubscriber implements PlatformSubscriber {
             running.set(false);
             return;
         }
+        if (symbols.length == 0) {
+            log.warn("[{}] No symbols configured for provider. Main polling loop will not start effectively.", providerName);
+            // Optionally set running to false or just let it be, it won't do much.
+            // running.set(false); 
+            // return;
+        }
         if (running.compareAndSet(false, true)) {
-            log.info("[{}] REST ana döngüsü başlatılıyor. Poll interval: {}ms", providerName, pollIntervalMs);
+            log.info("[{}] REST ana döngüsü başlatılıyor. Poll interval: {}ms. Symbols to poll: {}", providerName, pollIntervalMs, Arrays.toString(symbols));
 
             subscriberTaskExecutor.execute(() -> {
                 log.info("[{}] REST poll task started.", providerName);
@@ -251,11 +298,13 @@ public class RestRateSubscriber implements PlatformSubscriber {
                             log.debug("[{}] Tüm semboller sorgulandı, sonraki poll çevrimine kadar {}ms bekleniyor",
                                     providerName, pollIntervalMs);
                         } else {
-                            if (!connected.get()) {
-                                log.warn("[{}] REST poll atlandı, bağlantı yok (connected=false).", providerName);
-                            }
-                            if (symbols.length == 0) {
-                                log.warn("[{}] REST poll atlandı, izlenecek sembol yok.", providerName);
+                            if (!running.get()) { 
+                                log.info("[{}] REST poll task is stopping, skipping fetch cycle.", providerName);
+                            } else if (!connected.get()) {
+                                log.warn("[{}] REST poll SKIPPED for all symbols, provider not connected (connected=false). Current CircuitBreaker state: {}", 
+                                         providerName, circuitBreaker != null ? circuitBreaker.getState() : "N/A");
+                            } else if (symbols.length == 0) {
+                                log.warn("[{}] REST poll SKIPPED, no symbols configured to monitor for this provider instance.", providerName);
                             }
                         }
 
@@ -263,14 +312,15 @@ public class RestRateSubscriber implements PlatformSubscriber {
                     } catch (InterruptedException e) {
                         log.warn("[{}] REST poll task kesintiye uğradı.", providerName, e);
                         Thread.currentThread().interrupt();
-                        running.set(false);
+                        running.set(false); 
                         break;
                     } catch (Exception e) {
                         log.error("[{}] REST sorgu döngüsünde beklenmedik hata: {}", providerName, e.getMessage(), e);
                         try {
-                            Thread.sleep(1000);
+                            Thread.sleep(Math.min(pollIntervalMs, 5000L)); 
                         } catch (InterruptedException ie) {
                             Thread.currentThread().interrupt();
+                            running.set(false); 
                         }
                     }
                 }
@@ -299,8 +349,16 @@ public class RestRateSubscriber implements PlatformSubscriber {
     }
 
     private void fetchRate(String symbol) {
+        log.info("[{}] Attempting to fetch rate for symbol: {}. Effective readTimeout: {}s", providerName, symbol, this.readTimeoutSeconds);
+
         if (webClient == null) {
-            log.warn("[{}] WebClient null, {} için kur alınamıyor.", providerName, symbol);
+            log.warn("[{}] WebClient null, {} için kur alınamıyor. Skipping fetch. Check WebClientBuilder injection and init logs.", providerName, symbol);
+            return;
+        }
+        
+        if (!connected.get()) {
+            log.warn("[{}] Skipping fetch for symbol {} because provider is not connected. Current CircuitBreaker state: {}", 
+                     providerName, symbol, circuitBreaker != null ? circuitBreaker.getState() : "N/A");
             return;
         }
 
@@ -315,9 +373,14 @@ public class RestRateSubscriber implements PlatformSubscriber {
                     .onStatus(status -> status.value() == 401, response -> {
                         log.error("[{}] REST Provider authentication failed (401 Unauthorized) for symbol: {}",
                                 providerName, symbol);
-                        return Mono.error(new RuntimeException("Authentication failed - 401 Unauthorized"));
+                        return Mono.error(new RuntimeException("Authentication failed - 401 Unauthorized for " + symbol));
                     })
-                    .bodyToMono(String.class);
+                    .bodyToMono(String.class)
+                    .timeout(Duration.ofSeconds(this.readTimeoutSeconds)) // Added per-call timeout
+                    .doOnError(TimeoutException.class, te -> 
+                        log.warn("[{}] WebClient request timeout for symbol {}: {} after {}s. URL: {}{}", 
+                                 providerName, symbol, te.getMessage(), this.readTimeoutSeconds, baseUrl, requestPath)
+                    );
 
             // Apply Resilience4j operators if available
             if (circuitBreaker != null) {
@@ -389,19 +452,41 @@ public class RestRateSubscriber implements PlatformSubscriber {
                         }
                     },
                     error -> {
-                        if (error.getMessage().contains("401") || error.getMessage().contains("Unauthorized")) {
-                            log.error("[{}] REST authentication error for symbol {}: {}", providerName, symbol,
-                                    error.getMessage());
-                        } else {
-                            log.error("[{}] REST sorgu hatası: {} - URL: {}{} - Hata: {}",
-                                    providerName, symbol, baseUrl, requestPath, error.getMessage(), error);
+                        if (error instanceof TimeoutException) {
+                            // Already logged by doOnError, but we can add more context if needed or ensure callback
+                            log.warn("[{}] TimeoutException in fetchRate subscribe error block for symbol {}. URL: {}{}", 
+                                     providerName, symbol, baseUrl, requestPath);
+                        } else if (circuitBreaker != null && circuitBreaker.getState() == CircuitBreaker.State.OPEN) {
+                            log.warn("[{}] CircuitBreaker is OPEN. Call for symbol {} was not permitted.", providerName, symbol);
                         }
-                        callback.onProviderError(providerName, "REST sorgu hatası: " + symbol, error);
+                        String errorMessage = (error != null && error.getMessage() != null) ? error.getMessage() : "Bilinmeyen hata";
+                        if (error instanceof WebClientResponseException) {
+                            WebClientResponseException wcre = (WebClientResponseException) error;
+                            log.error(
+                                    "[{}] REST API Hatası - Sembol {}: HTTP {} {}. Yanıt: '{}'. URL: {}{}",
+                                    providerName,
+                                    symbol,
+                                    wcre.getStatusCode().value(),
+                                    wcre.getStatusText(),
+                                    wcre.getResponseBodyAsString(),
+                                    baseUrl, requestPath,
+                                    wcre); 
+                        } else {
+                            log.error(
+                                    "[{}] REST İstek Hatası - Sembol {}: {}. URL: {}{}",
+                                    providerName,
+                                    symbol,
+                                    errorMessage,
+                                    baseUrl, requestPath,
+                                    error); 
+                        }
+                        String callbackErrorMessage = String.format("REST sorgu hatası: %s - %s", symbol, errorMessage.length() > 100 ? errorMessage.substring(0,100) + "..." : errorMessage);
+                        callback.onProviderError(providerName, callbackErrorMessage, error);
                     });
-        } catch (Exception e) {
-            log.error("[{}] REST request oluşturulurken beklenmedik hata: {} - Symbol: {}",
+        } catch (Exception e) { 
+            log.error("[{}] REST request oluşturulurken (senkron) beklenmedik hata: {} - Symbol: {}",
                     providerName, e.getMessage(), symbol, e);
-            callback.onProviderError(providerName, "REST request hatası: " + symbol, e);
+            callback.onProviderError(providerName, "REST request setup hatası: " + symbol, e);
         }
     }
 

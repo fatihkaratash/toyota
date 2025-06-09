@@ -1,6 +1,5 @@
 # Documentation files to ignore
-README.md
-**/README.md
+
 architecture.md
 **/architecture.md
 
