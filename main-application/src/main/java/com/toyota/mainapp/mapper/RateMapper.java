@@ -13,7 +13,15 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
- * Efficient and unified mapper for all rate DTOs
+ * Toyota Financial Data Platform - Rate Data Mapper
+ * 
+ * Efficient and unified mapper for all rate DTOs using MapStruct.
+ * Handles conversions between provider rates, base rates, and Kafka payloads
+ * with proper type handling and timestamp normalization.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE)
 public interface RateMapper {

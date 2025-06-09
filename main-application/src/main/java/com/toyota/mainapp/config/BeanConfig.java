@@ -18,6 +18,17 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.concurrent.ThreadPoolExecutor;
 
+/**
+ * Toyota Financial Data Platform - Bean Configuration
+ * 
+ * Central configuration for application beans including ObjectMapper,
+ * task executors, schedulers, and resilience components. Provides
+ * optimized thread pools for pipeline and subscriber operations.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Configuration
 @EnableAsync
 @EnableScheduling

@@ -21,7 +21,15 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Config-driven topics and optimized for real-time pipeline
+ * Toyota Financial Data Platform - Kafka Configuration
+ * 
+ * Configures Kafka producers, templates, and topics for real-time
+ * financial data distribution. Optimizes for config-driven topics
+ * and high-performance real-time pipeline requirements.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 @Configuration
 @RequiredArgsConstructor

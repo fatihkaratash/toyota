@@ -1,4 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Toyota Financial Data Platform - Main Application
+    
+    Coordinator service for real-time financial rate data aggregation and processing.
+    Manages multiple data providers, rate calculations, and Redis-based caching.
+    Built with Spring Boot 3, WebFlux, and Resilience4j patterns.
+    
+    @author Fatih Karataş
+    @version 0.0.1-SNAPSHOT
+    @since 2025
+-->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>

@@ -29,6 +29,17 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import com.toyota.mainapp.config.ApplicationProperties;
 
+/**
+ * Toyota Financial Data Platform - Main Coordinator Service
+ * 
+ * Central orchestration service managing subscriber lifecycle, rate processing
+ * pipeline, and system health monitoring. Coordinates data flow from multiple
+ * providers through validation, caching, calculation, and Kafka publishing.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

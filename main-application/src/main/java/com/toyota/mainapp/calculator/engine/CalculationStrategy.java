@@ -7,7 +7,15 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Config-driven calculation execution with standardized input/output
+ * Toyota Financial Data Platform - Calculation Strategy Interface
+ * 
+ * Core contract for all rate calculation strategies supporting config-driven
+ * execution with standardized input/output. Enables pluggable calculation
+ * algorithms for average, cross-rate, and custom financial computations.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 public interface CalculationStrategy {
     

@@ -4,7 +4,15 @@ import com.toyota.mainapp.coordinator.callback.PlatformCallback;
 import com.toyota.mainapp.dto.config.SubscriberConfigDto;
 
 /**
- * Interface for platform subscribers
+ * Toyota Financial Data Platform - Platform Subscriber Interface
+ * 
+ * Core contract for all rate data subscribers supporting multiple protocols
+ * (REST, TCP). Defines lifecycle management, connection handling, and
+ * configuration-driven initialization for the financial data platform.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 public interface PlatformSubscriber {
     void init(SubscriberConfigDto config, PlatformCallback callback);

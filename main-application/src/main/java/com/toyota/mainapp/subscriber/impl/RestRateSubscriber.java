@@ -32,7 +32,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeoutException;
 
 /**
- * REST API üzerinden kur verisi alan abone
+ * Toyota Financial Data Platform - REST API Rate Subscriber
+ * 
+ * HTTP-based rate data subscriber that polls external rate providers via REST endpoints.
+ * Supports basic authentication, circuit breaker patterns, and dynamic symbol subscriptions.
+ * Part of the main coordinator application for real-time financial data aggregation.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 @Slf4j
 public class RestRateSubscriber implements PlatformSubscriber {

@@ -1,5 +1,16 @@
 package com.toyota.mainapp.dto.config;
 
+/**
+ * Toyota Financial Data Platform - Calculation Rule Types
+ * 
+ * Enumeration defining supported calculation strategies for rate processing.
+ * Includes average calculations, cross-rate derivations, and custom implementations
+ * with priority ordering and dependency management capabilities.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 public enum CalculationRuleType {
     
 

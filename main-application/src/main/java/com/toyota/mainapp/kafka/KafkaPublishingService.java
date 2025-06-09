@@ -16,7 +16,15 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Supports immediate snapshot pipeline with proper interface implementation
+ * Toyota Financial Data Platform - Kafka Publishing Service
+ * 
+ * Central service for publishing financial rate data to Kafka topics.
+ * Supports immediate snapshot pipeline with proper interface implementation,
+ * individual rate publishing, and topic-based message routing.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 @Service
 @Slf4j

@@ -10,8 +10,15 @@ import java.util.List;
 import java.util.Map;
 
 /**
- Single source of truth for calculation rules
- * Used by: ApplicationProperties, CalculationStrategyFactory, Pipeline Stages
+ * Toyota Financial Data Platform - Calculation Rule Configuration
+ * 
+ * Data transfer object defining calculation rules for rate processing pipelines.
+ * Supports multiple calculation strategies including averages, cross-rates, and
+ * custom Groovy/Java implementations with configurable input parameters.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 @Data
 @Builder

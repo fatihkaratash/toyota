@@ -11,6 +11,17 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.HashMap;
 
+/**
+ * Toyota Financial Data Platform - Average Calculation Strategy
+ * 
+ * Standard calculation strategy for computing weighted averages from multiple
+ * provider rates. Filters relevant input rates and applies configurable
+ * weighting algorithms for accurate market rate aggregation.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Component("averageCalculationStrategy") 
 @Slf4j
 public class AverageCalculationStrategy implements CalculationStrategy {

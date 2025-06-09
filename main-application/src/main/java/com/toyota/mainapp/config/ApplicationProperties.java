@@ -24,8 +24,15 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- Configuration loading with resolved circular dependency
- * ObjectMapper injected via setter to prevent circular reference
+ * Toyota Financial Data Platform - Application Properties Configuration
+ * 
+ * Central configuration loading with resolved circular dependency handling.
+ * Manages calculation rules, subscriber configurations, and pipeline
+ * parameters with thread-safe configuration state management.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 @Component("applicationProperties")
 @ConfigurationProperties(prefix = "app")

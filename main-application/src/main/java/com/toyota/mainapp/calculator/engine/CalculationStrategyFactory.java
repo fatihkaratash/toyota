@@ -11,8 +11,15 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Strategy discovery and instantiation
- * Automatically registers all CalculationStrategy implementations via Spring DI
+ * Toyota Financial Data Platform - Calculation Strategy Factory
+ * 
+ * Auto-discovery factory for calculation strategy implementations using Spring DI.
+ * Provides strategy lookup by name and type with validation capabilities for
+ * the dynamic rate calculation engine within the financial data platform.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 @Component
 @Slf4j

@@ -22,7 +22,15 @@ import com.toyota.mainapp.dto.model.BaseRateDto;
 import lombok.extern.slf4j.Slf4j;
 
 /**
-serialization and pipeline performance
+ * Toyota Financial Data Platform - Redis Configuration
+ * 
+ * Configures Redis connection factory and specialized templates for
+ * raw and calculated rate caching. Optimizes serialization and
+ * pipeline performance for high-throughput financial data operations.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 @Configuration
 @Slf4j

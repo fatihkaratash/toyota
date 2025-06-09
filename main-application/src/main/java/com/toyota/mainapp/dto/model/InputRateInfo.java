@@ -7,7 +7,17 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 
-
+/**
+ * Toyota Financial Data Platform - Input Rate Information DTO
+ * 
+ * Lightweight data structure capturing essential rate information
+ * for calculation input tracking and audit trails. Provides factory
+ * methods for safe conversion from BaseRateDto with validation.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Data
 @Builder
 @NoArgsConstructor

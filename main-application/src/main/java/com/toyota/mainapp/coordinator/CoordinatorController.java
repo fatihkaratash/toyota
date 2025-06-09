@@ -12,6 +12,17 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
+/**
+ * Toyota Financial Data Platform - Coordinator REST Controller
+ * 
+ * REST API endpoints for subscriber management, system health monitoring,
+ * and dynamic configuration updates. Provides operational control over
+ * the financial data processing platform with real-time status reporting.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @RestController
 @RequestMapping("/api/coordinator")
 @RequiredArgsConstructor

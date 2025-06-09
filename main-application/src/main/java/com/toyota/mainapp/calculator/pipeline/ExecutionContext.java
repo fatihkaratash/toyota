@@ -14,6 +14,17 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 
+/**
+ * Toyota Financial Data Platform - Pipeline Execution Context
+ * 
+ * Maintains state and provides coordination during rate calculation pipeline
+ * execution. Tracks input rates, intermediate results, timing metrics, and
+ * error conditions across multiple processing stages.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Data
 @Builder
 @Slf4j

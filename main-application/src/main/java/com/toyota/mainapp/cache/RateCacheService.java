@@ -12,6 +12,17 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+/**
+ * Toyota Financial Data Platform - Rate Cache Service
+ * 
+ * Redis-based caching service for raw and calculated financial rate data.
+ * Provides optimized storage with configurable TTL values and batch operations
+ * for high-performance rate data access across the platform.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

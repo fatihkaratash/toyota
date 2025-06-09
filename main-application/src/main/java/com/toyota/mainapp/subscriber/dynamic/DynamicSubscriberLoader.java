@@ -25,9 +25,15 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Yapılandırma dosyalarından aboneleri dinamik olarak yükleyen sınıf
- * ✅ MODERNIZED: Dynamic subscriber loader with updated dependencies
- * Uses new BeanConfig executor beans and ApplicationProperties integration
+ * Toyota Financial Data Platform - Dynamic Subscriber Loader
+ * 
+ * Configuration-driven subscriber factory that dynamically instantiates and configures
+ * rate data subscribers from JSON configuration files. Supports multiple subscriber types
+ * including REST and TCP-based implementations with resilience patterns.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 @Slf4j
 @Component

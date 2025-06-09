@@ -18,6 +18,17 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Toyota Financial Data Platform - Groovy Script Calculation Strategy
+ * 
+ * Dynamic calculation strategy that executes Groovy scripts for complex rate
+ * calculations. Provides flexible scripting capabilities with input rate adaptation,
+ * script caching, and comprehensive error handling for custom financial formulas.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Component("groovyScriptCalculationStrategy")
 @Slf4j
 @RequiredArgsConstructor

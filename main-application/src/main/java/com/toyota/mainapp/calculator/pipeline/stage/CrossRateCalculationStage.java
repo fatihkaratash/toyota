@@ -20,7 +20,15 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Stage 3: Calculate cross rates from ExecutionContext snapshot data with fallback to cache
+ * Toyota Financial Data Platform - Cross Rate Calculation Stage
+ * 
+ * Pipeline stage that calculates cross rates from snapshot data with cache fallback.
+ * Processes complex rate derivations using configurable strategies and maintains
+ * dependencies between calculated rates for comprehensive market coverage.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 @Component
 @RequiredArgsConstructor

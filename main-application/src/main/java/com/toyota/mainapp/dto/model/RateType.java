@@ -1,7 +1,15 @@
 package com.toyota.mainapp.dto.model;
 
 /**
- * Enum to represent different types of rate data
+ * Toyota Financial Data Platform - Rate Type Enumeration
+ * 
+ * Defines different types of rate data flowing through the platform
+ * including raw provider rates, calculated averages, cross rates,
+ * and status information with corresponding event types.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 public enum RateType {
 

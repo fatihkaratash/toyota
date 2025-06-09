@@ -8,7 +8,15 @@ import java.time.Duration;
 import java.time.Instant;
 
 /**
- * Result of stage execution
+ * Toyota Financial Data Platform - Pipeline Stage Result
+ * 
+ * Encapsulates execution results from individual pipeline stages including
+ * success status, performance metrics, and error details. Enables comprehensive
+ * monitoring and debugging of the rate calculation pipeline.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 @Data
 @Builder

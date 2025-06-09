@@ -11,7 +11,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Base DTO for all rate data types
+ * Toyota Financial Data Platform - Base Rate Data Transfer Object
+ * 
+ * Central data structure for all rate types within the platform.
+ * Supports raw provider rates, calculated averages, cross rates,
+ * and status tracking with comprehensive metadata and audit information.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 @Data
 @SuperBuilder

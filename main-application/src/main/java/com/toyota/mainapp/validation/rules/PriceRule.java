@@ -10,7 +10,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Validates that price values are within reasonable bounds
+ * Toyota Financial Data Platform - Price Validation Rule
+ * 
+ * Validates bid and ask price values ensuring they are positive, non-null,
+ * and above configurable minimum thresholds. Part of the comprehensive
+ * rate validation pipeline for financial data integrity.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 @Component
 public class PriceRule implements ValidationRule {

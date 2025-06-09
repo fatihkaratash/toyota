@@ -9,6 +9,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
+ * Toyota Financial Data Platform - Raw Data Handling Stage
+ * 
+ * First pipeline stage that processes incoming raw rate data from providers.
+ * Handles caching, Kafka publishing, and snapshot initialization for the
+ * immediate processing pipeline within the financial data platform.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
+
+/**
  * Stage 1: Process triggering raw rate and add to snapshot
  First stage in immediate pipeline processing
  */

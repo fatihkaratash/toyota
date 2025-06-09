@@ -12,6 +12,18 @@ import org.springframework.stereotype.Service;
 
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Toyota Financial Data Platform - Real-Time Batch Processor
+ * 
+ * Asynchronous pipeline orchestrator that processes incoming rates through
+ * a four-stage calculation pipeline. Coordinates raw data handling, average
+ * calculations, cross-rate derivations, and snapshot publishing for real-time
+ * financial data distribution across the platform.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 @Service
 @Slf4j  
 @RequiredArgsConstructor

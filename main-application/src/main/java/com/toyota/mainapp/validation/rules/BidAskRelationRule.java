@@ -7,7 +7,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Validates that the bid-ask relationship is valid (bid <= ask)
+ * Toyota Financial Data Platform - Bid-Ask Relationship Validation Rule
+ * 
+ * Ensures financial market integrity by validating that bid prices never exceed
+ * ask prices. Critical component of the rate validation system preventing
+ * invalid market data from propagating through the platform.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 @Component
 public class BidAskRelationRule implements ValidationRule {

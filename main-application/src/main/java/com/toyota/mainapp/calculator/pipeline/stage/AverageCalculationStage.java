@@ -20,6 +20,17 @@ import com.toyota.mainapp.util.CalculationInputUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * Toyota Financial Data Platform - Average Calculation Stage
+ * 
+ * Pipeline stage that calculates weighted averages from multiple raw provider rates.
+ * Processes affected average rules based on triggering rates and maintains
+ * comprehensive rate snapshots for downstream cross-rate calculations.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
+ */
 /** Average calculation stage implementation
  * Stage 2: Calculate AVG rates from multiple RAW providers with focused responsibility
  */

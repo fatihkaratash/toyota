@@ -16,8 +16,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Stage 4: Publish complete snapshot with pipe-delimited format and proper sorting
- Final stage in immediate pipeline processing
+ * Toyota Financial Data Platform - Simple Batch Assembly Stage
+ * 
+ * Final pipeline stage that assembles and publishes complete rate snapshots
+ * with pipe-delimited format and proper sorting. Handles immediate snapshot
+ * publishing for real-time rate distribution across the platform.
+ * 
+ * @author Fatih Karataş
+ * @version 1.0
+ * @since 2025
  */
 @Component
 @RequiredArgsConstructor
